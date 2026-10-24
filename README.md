@@ -16,9 +16,12 @@ ghcr.io/OWNER/REPOSITORY:BRANCH
 The branch name is lowercased and characters that are invalid in a container
 tag are replaced with hyphens. The branch tag is updated on each push. Add or
 remove Fedora RPM package names in `packages.yml` to customize the image.
-Currently it includes `plasma-desktop` and `sddm`.
-The image enables `sddm.service` and sets `graphical.target` as the default,
-so the display manager starts when the VM boots.
+Currently it includes `plasma-desktop`, `plasma-setup`, `sddm`, `sddm-breeze`,
+and `sddm-wayland-plasma`. The SDDM Breeze theme is selected in
+`sddm-theme.conf`. The image enables SDDM and Plasma Setup and sets
+`graphical.target` as the default. Plasma Setup runs before the login manager
+on the first boot so you can create the initial user. After setup completes,
+SDDM provides the login screen on later boots.
 
 ## Release disk image
 

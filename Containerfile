@@ -4,5 +4,8 @@ ARG PACKAGES
 
 RUN dnf -y install ${PACKAGES} && dnf clean all
 
-RUN systemctl --root=/ enable sddm.service && \
+COPY sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
+
+RUN systemctl --root=/ enable --force sddm.service && \
+    systemctl --root=/ enable plasma-setup.service && \
     systemctl --root=/ set-default graphical.target

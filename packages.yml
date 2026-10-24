@@ -1,3 +1,6 @@
 packages:
   - plasma-desktop
+  - plasma-setup
   - sddm
+  - sddm-breeze
+  - sddm-wayland-plasma
