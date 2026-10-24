@@ -3,6 +3,7 @@ packages:
   - NetworkManager-wifi
   - plasma-nm
   - plasma-pa
+  - plasma-firewall
   - plasma-setup
   - kscreen
   - pipewire
