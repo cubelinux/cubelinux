@@ -16,9 +16,12 @@ ghcr.io/OWNER/REPOSITORY:BRANCH
 The branch name is lowercased and characters that are invalid in a container
 tag are replaced with hyphens. The branch tag is updated on each push. Add or
 remove Fedora RPM package names in `packages.yml` to customize the image.
-Currently it includes `plasma-desktop`, `plasma-setup`, `sddm`, `sddm-breeze`,
-and `sddm-wayland-plasma`. The SDDM Breeze theme is selected in
-`sddm-theme.conf`. The image enables SDDM and Plasma Setup and sets
+The package list includes `dolphin`, `plasma-setup`, `plasma-nm`, `plasma-pa`,
+`kscreen`, `NetworkManager-wifi`, `pipewire`, and `pipewire-alsa`, plus `sddm`,
+`sddm-breeze`, and `sddm-wayland-plasma`. DNF installs required dependencies,
+including `plasma-desktop`, `NetworkManager`, `pipewire-pulseaudio`, and
+WirePlumber. The SDDM Breeze theme is selected in `sddm-theme.conf`. The image
+enables NetworkManager, SDDM and Plasma Setup and sets
 `graphical.target` as the default. Plasma Setup runs before the login manager
 on the first boot so you can create the initial user. After setup completes,
 SDDM provides the login screen on later boots.

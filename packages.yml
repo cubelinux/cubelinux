@@ -1,6 +1,12 @@
 packages:
-  - plasma-desktop
+  - dolphin
+  - NetworkManager-wifi
+  - plasma-nm
+  - plasma-pa
   - plasma-setup
+  - kscreen
+  - pipewire
+  - pipewire-alsa
   - sddm
   - sddm-breeze
   - sddm-wayland-plasma
