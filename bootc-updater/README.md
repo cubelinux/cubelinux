@@ -37,10 +37,13 @@ Install PySide6 and the Kirigami QML runtime module from your distribution,
 then install the project with `python -m pip install --no-deps -e .` and launch
 it with `bootc-updater`.
 
-The app runs `pkexec bootc upgrade --check` to look for updates,
-`bootc upgrade --download-only` to download one, and
-`bootc upgrade --from-downloaded --apply` after restart confirmation. KDE may
-ask you to authenticate before a system change.
+The app uses a root-owned helper with three fixed operations: check for system
+updates, download the current update, and apply the downloaded update while
+restarting. Other bootc commands and extra arguments are rejected. KDE may ask
+you to authenticate unless the request comes from an active local session for
+a user in the `wheel` administrator group. Those three operations are
+authorized without a password for that session. Other bootc commands are not
+authorized.
 The app stays in the KDE system tray, can start hidden with `--background`, and
 opens its window from the tray icon or KDE app launcher. Closing the window
 hides it; the tray menu has no quit action, so the process stays active until

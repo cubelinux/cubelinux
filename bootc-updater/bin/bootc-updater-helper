@@ -1,0 +1,20 @@
+#!/bin/sh
+
+if [ "$#" -ne 1 ]; then
+    exit 2
+fi
+
+case "$1" in
+    check)
+        exec /usr/bin/bootc upgrade --check
+        ;;
+    download)
+        exec /usr/bin/bootc upgrade --download-only --progress-fd=1
+        ;;
+    apply)
+        exec /usr/bin/bootc upgrade --from-downloaded --apply
+        ;;
+    *)
+        exit 2
+        ;;
+esac

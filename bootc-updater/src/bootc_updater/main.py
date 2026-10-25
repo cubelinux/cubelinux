@@ -127,13 +127,16 @@ class UpdateController(QObject):
         self._set_status_text(message)
         self._set_busy(True)
         self._set_tray_state("busy")
-        self._process.start("/usr/bin/pkexec", ["/usr/bin/bootc", *arguments])
+        self._process.start(
+            "/usr/bin/pkexec",
+            ["/usr/libexec/bootc-updater-helper", *arguments],
+        )
 
     @Slot()
     def checkForUpdates(self) -> None:
         self._start_command(
             "check",
-            ["upgrade", "--check"],
+            ["check"],
             "Checking for updates...",
         )
 
@@ -142,7 +145,7 @@ class UpdateController(QObject):
         if self._update_available:
             self._start_command(
                 "stage",
-                ["upgrade", "--download-only", "--progress-fd=1"],
+                ["download"],
                 "Downloading the update... You can keep using your PC.",
             )
 
@@ -151,7 +154,7 @@ class UpdateController(QObject):
         if self._update_staged:
             self._start_command(
                 "apply",
-                ["upgrade", "--from-downloaded", "--apply"],
+                ["apply"],
                 "Restarting to finish installing the update...",
             )
 
