@@ -1,4 +1,4 @@
-name: Build bootc image and release raw disk
+name: Build and publish bootc image
 
 on:
   push:
@@ -16,9 +16,6 @@ jobs:
   build-image:
     name: Build and push customized bootc image
     runs-on: ubuntu-24.04
-    outputs:
-      image: ${{ steps.image.outputs.name }}
-      tag: ${{ steps.image.outputs.tag }}
 
     steps:
       - name: Check out source
@@ -70,64 +67,3 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-
-  build-release-disk:
-    name: Build and attach compressed raw disk
-    if: github.event_name == 'release'
-    needs: build-image
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-      packages: read
-    steps:
-      - name: Install Podman and Zstandard
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes podman zstd
-
-      - name: Log in and pull release image
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_IMAGE: ${{ needs.build-image.outputs.image }}:${{ needs.build-image.outputs.tag }}
-          UPDATE_IMAGE: ${{ needs.build-image.outputs.image }}:main
-        run: |
-          printf '%s' "$GH_TOKEN" | sudo podman login ghcr.io \
-            --username "$GITHUB_ACTOR" --password-stdin
-          sudo podman pull "$RELEASE_IMAGE"
-          # Keep the release contents, but configure bootc to check the
-          # moving main tag for subsequent updates.
-          sudo podman tag "$RELEASE_IMAGE" "$UPDATE_IMAGE"
-
-      - name: Build raw disk image
-        env:
-          UPDATE_IMAGE: ${{ needs.build-image.outputs.image }}:main
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          mkdir -p output
-          sudo podman run --privileged --rm \
-            -v "$PWD/output:/output" \
-            -v /var/lib/containers/storage:/var/lib/containers/storage \
-            ghcr.io/osbuild/image-builder-cli:latest \
-            build \
-            --bootc-ref "$UPDATE_IMAGE" \
-            --bootc-default-fs ext4 \
-            --output-dir /output \
-            --output-name "fedora-bootc-${RELEASE_TAG}" \
-            raw
-          sudo chown -R "$(id -u):$(id -g)" output
-          image="$(find output -type f -name '*.raw' -print -quit)"
-          test -n "$image"
-          zstd -T0 -19 "$image" -o "$image.zst"
-          rm "$image"
-          sha256sum "$image.zst" > "$image.zst.sha256"
-          if [ "$(stat -c '%s' "$image.zst")" -ge 2000000000 ]; then
-            echo 'Compressed image exceeds GitHub release asset size limit.' >&2
-            exit 1
-          fi
-
-      - name: Upload assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            output/*.raw.zst
-            output/*.raw.zst.sha256
