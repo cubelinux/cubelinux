@@ -287,6 +287,20 @@ def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
     username = account.pw_name
     script = (
         "set -eu; "
+        # The Fedora container image may use a systemd-resolved stub address,
+        # but systemd-resolved is not running yet in this LXC container. Use
+        # the DHCP-provided bridge gateway, where lxc-net's dnsmasq serves DNS.
+        "gateway=\"$(ip -4 route show default | awk 'NR == 1 {print $3}')\"; "
+        "if [ -z \"$gateway\" ]; then "
+        "echo 'Fedora did not receive a network gateway.' >&2; exit 1; fi; "
+        "rm -f /etc/resolv.conf; "
+        "printf 'nameserver %s\\n' \"$gateway\" > /etc/resolv.conf; "
+        "dns_ready=0; "
+        "for attempt in 1 2 3 4 5; do "
+        "if getent ahostsv4 mirrors.fedoraproject.org >/dev/null; then "
+        "dns_ready=1; break; fi; sleep 2; done; "
+        "if [ \"$dns_ready\" -ne 1 ]; then "
+        "echo \"Could not resolve Fedora package servers through $gateway.\" >&2; exit 1; fi; "
         f"if ! getent group {GUEST_ID} >/dev/null; then "
         f"groupadd --gid {GUEST_ID} {username}; fi; "
         f"if getent passwd {GUEST_ID} >/dev/null; then "

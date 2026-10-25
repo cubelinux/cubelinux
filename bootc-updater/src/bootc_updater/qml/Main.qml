@@ -173,23 +173,31 @@ Kirigami.ApplicationWindow {
             wrapMode: Text.Wrap
         }
 
-        footer: RowLayout {
-            spacing: Kirigami.Units.smallSpacing
+        footer: Item {
+            implicitWidth: footerButtons.implicitWidth + Kirigami.Units.largeSpacing * 2
+            implicitHeight: footerButtons.implicitHeight + Kirigami.Units.largeSpacing * 2
 
-            Item { Layout.fillWidth: true }
+            RowLayout {
+                id: footerButtons
+                anchors.fill: parent
+                anchors.margins: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
 
-            Controls.Button {
-                text: qsTr("Later")
-                onClicked: rebootConfirmation.reject()
-            }
+                Item { Layout.fillWidth: true }
 
-            Controls.Button {
-                text: qsTr("Restart now")
-                icon.name: "system-reboot"
-                highlighted: true
-                onClicked: {
-                    rebootConfirmation.accept()
-                    updateController.applyAndReboot()
+                Controls.Button {
+                    text: qsTr("Later")
+                    onClicked: rebootConfirmation.reject()
+                }
+
+                Controls.Button {
+                    text: qsTr("Restart now")
+                    icon.name: "system-reboot"
+                    highlighted: true
+                    onClicked: {
+                        rebootConfirmation.accept()
+                        updateController.applyAndReboot()
+                    }
                 }
             }
         }

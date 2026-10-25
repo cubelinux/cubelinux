@@ -1,12 +1,24 @@
 """Application entry point."""
 
 import json
+import logging
 import math
 import re
 import sys
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
-from PySide6.QtCore import QObject, Property, QProcess, QTimer, Qt, Signal, Slot
+from PySide6.QtCore import (
+    QObject,
+    Property,
+    QProcess,
+    QTimer,
+    Qt,
+    QtMsgType,
+    Signal,
+    Slot,
+    qInstallMessageHandler,
+)
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import QQmlApplicationEngine
@@ -14,6 +26,42 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 
 SERVER_NAME = "bootc-updater-session"
+LOGGER = logging.getLogger("bootc_updater")
+
+
+def configure_logging() -> Path | None:
+    """Write startup and operation diagnostics to the user's state directory."""
+    try:
+        log_dir = Path.home() / ".local" / "state" / "bootc-updater"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(
+            log_dir / "bootc-updater.log",
+            maxBytes=1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        LOGGER.setLevel(logging.INFO)
+        LOGGER.addHandler(handler)
+        LOGGER.info("Starting bootc-updater (arguments: %s)", sys.argv[1:])
+        return log_dir / "bootc-updater.log"
+    except OSError as error:
+        logging.basicConfig(level=logging.INFO)
+        LOGGER.warning("Could not open the updater log file: %s", error)
+        return None
+
+
+def _qt_message_handler(message_type, _context, message: str) -> None:
+    if message_type == QtMsgType.QtDebugMsg:
+        LOGGER.debug("Qt: %s", message)
+    elif message_type == QtMsgType.QtInfoMsg:
+        LOGGER.info("Qt: %s", message)
+    elif message_type == QtMsgType.QtWarningMsg:
+        LOGGER.warning("Qt: %s", message)
+    elif message_type == QtMsgType.QtCriticalMsg:
+        LOGGER.error("Qt: %s", message)
+    else:
+        LOGGER.critical("Qt: %s", message)
 
 
 class UpdateController(QObject):
@@ -177,6 +225,7 @@ class UpdateController(QObject):
     def _start_command(self, operation: str, arguments: list[str], message: str) -> None:
         if self._process.state() != QProcess.ProcessState.NotRunning:
             return
+        LOGGER.info("Starting update operation: %s", operation)
         self._operation = operation
         self._process_output = ""
         self._stderr_output = ""
@@ -292,6 +341,12 @@ class UpdateController(QObject):
                 "apply": "Couldn't finish installing the update. Try again.",
             }.get(operation, "Something went wrong. Try again.")
             self._set_status_text(failure_message)
+            LOGGER.error(
+                "Update operation %s failed (exit %s): %s",
+                operation,
+                exit_code,
+                details[-2000:],
+            )
             return
 
         if operation == "check":
@@ -331,6 +386,7 @@ class UpdateController(QObject):
             self._set_status_text("Your PC is restarting to finish installing the update.")
 
     def _process_error(self, error: QProcess.ProcessError) -> None:
+        LOGGER.error("Update helper process error (%s): %s", error, self._process.errorString())
         if error == QProcess.ProcessError.FailedToStart:
             if self._operation == "check":
                 self._set_has_checked(True)
@@ -379,6 +435,8 @@ def activate_existing_instance(show_window: bool = True) -> bool:
 
 
 def main() -> int:
+    configure_logging()
+    qInstallMessageHandler(_qt_message_handler)
     start_in_background = "--background" in sys.argv
     arguments = [argument for argument in sys.argv if argument != "--background"]
 
@@ -386,21 +444,34 @@ def main() -> int:
     app.setApplicationName("bootc-updater")
     app.setOrganizationName("bootc-updater")
     app.setQuitOnLastWindowClosed(False)
+    sys.excepthook = lambda exception_type, exception, traceback: LOGGER.critical(
+        "Uncaught application exception",
+        exc_info=(exception_type, exception, traceback),
+    )
 
     if activate_existing_instance(show_window=not start_in_background):
+        LOGGER.info("Activated the existing updater process")
         return 0
 
     QLocalServer.removeServer(SERVER_NAME)
     server = QLocalServer()
     if not server.listen(SERVER_NAME):
+        LOGGER.error("Could not listen on the session socket: %s", server.errorString())
         return 1
 
     engine = QQmlApplicationEngine()
+
+    def log_qml_warnings(warnings) -> None:
+        for warning in warnings:
+            LOGGER.error("QML: %s", warning.toString())
+
+    engine.warnings.connect(log_qml_warnings)
     update_controller = UpdateController()
     engine.rootContext().setContextProperty("updateController", update_controller)
     qml_file = Path(__file__).parent / "qml" / "Main.qml"
     engine.load(qml_file)
     if not engine.rootObjects():
+        LOGGER.error("QML interface failed to load from %s", qml_file)
         return 1
 
     window = engine.rootObjects()[0]
@@ -482,10 +553,14 @@ def main() -> int:
 
     tray.activated.connect(tray_activated)
     tray.show()
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        LOGGER.warning("No system tray is available in this desktop session")
 
     if not start_in_background:
         show_window()
 
+    LOGGER.info("Updater started successfully%s", " in background" if start_in_background else "")
+    app.aboutToQuit.connect(lambda: LOGGER.info("Updater is shutting down"))
     return app.exec()
 
 

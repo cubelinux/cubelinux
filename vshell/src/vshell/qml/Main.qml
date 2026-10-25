@@ -134,6 +134,14 @@ Kirigami.ApplicationWindow {
                         wrapMode: Text.Wrap
                     }
 
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        visible: setupController.busy
+                        text: setupController.progressTitle
+                        font.bold: true
+                        wrapMode: Text.Wrap
+                    }
+
                     Controls.ProgressBar {
                         Layout.fillWidth: true
                         visible: setupController.busy

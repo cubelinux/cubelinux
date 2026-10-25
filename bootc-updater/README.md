@@ -50,6 +50,9 @@ The app stays in the KDE system tray, can start hidden with `--background`, and
 opens its window from the tray icon or KDE app launcher. Closing the window
 hides it; the tray menu has no quit action, so the process stays active until
 ended externally or the user session stops.
+Startup, QML, and update-operation diagnostics are written to
+`~/.local/state/bootc-updater/bootc-updater.log` so failures from the hidden
+autostart can be inspected after login.
 `data/bootc-updater-autostart.desktop` is intended for the system autostart
 directory so it starts when the user's KDE session begins. Update notifications
 are not implemented yet.

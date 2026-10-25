@@ -34,6 +34,25 @@ class SetupController(QObject):
     def progress(self) -> str:
         return self._progress
 
+    @Property(str, notify=progressChanged)
+    def progressTitle(self) -> str:
+        message = self._progress.lower()
+        if "downloading the fedora environment" in message:
+            return "Downloading Fedora"
+        if "requesting one-time permission" in message:
+            return "Preparing container networking"
+        if "starting fedora" in message:
+            return "Starting Fedora"
+        if "connecting fedora" in message:
+            return "Connecting Fedora"
+        if "preparing your fedora user" in message:
+            return "Setting up your account"
+        if "sharing your home" in message:
+            return "Sharing your home folder"
+        if "ready" in message:
+            return "Setup complete"
+        return "Setting up Fedora"
+
     @Property(bool, notify=stateChanged)
     def busy(self) -> bool:
         return self._worker is not None and self._worker.isRunning()
