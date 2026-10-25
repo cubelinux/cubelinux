@@ -1,12 +1,15 @@
 # vshell
 
-`vshell` is the virtual-shell project: a KDE application for setting up and
-opening a persistent Linux environment managed with LXC.
+`vshell` is a KDE application for setting up and opening a persistent Fedora
+environment managed with LXC.
 
-This initial version is a UI prototype. It does not create or start containers
-yet. Container creation needs a deliberately narrow host-side backend, and the
-LXC unprivileged-user setup for Fedora needs to be defined before wiring the
-button to system changes.
+The initial setup is intentionally simple: Fedora is the only image choice,
+and the signed-in user's home folder is shared automatically. Users do not
+need to choose a distribution or enter a folder path.
+
+The current version is still a UI prototype. It does not create or start
+containers yet. The setup button remains disabled until the LXC backend and
+Fedora unprivileged-user setup are ready.
 
 The image also provides a separate Konsole Host Terminal profile for host
 administration. Konsole's default profile will be redirected to VShell after
@@ -31,12 +34,12 @@ be designed as a later feature.
 
 ## UI prototype
 
-The Qt Quick/Kirigami screen sketches first-run setup:
+The Qt Quick/Kirigami screen guides the user through a short setup wizard:
 
-- choose an LXC distribution image;
-- choose a project folder to share with the environment;
-- review that this is a container environment and not a VM;
-- start setup (currently disabled until the backend is ready).
+- welcome and explain the container environment;
+- show Fedora and automatic home-folder sharing as fixed defaults;
+- review the setup before continuing;
+- finish setup (currently disabled until the backend is ready).
 
 ## Run
 

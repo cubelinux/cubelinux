@@ -6,15 +6,15 @@ import org.kde.kirigami as Kirigami
 Kirigami.ApplicationWindow {
     id: root
 
-    title: qsTr("Set up Virtual Shell")
-    width: 720
-    height: 640
-    minimumWidth: 560
-    minimumHeight: 560
+    title: qsTr("Virtual Shell Setup")
+    width: 560
+    height: 480
+    minimumWidth: 480
+    minimumHeight: 440
     visible: true
 
     pageStack.initialPage: Kirigami.ScrollablePage {
-        title: qsTr("Virtual Shell")
+        title: qsTr("Virtual Shell Setup")
         padding: Kirigami.Units.largeSpacing
 
         ColumnLayout {
@@ -37,107 +37,128 @@ Kirigami.ApplicationWindow {
 
                     Kirigami.Heading {
                         Layout.fillWidth: true
-                        text: qsTr("Your Linux workspace")
+                        text: qsTr("Set up your Linux shell")
                         level: 1
                         wrapMode: Text.Wrap
                     }
 
                     Controls.Label {
                         Layout.fillWidth: true
-                        text: qsTr("Set up a separate Linux environment for terminal work and development.")
+                        text: qsTr("A few quick steps, then your workspace is ready.")
                         opacity: 0.75
                         wrapMode: Text.Wrap
                     }
                 }
             }
 
-            Rectangle {
+            Controls.Label {
                 Layout.fillWidth: true
-                implicitHeight: setupLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
-                radius: Kirigami.Units.mediumSpacing
-                color: Kirigami.Theme.backgroundColor
-                border.color: Kirigami.Theme.separatorColor
+                text: qsTr("Step %1 of 3").arg(steps.currentIndex + 1)
+                opacity: 0.7
+            }
+
+            StackLayout {
+                id: steps
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
                 ColumnLayout {
-                    id: setupLayout
-                    anchors.fill: parent
-                    anchors.margins: Kirigami.Units.largeSpacing
                     spacing: Kirigami.Units.mediumSpacing
 
                     Kirigami.Heading {
-                        text: qsTr("Choose a Linux environment")
+                        Layout.fillWidth: true
+                        text: qsTr("Welcome to Virtual Shell")
                         level: 2
+                        wrapMode: Text.Wrap
                     }
 
                     Controls.Label {
                         Layout.fillWidth: true
-                        text: qsTr("The first version will use a standard LXC system image. You can install tools inside it without changing the host system image.")
+                        text: qsTr("Virtual Shell gives you a separate Linux environment for terminal and development work. It runs in a container and does not replace your host system.")
                         opacity: 0.75
-                        wrapMode: Text.Wrap
-                    }
-
-                    Controls.ComboBox {
-                        id: distroChoice
-                        Layout.fillWidth: true
-                        model: ["Fedora", "Debian", "Ubuntu"]
-                        currentIndex: 0
-                        displayText: qsTr("%1 (LXC system image)").arg(currentText)
-                    }
-
-                    Kirigami.Separator { Layout.fillWidth: true }
-
-                    Kirigami.Heading {
-                        text: qsTr("Project folder")
-                        level: 2
-                    }
-
-                    Controls.Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Choose the folder you want to use from both the host and the Linux environment.")
-                        opacity: 0.75
-                        wrapMode: Text.Wrap
-                    }
-
-                    Controls.TextField {
-                        id: projectPath
-                        Layout.fillWidth: true
-                        placeholderText: qsTr("For example: /home/you/Projects")
-                        text: ""
-                    }
-
-                    Kirigami.Separator { Layout.fillWidth: true }
-
-                    Controls.Label {
-                        Layout.fillWidth: true
-                        text: qsTr("This uses a Linux container that shares the host kernel. It is a separate workspace, not a virtual machine.")
-                        opacity: 0.75
-                        wrapMode: Text.Wrap
-                    }
-
-                    Controls.Label {
-                        Layout.fillWidth: true
-                        text: qsTr("OCI registry images are not directly supported as LXC system images. Start with a distro image; OCI import can be added later.")
-                        wrapMode: Text.Wrap
-                    }
-
-                    Controls.Button {
-                        Layout.fillWidth: true
-                        text: qsTr("Create Virtual Shell")
-                        icon.name: "dialog-ok-apply"
-                        enabled: false
-                        highlighted: true
-                        Controls.ToolTip.visible: hovered
-                        Controls.ToolTip.text: qsTr("Container setup will be enabled when the LXC backend is ready.")
-                    }
-
-                    Controls.Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Setup is not connected yet. This screen is the initial UI prototype.")
-                        horizontalAlignment: Text.AlignHCenter
-                        opacity: 0.65
                         wrapMode: Text.Wrap
                     }
                 }
+
+                ColumnLayout {
+                    spacing: Kirigami.Units.mediumSpacing
+
+                    Kirigami.Heading {
+                        Layout.fillWidth: true
+                        text: qsTr("Fedora, ready to use")
+                        level: 2
+                        wrapMode: Text.Wrap
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Virtual Shell will use the Fedora LXC image. Your home folder will be shared automatically, so your files are available in both Fedora and the host.")
+                        opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
+                }
+
+                ColumnLayout {
+                    spacing: Kirigami.Units.mediumSpacing
+
+                    Kirigami.Heading {
+                        Layout.fillWidth: true
+                        text: qsTr("Everything is ready")
+                        level: 2
+                        wrapMode: Text.Wrap
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Linux environment: Fedora\nShared folder: your home folder")
+                        opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("You can start using Virtual Shell after setup finishes.")
+                        opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Controls.Button {
+                    text: qsTr("Back")
+                    visible: steps.currentIndex > 0
+                    onClicked: steps.currentIndex -= 1
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Controls.Button {
+                    text: qsTr("Next")
+                    visible: steps.currentIndex < 2
+                    highlighted: true
+                    onClicked: steps.currentIndex += 1
+                }
+
+                Controls.Button {
+                    text: qsTr("Set up Fedora")
+                    visible: steps.currentIndex === 2
+                    enabled: false
+                    highlighted: true
+                    Controls.ToolTip.visible: hovered
+                    Controls.ToolTip.text: qsTr("Setup will be available when the LXC backend is ready.")
+                }
+            }
+
+            Controls.Label {
+                Layout.fillWidth: true
+                visible: steps.currentIndex === 2
+                text: qsTr("Container setup is not connected yet.")
+                horizontalAlignment: Text.AlignHCenter
+                opacity: 0.65
+                wrapMode: Text.Wrap
             }
         }
     }
