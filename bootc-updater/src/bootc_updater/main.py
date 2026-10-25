@@ -20,23 +20,25 @@ class UpdateController(QObject):
     busyChanged = Signal()
     updateAvailableChanged = Signal()
     updateStagedChanged = Signal()
-    imageHistoryChanged = Signal()
+    hasCheckedChanged = Signal()
+    progressChanged = Signal()
     trayStateChanged = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
-        self._status_text = "No update check has been run yet."
+        self._status_text = "Check for updates to see if one is available."
         self._busy = False
         self._update_available = False
         self._update_staged = False
-        self._image_history = []
+        self._has_checked = False
         self._operation = ""
         self._process_output = ""
-        self._process_error_output = ""
+        self._progress_buffer = ""
+        self._progress_percent = -1
+        self._progress_phase = "download"
         self._tray_state = "idle"
         self._process = QProcess(self)
         self._process.readyReadStandardOutput.connect(self._read_process_output)
-        self._process.readyReadStandardError.connect(self._read_process_error_output)
         self._process.finished.connect(self._operation_finished)
         self._process.errorOccurred.connect(self._process_error)
 
@@ -56,9 +58,26 @@ class UpdateController(QObject):
     def updateStaged(self) -> bool:
         return self._update_staged
 
-    @Property("QVariantList", notify=imageHistoryChanged)
-    def imageHistory(self) -> list:
-        return self._image_history
+    @Property(bool, notify=hasCheckedChanged)
+    def hasChecked(self) -> bool:
+        return self._has_checked
+
+    @Property(str, notify=statusTextChanged)
+    def busyText(self) -> str:
+        if self._operation == "stage":
+            if self._progress_phase == "prepare":
+                return "Finishing update..."
+            if self._progress_percent >= 0:
+                return f"Downloading... {self._progress_percent}%"
+            return "Downloading..."
+        return {
+            "check": "Checking...",
+            "apply": "Restarting...",
+        }.get(self._operation, "Please wait...")
+
+    @Property(int, notify=progressChanged)
+    def progressPercent(self) -> int:
+        return self._progress_percent
 
     def _set_status_text(self, value: str) -> None:
         self._status_text = value
@@ -79,6 +98,20 @@ class UpdateController(QObject):
             self._update_staged = value
             self.updateStagedChanged.emit()
 
+    def _set_has_checked(self, value: bool) -> None:
+        if self._has_checked != value:
+            self._has_checked = value
+            self.hasCheckedChanged.emit()
+
+    def _set_progress(self, percent: int, phase: str = "download") -> None:
+        percent = max(-1, min(100, percent))
+        if self._progress_percent == percent and self._progress_phase == phase:
+            return
+        self._progress_percent = percent
+        self._progress_phase = phase
+        self.progressChanged.emit()
+        self.statusTextChanged.emit()
+
     def _set_tray_state(self, value: str) -> None:
         if self._tray_state != value:
             self._tray_state = value
@@ -89,7 +122,8 @@ class UpdateController(QObject):
             return
         self._operation = operation
         self._process_output = ""
-        self._process_error_output = ""
+        self._progress_buffer = ""
+        self._set_progress(-1)
         self._set_status_text(message)
         self._set_busy(True)
         self._set_tray_state("busy")
@@ -100,7 +134,7 @@ class UpdateController(QObject):
         self._start_command(
             "check",
             ["upgrade", "--check"],
-            "Checking for updates... You may be asked to authenticate.",
+            "Checking for updates...",
         )
 
     @Slot()
@@ -108,8 +142,8 @@ class UpdateController(QObject):
         if self._update_available:
             self._start_command(
                 "stage",
-                ["upgrade", "--download-only"],
-                "Downloading and staging the update... You may be asked to authenticate.",
+                ["upgrade", "--download-only", "--progress-fd=1"],
+                "Downloading the update... You can keep using your PC.",
             )
 
     @Slot()
@@ -118,126 +152,98 @@ class UpdateController(QObject):
             self._start_command(
                 "apply",
                 ["upgrade", "--from-downloaded", "--apply"],
-                "Applying the staged update and rebooting... You may be asked to authenticate.",
+                "Restarting to finish installing the update...",
             )
-
-    @Slot()
-    def refreshImageHistory(self) -> None:
-        self._start_command(
-            "history",
-            ["status", "--format=json", "--format-version=1"],
-            "Loading locally tracked image deployments... You may be asked to authenticate.",
-        )
 
     def _read_process_output(self) -> None:
         chunk = bytes(self._process.readAllStandardOutput()).decode(errors="replace")
         if chunk:
-            self._process_output += chunk
             if self._operation == "stage":
-                latest_line = chunk.strip().splitlines()
-                if latest_line:
-                    self._set_status_text(latest_line[-1])
+                self._progress_buffer += chunk
+                lines = self._progress_buffer.split("\n")
+                self._progress_buffer = lines.pop()
+                for line in lines:
+                    self._read_progress_event(line)
+            else:
+                self._process_output += chunk
 
-    def _read_process_error_output(self) -> None:
-        chunk = bytes(self._process.readAllStandardError()).decode(errors="replace")
-        if chunk:
-            self._process_error_output += chunk
+    def _read_progress_event(self, line: str) -> None:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return
+
+        task = event.get("task")
+        if task == "pulling":
+            total = event.get("bytesTotal", 0)
+            downloaded = event.get("bytes", 0)
+            if isinstance(total, int) and isinstance(downloaded, int) and total > 0:
+                percent = (downloaded * 100) // total
+                self._set_progress(percent)
+            else:
+                self._set_progress(-1)
+        elif task in ("importing", "staging"):
+            self._set_progress(-1, "prepare")
 
     def _operation_finished(self, exit_code: int, _exit_status: QProcess.ExitStatus) -> None:
         self._read_process_output()
-        self._read_process_error_output()
+        if self._operation == "stage":
+            self._read_progress_event(self._progress_buffer)
+            self._progress_buffer = ""
         self._set_busy(False)
-        error = self._process_error_output.strip()
         output = self._process_output.strip()
         operation = self._operation
         self._operation = ""
-
-        if operation == "history":
-            if exit_code != 0:
-                self._set_tray_state("error")
-                self._set_status_text(f"Could not load image history. {error or output}".strip())
-                return
-            self._load_image_history(output)
-            return
+        if operation == "check":
+            self._set_has_checked(True)
 
         if exit_code != 0:
             self._set_tray_state("error")
-            self._set_status_text(f"Operation failed (exit code {exit_code}). {error or output}".strip())
+            failure_message = {
+                "check": "Couldn't check for updates. Try again.",
+                "stage": "Couldn't download the update. Try again.",
+                "apply": "Couldn't finish installing the update. Try again.",
+            }.get(operation, "Something went wrong. Try again.")
+            self._set_status_text(failure_message)
             return
 
         if operation == "check":
             if "Update available for:" in output:
                 self._set_update_available(True)
+                self._set_update_staged(False)
                 self._set_tray_state("available")
-                self._set_status_text("An update is available. Staging downloads it but does not reboot.")
+                self._set_status_text("An update is available. Select Update now to download it.")
             elif "Staged update present, not changed" in output:
                 self._set_update_available(False)
                 self._set_update_staged(True)
                 self._set_tray_state("staged")
-                self._set_status_text("No newer update found. An update may already be staged.")
+                self._set_status_text("Your update is ready. Restart your PC to finish installing it.")
             elif any(marker in output for marker in ("No changes in:", "No update available.")):
                 self._set_update_available(False)
+                self._set_update_staged(False)
                 self._set_tray_state("idle")
-                self._set_status_text("Your system is up to date.")
+                self._set_status_text("You're up to date.")
             else:
                 self._set_tray_state("error")
-                self._set_status_text(f"Check completed, but the result was unclear. {output}".strip())
+                self._set_status_text("Couldn't tell whether an update is available. Try again.")
         elif operation == "stage":
             self._set_update_available(False)
             self._set_update_staged(True)
             self._set_tray_state("staged")
-            self._set_status_text("Update downloaded and staged. Apply it when you are ready to reboot.")
+            self._set_status_text("Update downloaded. Restart your PC to finish installing it.")
         elif operation == "apply":
             self._set_update_staged(False)
             self._set_tray_state("rebooting")
-            self._set_status_text("The system is rebooting to apply the update.")
-
-    def _load_image_history(self, output: str) -> None:
-        try:
-            document = json.loads(output)
-            status = document.get("status", {})
-            entries = []
-            for key, label in (
-                ("staged", "Staged"),
-                ("booted", "Current"),
-                ("rollback", "Rollback"),
-                ("otherDeployments", "Other deployment"),
-                ("other_deployments", "Other deployment"),
-            ):
-                deployments = status.get(key)
-                if deployments is None:
-                    continue
-                if isinstance(deployments, dict):
-                    deployments = [deployments]
-                for deployment in deployments:
-                    image_info = deployment.get("image") or {}
-                    source = image_info.get("image") or {}
-                    entries.append({
-                        "role": label,
-                        "image": source.get("image", "Unknown image"),
-                        "version": image_info.get("version") or "Version unavailable",
-                        "digest": image_info.get("imageDigest") or "Digest unavailable",
-                    })
-            self._image_history = entries
-            self.imageHistoryChanged.emit()
-            staged = status.get("staged")
-            self._set_update_staged(staged is not None)
-            if staged is not None:
-                self._set_tray_state("staged")
-            else:
-                self._set_tray_state("available" if self._update_available else "idle")
-            self._set_status_text(
-                f"Loaded {len(entries)} deployment(s) tracked locally by bootc."
-            )
-        except (json.JSONDecodeError, AttributeError, TypeError) as exc:
-            self._set_status_text(f"Could not read bootc status: {exc}")
+            self._set_status_text("Your PC is restarting to finish installing the update.")
 
     def _process_error(self, error: QProcess.ProcessError) -> None:
         if error == QProcess.ProcessError.FailedToStart:
+            if self._operation == "check":
+                self._set_has_checked(True)
             self._operation = ""
             self._set_busy(False)
             self._set_tray_state("error")
-            self._set_status_text("Could not start pkexec. Check that Polkit is installed.")
+            self._set_status_text("Couldn't start the update. Check that the password prompt is available.")
 
 
 def create_spinner_icons(count: int = 8) -> list[QIcon]:
@@ -265,13 +271,13 @@ def create_spinner_icons(count: int = 8) -> list[QIcon]:
     return icons
 
 
-def activate_existing_instance() -> bool:
+def activate_existing_instance(show_window: bool = True) -> bool:
     socket = QLocalSocket()
     socket.connectToServer(SERVER_NAME)
     if not socket.waitForConnected(250):
         return False
 
-    socket.write(b"show")
+    socket.write(b"show" if show_window else b"background")
     socket.waitForBytesWritten(1000)
     socket.disconnectFromServer()
     return True
@@ -286,7 +292,7 @@ def main() -> int:
     app.setOrganizationName("bootc-updater")
     app.setQuitOnLastWindowClosed(False)
 
-    if activate_existing_instance():
+    if activate_existing_instance(show_window=not start_in_background):
         return 0
 
     QLocalServer.removeServer(SERVER_NAME)
@@ -356,8 +362,8 @@ def main() -> int:
         tray.setIcon(tray_icons.get(state, icon))
         tooltip = {
             "available": "bootc Updater: update available",
-            "staged": "bootc Updater: update staged; reboot to apply",
-            "rebooting": "bootc Updater: rebooting to apply update",
+            "staged": "bootc Updater: restart to finish installing the update",
+            "rebooting": "bootc Updater: restarting to finish the update",
             "error": "bootc Updater: operation failed",
             "idle": "bootc Updater",
         }

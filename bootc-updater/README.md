@@ -1,7 +1,7 @@
 # bootc-updater
 
-A small KDE Plasma application for checking and staging Fedora bootc image
-updates.
+A small KDE Plasma application for checking for and installing Fedora bootc
+system updates.
 
 ## UI stack
 
@@ -14,12 +14,16 @@ KDE recommends Qt Quick and Kirigami for new KDE applications. Kirigami uses
 QML and Qt Quick Controls, while keeping application logic separate from the
 visual interface. KDE also provides a PySide6 setup path for Kirigami apps.
 
-## Planned screen
+## Update flow
 
-Show the installed image and update status, with a clear action to stage an
-available update. After staging, show that a reboot is needed to boot into the
-updated image. Include progress and actionable error messages while checking or
-staging updates.
+Select **Check for updates** to see whether an update is available. Select
+**Update now** to download it; you can keep using your PC while it downloads.
+When the download finishes, select **Restart now** and confirm to finish
+installing the update. The app shows plain-language progress and error
+messages, and shows a download percentage when bootc provides byte totals.
+Preparing the update after download may take additional time, so that phase
+uses an activity indicator. The tray icon animates while an operation is
+running.
 
 ## Development notes
 
@@ -33,15 +37,10 @@ Install PySide6 and the Kirigami QML runtime module from your distribution,
 then install the project with `python -m pip install --no-deps -e .` and launch
 it with `bootc-updater`.
 
-The app's **Check for updates** button runs `pkexec bootc upgrade --check`.
-This checks the configured image registry without downloading or staging an
-update; KDE may ask you to authenticate. **Stage update** downloads the image
-with `bootc upgrade --download-only`. **Apply & reboot** is a separate action
-with a confirmation dialog. The image history panel shows deployments bootc
-still tracks on the device; it does not enumerate every tag in the remote
-GitHub Container Registry package. The tray icon animates while an operation
-is running, changes when an update is available or staged, and shows an error
-icon if an operation fails.
+The app runs `pkexec bootc upgrade --check` to look for updates,
+`bootc upgrade --download-only` to download one, and
+`bootc upgrade --from-downloaded --apply` after restart confirmation. KDE may
+ask you to authenticate before a system change.
 The app stays in the KDE system tray, can start hidden with `--background`, and
 opens its window from the tray icon or KDE app launcher. Closing the window
 hides it; the tray menu has no quit action, so the process stays active until
