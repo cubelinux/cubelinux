@@ -144,7 +144,6 @@ public:
         , m_updater(new StandardBackendUpdater(this))
     {
         connect(m_updater, &StandardBackendUpdater::updatesCountChanged, this, &AbstractResourcesBackend::updatesCountChanged);
-        refreshStatus();
         QTimer::singleShot(0, this, &BootcBackend::checkForUpdates);
     }
 
@@ -227,8 +226,9 @@ public:
         if (m_checkProcess || m_transactionRunning) {
             return;
         }
-        if (!refreshStatus()) {
-            Q_EMIT passiveMessage(i18n("Could not read bootc system status."));
+        QString statusError;
+        if (!refreshStatus(&statusError)) {
+            Q_EMIT passiveMessage(i18n("Could not read bootc system status: %1", statusError));
             return;
         }
         if (m_staged) {
@@ -311,21 +311,39 @@ public:
     }
 
 private:
-    bool refreshStatus()
+    bool refreshStatus(QString *errorMessage = nullptr)
     {
         QProcess process;
-        process.start(QStringLiteral("/usr/bin/bootc"), {QStringLiteral("status"), QStringLiteral("--format=json"), QStringLiteral("--format-version=1")});
-        if (!process.waitForStarted(2000) || !process.waitForFinished(10000) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        process.start(QStringLiteral("/usr/bin/pkexec"),
+                      {QStringLiteral("/usr/bin/bootc"), QStringLiteral("status"), QStringLiteral("--format=json"), QStringLiteral("--format-version=1")});
+        if (!process.waitForStarted(2000)) {
+            if (errorMessage) {
+                *errorMessage = process.errorString();
+            }
             return false;
         }
-        const auto document = QJsonDocument::fromJson(process.readAllStandardOutput());
+        if (!process.waitForFinished(10000) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+            if (errorMessage) {
+                const QString details = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
+                *errorMessage = details.isEmpty() ? process.errorString() : details;
+            }
+            return false;
+        }
+        QJsonParseError parseError;
+        const auto document = QJsonDocument::fromJson(process.readAllStandardOutput(), &parseError);
         if (!document.isObject()) {
+            if (errorMessage) {
+                *errorMessage = i18n("bootc returned invalid JSON: %1", parseError.errorString());
+            }
             return false;
         }
         const QJsonObject root = document.object();
         const QJsonObject status = root.value(QStringLiteral("status")).toObject();
         const QJsonObject booted = status.value(QStringLiteral("booted")).toObject();
         if (booted.isEmpty()) {
+            if (errorMessage) {
+                *errorMessage = i18n("bootc status did not include a booted deployment.");
+            }
             return false;
         }
         const QJsonObject image = booted.value(QStringLiteral("image")).toObject();
