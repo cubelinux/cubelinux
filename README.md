@@ -15,13 +15,17 @@ ghcr.io/OWNER/REPOSITORY:BRANCH
 The branch name is lowercased and characters that are invalid in a container
 tag are replaced with hyphens. The branch tag is updated on each push. Add or
 remove Fedora RPM package names in `packages.yml` to customize the image.
-The package list includes `dolphin`, `konsole`, `polkit`, `python3-pyside6`,
-`kf6-kirigami`, `qt6-qtdeclarative`, `plasma-setup`, `plasma-nm`, `plasma-pa`,
-`plasma-firewall`, `kscreen`, `kinfocenter`, `plymouth`,
-`plymouth-system-theme`, `fedora-logos`, `NetworkManager-wifi`, `pipewire`, and
-`pipewire-alsa`, plus `sddm`, `sddm-breeze`, and `sddm-wayland-plasma`. DNF
-installs required dependencies, including `plasma-desktop`, `NetworkManager`,
-`pipewire-pulseaudio`, WirePlumber, and the Plasma Firewall Firewalld backend.
+The package list includes `dolphin`, `konsole`, `lxc`, `lxc-templates`, `polkit`,
+`python3-pyside6`, `kf6-kirigami`, `qt6-qtdeclarative`, `plasma-setup`,
+`plasma-nm`, `plasma-pa`, `plasma-firewall`, `kscreen`, `kinfocenter`,
+`plymouth`, `plymouth-system-theme`, `fedora-logos`, `NetworkManager-wifi`,
+`pipewire`, `pipewire-alsa`, `shadow-utils`, `sddm`, `sddm-breeze`, and
+`sddm-wayland-plasma`. DNF installs required dependencies, including
+`plasma-desktop`, `NetworkManager`, `pipewire-pulseaudio`, WirePlumber, and the
+Plasma Firewall Firewalld backend.
+LXC and its distro image templates are included for the VShell project. The
+container creation backend still needs to configure and verify per-user UID/GID
+mappings and networking before it can create unprivileged shells.
 The bootc-updater can check for updates, stage a download-only deployment, and
 apply it after a confirmed reboot; updates can also be staged from Konsole with
 `sudo bootc upgrade`. Discover and its PackageKit, Flatpak, and
@@ -37,6 +41,11 @@ NetworkManager, Firewalld, SDDM and Plasma Setup and sets
 `graphical.target` as the default. Plasma Setup runs before the login manager
 on the first boot so you can create the initial user. After setup completes,
 SDDM provides the login screen on later boots.
+
+Konsole has a separate Host Terminal profile and launcher for host
+administration, including commands such as `sudo bootc upgrade`. The default
+Konsole shell remains unchanged until VShell can start and manage its LXC
+environment.
 
 The image adds the `rhgb` and `quiet` kernel arguments through
 `/usr/lib/bootc/kargs.d/10-quiet-boot.toml` so Plymouth can show a graphical

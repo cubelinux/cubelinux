@@ -12,6 +12,8 @@ COPY bootc-updater/src/bootc_updater /usr/lib/bootc-updater/bootc_updater
 COPY bootc-updater/bin/bootc-updater /usr/bin/bootc-updater
 COPY bootc-updater/bin/bootc-updater-helper /usr/libexec/bootc-updater-helper
 COPY bootc-updater/data/org.bootc.Updater.desktop /usr/share/applications/org.bootc.Updater.desktop
+COPY vshell/data/org.vshell.HostTerminal.desktop /usr/share/applications/org.vshell.HostTerminal.desktop
+COPY vshell/data/HostTerminal.profile /usr/share/konsole/HostTerminal.profile
 COPY bootc-updater/data/bootc-updater-autostart.desktop /etc/xdg/autostart/bootc-updater-autostart.desktop
 COPY bootc-updater/data/org.bootc.Updater.policy /usr/share/polkit-1/actions/org.bootc.Updater.policy
 COPY bootc-updater/data/50-bootc-updater.rules /usr/share/polkit-1/rules.d/50-bootc-updater.rules

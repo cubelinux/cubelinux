@@ -1,6 +1,8 @@
 packages:
   - dolphin
   - konsole
+  - lxc
+  - lxc-templates
   - polkit
   - python3-pyside6
   - kf6-kirigami
@@ -15,6 +17,7 @@ packages:
   - plasma-setup
   - kscreen
   - kinfocenter
+  - shadow-utils
   - pipewire
   - pipewire-alsa
   - sddm
