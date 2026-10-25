@@ -2,6 +2,8 @@ packages:
   - dolphin
   - konsole
   - plasma-discover
+  - plasma-discover-packagekit
+  - PackageKit
   - NetworkManager-wifi
   - plasma-nm
   - plasma-pa
