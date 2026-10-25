@@ -1,6 +1,7 @@
 packages:
   - dolphin
   - konsole
+  - plasma-discover
   - NetworkManager-wifi
   - plasma-nm
   - plasma-pa
