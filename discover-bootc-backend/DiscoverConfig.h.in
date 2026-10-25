@@ -1,3 +1,0 @@
-#pragma once
-
-#define DISCOVER_PLUGIN_IID "org.kde.discover.@DISCOVER_VERSION@.AbstractResourcesBackendFactory"

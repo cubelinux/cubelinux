@@ -1,9 +1,7 @@
 packages:
   - dolphin
   - konsole
-  - plasma-discover
   - polkit
-  - skopeo
   - NetworkManager-wifi
   - plasma-nm
   - plasma-pa
