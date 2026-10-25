@@ -41,3 +41,7 @@ process stays active until ended externally or the user session stops.
 `data/bootc-updater-autostart.desktop` is intended for the system autostart
 directory so it starts when the user's KDE session begins. Update notifications
 will be connected when the update backend is implemented.
+
+The Containerfile copies the Python/QML application, launcher, desktop entry,
+and KDE session autostart entry directly into the image. Runtime dependencies
+are listed in the root `packages.yml` manifest.

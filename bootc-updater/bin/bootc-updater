@@ -1,0 +1,10 @@
+#!/usr/bin/python3
+"""Start the image-installed bootc-updater application."""
+
+import sys
+
+sys.path.insert(0, "/usr/lib/bootc-updater")
+
+from bootc_updater.main import main
+
+raise SystemExit(main())

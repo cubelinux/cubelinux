@@ -5,18 +5,15 @@ ARG PACKAGES
 RUN dnf -y install \
         --exclude='plasma-discover*' \
         --exclude=PackageKit \
-        ${PACKAGES} && dnf clean all
+        ${PACKAGES} && \
+    dnf clean all
 
-RUN find /usr/share/plasma /usr/share/kde-settings /etc/xdg /etc/skel \
-        -type f \( -name '*.conf' -o -name '*.js' -o -name '*.json' -o -name '*.rc' -o -name '*.xml' \) \
-        -exec sed -i -E \
-            -e "s/[\"']?(applications:)?org\\.kde\\.discover\\.desktop[\"']?,[[:space:]]*//g" \
-            -e "s/,[[:space:]]*[\"']?(applications:)?org\\.kde\\.discover\\.desktop[\"']?//g" \
-            -e 's/(applications:)?org\.kde\.discover\.desktop//g' {} +
+COPY bootc-updater/src/bootc_updater /usr/lib/bootc-updater/bootc_updater
+COPY bootc-updater/bin/bootc-updater /usr/bin/bootc-updater
+COPY bootc-updater/data/org.bootc.Updater.desktop /usr/share/applications/org.bootc.Updater.desktop
+COPY bootc-updater/data/bootc-updater-autostart.desktop /etc/xdg/autostart/bootc-updater-autostart.desktop
 
-COPY remove-discover-shortcut.service /etc/systemd/system/remove-discover-shortcut.service
-
-RUN systemctl --root=/ enable remove-discover-shortcut.service
+RUN chmod 0755 /usr/bin/bootc-updater
 
 COPY sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
 

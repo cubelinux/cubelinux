@@ -2,6 +2,9 @@ packages:
   - dolphin
   - konsole
   - polkit
+  - python3-pyside6
+  - kf6-kirigami
+  - qt6-qtdeclarative
   - NetworkManager-wifi
   - plasma-nm
   - plasma-pa

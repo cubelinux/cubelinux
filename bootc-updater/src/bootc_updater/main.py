@@ -3,8 +3,8 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QLocalServer, QLocalSocket
 from PySide6.QtGui import QAction, QIcon
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
