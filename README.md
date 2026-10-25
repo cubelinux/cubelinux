@@ -24,10 +24,10 @@ installs required dependencies, including `plasma-desktop`, `NetworkManager`,
 `pipewire-pulseaudio`, WirePlumber, and the Plasma Firewall Firewalld backend.
 System image updates can be staged from Konsole with `sudo bootc upgrade`;
 they take effect after a reboot. Discover and its PackageKit, Flatpak, and
-rpm-ostree backends are excluded. The image build also removes Discover from
-Plasma's default launcher favorites so new user profiles don't show a broken
-shortcut. Add RPM packages to the image's package list so they are included in
-the bootc image.
+rpm-ostree backends are excluded. The image build removes Discover from Plasma's
+launcher defaults, and a boot-time cleanup removes a saved Discover taskbar
+launcher from existing user profiles. Add RPM packages to the image's package
+list so they are included in the bootc image.
 The SDDM Breeze theme is selected in `sddm-theme.conf`. The image enables
 NetworkManager, Firewalld, SDDM and Plasma Setup and sets
 `graphical.target` as the default. Plasma Setup runs before the login manager
