@@ -8,6 +8,12 @@ RUN dnf -y install \
         ${PACKAGES} && \
     dnf clean all
 
+# Plymouth must be present in the initramfs, which is shipped with the bootc image.
+RUN set -eux; \
+    kver="$(ls /usr/lib/modules)"; \
+    env DRACUT_NO_XATTR=1 dracut -vf "/usr/lib/modules/${kver}/initramfs.img" "${kver}"; \
+    bootc container lint
+
 COPY bootc-updater/src/bootc_updater /usr/lib/bootc-updater/bootc_updater
 COPY bootc-updater/bin/bootc-updater /usr/bin/bootc-updater
 COPY bootc-updater/bin/bootc-updater-helper /usr/libexec/bootc-updater-helper
