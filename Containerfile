@@ -19,6 +19,7 @@ COPY bootc-updater/data/50-bootc-updater.rules /usr/share/polkit-1/rules.d/50-bo
 RUN chmod 0755 /usr/bin/bootc-updater /usr/libexec/bootc-updater-helper
 
 COPY sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
+COPY bootc/kargs.d/10-quiet-boot.toml /usr/lib/bootc/kargs.d/10-quiet-boot.toml
 
 RUN systemctl --root=/ enable NetworkManager.service && \
     systemctl --root=/ enable firewalld.service && \

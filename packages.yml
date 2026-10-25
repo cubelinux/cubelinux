@@ -5,6 +5,9 @@ packages:
   - python3-pyside6
   - kf6-kirigami
   - qt6-qtdeclarative
+  - plymouth
+  - plymouth-system-theme
+  - fedora-logos
   - NetworkManager-wifi
   - plasma-nm
   - plasma-pa

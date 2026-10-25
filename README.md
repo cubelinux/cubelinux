@@ -17,7 +17,8 @@ tag are replaced with hyphens. The branch tag is updated on each push. Add or
 remove Fedora RPM package names in `packages.yml` to customize the image.
 The package list includes `dolphin`, `konsole`, `polkit`, `python3-pyside6`,
 `kf6-kirigami`, `qt6-qtdeclarative`, `plasma-setup`, `plasma-nm`, `plasma-pa`,
-`plasma-firewall`, `kscreen`, `kinfocenter`, `NetworkManager-wifi`, `pipewire`, and
+`plasma-firewall`, `kscreen`, `kinfocenter`, `plymouth`,
+`plymouth-system-theme`, `fedora-logos`, `NetworkManager-wifi`, `pipewire`, and
 `pipewire-alsa`, plus `sddm`, `sddm-breeze`, and `sddm-wayland-plasma`. DNF
 installs required dependencies, including `plasma-desktop`, `NetworkManager`,
 `pipewire-pulseaudio`, WirePlumber, and the Plasma Firewall Firewalld backend.
@@ -36,6 +37,11 @@ NetworkManager, Firewalld, SDDM and Plasma Setup and sets
 `graphical.target` as the default. Plasma Setup runs before the login manager
 on the first boot so you can create the initial user. After setup completes,
 SDDM provides the login screen on later boots.
+
+The image adds the `rhgb` and `quiet` kernel arguments through
+`/usr/lib/bootc/kargs.d/10-quiet-boot.toml` so Plymouth can show a graphical
+boot splash while routine boot messages stay hidden. GRUB menu visibility is
+controlled by the installer or disk-image generation configuration.
 
 GitHub Actions needs permission to write packages. Make the GHCR package public
 if deployed machines should fetch updates without registry credentials.
