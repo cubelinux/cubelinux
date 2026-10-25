@@ -84,6 +84,15 @@ Kirigami.ApplicationWindow {
                                 wrapMode: Text.Wrap
                             }
 
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                visible: updateController.errorDetails.length > 0
+                                text: updateController.errorDetails
+                                wrapMode: Text.Wrap
+                                opacity: 0.85
+                                textFormat: Text.PlainText
+                            }
+
                             ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing

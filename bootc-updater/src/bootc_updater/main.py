@@ -24,6 +24,7 @@ class UpdateController(QObject):
     hasCheckedChanged = Signal()
     progressChanged = Signal()
     imageDetailsChanged = Signal()
+    errorDetailsChanged = Signal()
     trayStateChanged = Signal(str)
 
     def __init__(self) -> None:
@@ -35,6 +36,9 @@ class UpdateController(QObject):
         self._has_checked = False
         self._operation = ""
         self._process_output = ""
+        self._stderr_output = ""
+        self._stdout_diagnostics = ""
+        self._error_details = ""
         self._progress_buffer = ""
         self._progress_percent = -1
         self._progress_phase = "download"
@@ -43,6 +47,7 @@ class UpdateController(QObject):
         self._tray_state = "idle"
         self._process = QProcess(self)
         self._process.readyReadStandardOutput.connect(self._read_process_output)
+        self._process.readyReadStandardError.connect(self._read_process_error)
         self._process.finished.connect(self._operation_finished)
         self._process.errorOccurred.connect(self._process_error)
 
@@ -91,6 +96,10 @@ class UpdateController(QObject):
     def latestUpdated(self) -> str:
         return self._latest_updated
 
+    @Property(str, notify=errorDetailsChanged)
+    def errorDetails(self) -> str:
+        return self._error_details
+
     def _set_status_text(self, value: str) -> None:
         self._status_text = value
         self.statusTextChanged.emit()
@@ -131,6 +140,13 @@ class UpdateController(QObject):
         self._latest_updated = updated
         self.imageDetailsChanged.emit()
 
+    def _set_error_details(self, value: str) -> None:
+        value = value.strip()
+        if self._error_details == value:
+            return
+        self._error_details = value
+        self.errorDetailsChanged.emit()
+
     @staticmethod
     def _format_image_details(version: object, timestamp: object = None) -> tuple[str, str]:
         version_text = str(version).strip() if version else ""
@@ -163,6 +179,9 @@ class UpdateController(QObject):
             return
         self._operation = operation
         self._process_output = ""
+        self._stderr_output = ""
+        self._stdout_diagnostics = ""
+        self._set_error_details("")
         self._progress_buffer = ""
         self._set_progress(-1)
         self._set_status_text(message)
@@ -207,15 +226,21 @@ class UpdateController(QObject):
                 lines = self._progress_buffer.split("\n")
                 self._progress_buffer = lines.pop()
                 for line in lines:
-                    self._read_progress_event(line)
+                    if not self._read_progress_event(line):
+                        self._stdout_diagnostics += line + "\n"
             else:
                 self._process_output += chunk
 
-    def _read_progress_event(self, line: str) -> None:
+    def _read_process_error(self) -> None:
+        chunk = bytes(self._process.readAllStandardError()).decode(errors="replace")
+        if chunk:
+            self._stderr_output += chunk
+
+    def _read_progress_event(self, line: str) -> bool:
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
-            return
+            return False
 
         task = event.get("task")
         if task == "pulling":
@@ -228,11 +253,16 @@ class UpdateController(QObject):
                 self._set_progress(-1)
         elif task in ("importing", "staging"):
             self._set_progress(-1, "prepare")
+        else:
+            return False
+        return True
 
     def _operation_finished(self, exit_code: int, _exit_status: QProcess.ExitStatus) -> None:
         self._read_process_output()
+        self._read_process_error()
         if self._operation == "stage":
-            self._read_progress_event(self._progress_buffer)
+            if not self._read_progress_event(self._progress_buffer):
+                self._stdout_diagnostics += self._progress_buffer
             self._progress_buffer = ""
         self._set_busy(False)
         output = self._process_output.strip()
@@ -250,6 +280,12 @@ class UpdateController(QObject):
 
         if exit_code != 0:
             self._set_tray_state("error")
+            details = (
+                self._stderr_output.strip()
+                or self._stdout_diagnostics.strip()
+                or output
+            )
+            self._set_error_details(details[-2000:])
             failure_message = {
                 "check": "Couldn't check for updates. Try again.",
                 "stage": "Couldn't download the update. Try again.",
@@ -301,6 +337,7 @@ class UpdateController(QObject):
             self._operation = ""
             self._set_busy(False)
             self._set_tray_state("error")
+            self._set_error_details(self._process.errorString())
             self._set_status_text("Couldn't start the update. Check that the password prompt is available.")
 
 
