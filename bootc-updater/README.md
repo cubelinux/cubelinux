@@ -33,14 +33,22 @@ Install PySide6 and the Kirigami QML runtime module from your distribution,
 then install the project with `python -m pip install --no-deps -e .` and launch
 it with `bootc-updater`.
 
-The current screen is a UI prototype. Bootc status checks and update staging
-are not connected yet. The app stays in the KDE system tray, can start hidden
-with `--background`, and opens its window from the tray icon or KDE app
-launcher. Closing the window hides it; the tray menu has no quit action, so the
-process stays active until ended externally or the user session stops.
+The app's **Check for updates** button runs `pkexec bootc upgrade --check`.
+This checks the configured image registry without downloading or staging an
+update; KDE may ask you to authenticate. **Stage update** downloads the image
+with `bootc upgrade --download-only`. **Apply & reboot** is a separate action
+with a confirmation dialog. The image history panel shows deployments bootc
+still tracks on the device; it does not enumerate every tag in the remote
+GitHub Container Registry package. The tray icon animates while an operation
+is running, changes when an update is available or staged, and shows an error
+icon if an operation fails.
+The app stays in the KDE system tray, can start hidden with `--background`, and
+opens its window from the tray icon or KDE app launcher. Closing the window
+hides it; the tray menu has no quit action, so the process stays active until
+ended externally or the user session stops.
 `data/bootc-updater-autostart.desktop` is intended for the system autostart
 directory so it starts when the user's KDE session begins. Update notifications
-will be connected when the update backend is implemented.
+are not implemented yet.
 
 The Containerfile copies the Python/QML application, launcher, desktop entry,
 and KDE session autostart entry directly into the image. Runtime dependencies

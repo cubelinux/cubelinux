@@ -18,12 +18,13 @@ tag are replaced with hyphens. The branch tag is updated on each push. Add or
 remove Fedora RPM package names in `packages.yml` to customize the image.
 The package list includes `dolphin`, `konsole`, `polkit`, `python3-pyside6`,
 `kf6-kirigami`, `qt6-qtdeclarative`, `plasma-setup`, `plasma-nm`, `plasma-pa`,
-`plasma-firewall`, `kscreen`, `NetworkManager-wifi`, `pipewire`, and
+`plasma-firewall`, `kscreen`, `kinfocenter`, `NetworkManager-wifi`, `pipewire`, and
 `pipewire-alsa`, plus `sddm`, `sddm-breeze`, and `sddm-wayland-plasma`. DNF
 installs required dependencies, including `plasma-desktop`, `NetworkManager`,
 `pipewire-pulseaudio`, WirePlumber, and the Plasma Firewall Firewalld backend.
-System image updates can be staged from Konsole with `sudo bootc upgrade`;
-they take effect after a reboot. Discover and its PackageKit, Flatpak, and
+The bootc-updater can check for updates, stage a download-only deployment, and
+apply it after a confirmed reboot; updates can also be staged from Konsole with
+`sudo bootc upgrade`. Discover and its PackageKit, Flatpak, and
 rpm-ostree backends are excluded. Add RPM packages to the image's package list
 so they are included in the bootc image.
 The image build installs `bootc-updater/` directly, along with its Python/QML

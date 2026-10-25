@@ -11,9 +11,6 @@ Kirigami.ApplicationWindow {
     height: 680
     minimumWidth: 500
     minimumHeight: 560
-    property bool operationInProgress: false
-    property int operationProgress: 0
-    property string operationMessage: qsTr("Preparing update...")
 
     pageStack.initialPage: Kirigami.ScrollablePage {
         title: qsTr("System updates")
@@ -153,7 +150,7 @@ Kirigami.ApplicationWindow {
 
                             Controls.Label {
                                 Layout.fillWidth: true
-                                text: qsTr("The update service is not connected yet.")
+                                text: updateController.statusText
                                 opacity: 0.75
                                 wrapMode: Text.Wrap
                             }
@@ -167,27 +164,17 @@ Kirigami.ApplicationWindow {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
-                        visible: root.operationInProgress
+                        visible: updateController.busy
 
-                        RowLayout {
+                        Controls.Label {
                             Layout.fillWidth: true
-
-                            Controls.Label {
-                                Layout.fillWidth: true
-                                text: root.operationMessage
-                            }
-
-                            Controls.Label {
-                                text: qsTr("%1%").arg(root.operationProgress)
-                                opacity: 0.75
-                            }
+                            text: updateController.statusText
+                            wrapMode: Text.Wrap
                         }
 
                         Controls.ProgressBar {
                             Layout.fillWidth: true
-                            from: 0
-                            to: 100
-                            value: root.operationProgress
+                            indeterminate: true
                         }
                     }
 
@@ -208,15 +195,135 @@ Kirigami.ApplicationWindow {
 
                             Controls.Label {
                                 Layout.fillWidth: true
-                                text: qsTr("Update checking and progress will appear here.")
+                                text: qsTr("Checks the configured image registry without downloading or staging an update.")
                                 wrapMode: Text.Wrap
                             }
                         }
 
                         Controls.Button {
-                            text: qsTr("Check for updates")
+                            text: updateController.busy ? qsTr("Working...") : qsTr("Check for updates")
                             icon.name: "view-refresh"
-                            enabled: false
+                            enabled: !updateController.busy
+                            onClicked: updateController.checkForUpdates()
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.mediumSpacing
+
+                        Controls.Button {
+                            text: qsTr("Stage update")
+                            icon.name: "download"
+                            enabled: updateController.updateAvailable && !updateController.busy
+                            onClicked: updateController.stageUpdate()
+                        }
+
+                        Controls.Button {
+                            text: qsTr("Apply & reboot")
+                            icon.name: "system-reboot"
+                            visible: updateController.updateStaged
+                            enabled: updateController.updateStaged && !updateController.busy
+                            onClicked: rebootConfirmation.open()
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: historyLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
+                radius: Kirigami.Units.mediumSpacing
+                color: Kirigami.Theme.backgroundColor
+                border.color: Kirigami.Theme.separatorColor
+
+                ColumnLayout {
+                    id: historyLayout
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.largeSpacing
+                    spacing: Kirigami.Units.mediumSpacing
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Kirigami.Heading {
+                                text: qsTr("Image history on this device")
+                                level: 2
+                            }
+
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: qsTr("Shows images bootc still tracks locally. It does not list every tag published in GitHub Container Registry.")
+                                opacity: 0.75
+                                wrapMode: Text.Wrap
+                            }
+                        }
+
+                        Controls.Button {
+                            text: qsTr("Refresh")
+                            icon.name: "view-refresh"
+                            enabled: !updateController.busy
+                            onClicked: updateController.refreshImageHistory()
+                        }
+                    }
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        visible: updateController.imageHistory.length === 0
+                        text: qsTr("Select Refresh to load the current, staged, and rollback deployments.")
+                        wrapMode: Text.Wrap
+                    }
+
+                    Repeater {
+                        model: updateController.imageHistory
+
+                        delegate: ColumnLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                Controls.Label {
+                                    text: modelData.role
+                                    font.bold: true
+                                }
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.version
+                                    horizontalAlignment: Text.AlignRight
+                                    opacity: 0.75
+                                }
+                            }
+
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: modelData.image
+                                wrapMode: Text.WrapAnywhere
+                            }
+
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: modelData.digest
+                                font.family: "monospace"
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                                opacity: 0.65
+                                wrapMode: Text.WrapAnywhere
+                            }
+
+                            Kirigami.Separator {
+                                Layout.fillWidth: true
+                            }
                         }
                     }
                 }
@@ -301,5 +408,19 @@ Kirigami.ApplicationWindow {
                 wrapMode: Text.Wrap
             }
         }
+    }
+
+    Controls.Dialog {
+        id: rebootConfirmation
+        title: qsTr("Apply staged update?")
+        modal: true
+        standardButtons: Controls.Dialog.Cancel | Controls.Dialog.Ok
+
+        Controls.Label {
+            text: qsTr("The system will reboot to apply the staged image. Save your work before continuing.")
+            wrapMode: Text.Wrap
+        }
+
+        onAccepted: updateController.applyAndReboot()
     }
 }

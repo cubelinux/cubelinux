@@ -11,6 +11,7 @@ packages:
   - plasma-firewall
   - plasma-setup
   - kscreen
+  - kinfocenter
   - pipewire
   - pipewire-alsa
   - sddm
