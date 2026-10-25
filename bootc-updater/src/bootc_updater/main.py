@@ -2,6 +2,7 @@
 
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -22,6 +23,7 @@ class UpdateController(QObject):
     updateStagedChanged = Signal()
     hasCheckedChanged = Signal()
     progressChanged = Signal()
+    imageDetailsChanged = Signal()
     trayStateChanged = Signal(str)
 
     def __init__(self) -> None:
@@ -36,6 +38,8 @@ class UpdateController(QObject):
         self._progress_buffer = ""
         self._progress_percent = -1
         self._progress_phase = "download"
+        self._latest_version = ""
+        self._latest_updated = ""
         self._tray_state = "idle"
         self._process = QProcess(self)
         self._process.readyReadStandardOutput.connect(self._read_process_output)
@@ -79,6 +83,14 @@ class UpdateController(QObject):
     def progressPercent(self) -> int:
         return self._progress_percent
 
+    @Property(str, notify=imageDetailsChanged)
+    def latestVersion(self) -> str:
+        return self._latest_version
+
+    @Property(str, notify=imageDetailsChanged)
+    def latestUpdated(self) -> str:
+        return self._latest_updated
+
     def _set_status_text(self, value: str) -> None:
         self._status_text = value
         self.statusTextChanged.emit()
@@ -111,6 +123,35 @@ class UpdateController(QObject):
         self._progress_phase = phase
         self.progressChanged.emit()
         self.statusTextChanged.emit()
+
+    def _set_image_details(self, version: str, updated: str) -> None:
+        if self._latest_version == version and self._latest_updated == updated:
+            return
+        self._latest_version = version
+        self._latest_updated = updated
+        self.imageDetailsChanged.emit()
+
+    @staticmethod
+    def _format_image_details(version: object, timestamp: object = None) -> tuple[str, str]:
+        version_text = str(version).strip() if version else ""
+        match = re.fullmatch(r"(\d{4}-\d{2}-\d{2})\+([0-9a-f]{7,40})", version_text)
+        if match:
+            return version_text, match.group(1)
+
+        updated = str(timestamp).strip()[:10] if timestamp else ""
+        return version_text, updated
+
+    @classmethod
+    def _status_image_details(cls, status_output: str, staged: bool = False) -> tuple[str, str]:
+        try:
+            document = json.loads(status_output)
+            status = document.get("status", {})
+            deployment = status.get("staged") if staged else None
+            deployment = deployment or status.get("booted") or {}
+            image = deployment.get("image") or {}
+            return cls._format_image_details(image.get("version"), image.get("timestamp"))
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            return "", ""
 
     def _set_tray_state(self, value: str) -> None:
         if self._tray_state != value:
@@ -200,6 +241,13 @@ class UpdateController(QObject):
         if operation == "check":
             self._set_has_checked(True)
 
+        check_output, marker, status_output = output.partition(
+            "BOOTC_UPDATER_STATUS_JSON_BEGIN"
+        )
+        if not marker:
+            check_output = output
+            status_output = ""
+
         if exit_code != 0:
             self._set_tray_state("error")
             failure_message = {
@@ -211,17 +259,24 @@ class UpdateController(QObject):
             return
 
         if operation == "check":
-            if "Update available for:" in output:
+            if "Update available for:" in check_output:
+                version_match = re.search(r"^\s*Version:\s*(.+)$", check_output, re.MULTILINE)
+                if version_match:
+                    self._set_image_details(*self._format_image_details(version_match.group(1)))
+                else:
+                    self._set_image_details("", "")
                 self._set_update_available(True)
                 self._set_update_staged(False)
                 self._set_tray_state("available")
                 self._set_status_text("An update is available. Select Update now to download it.")
-            elif "Staged update present, not changed" in output:
+            elif "Staged update present, not changed" in check_output:
+                self._set_image_details(*self._status_image_details(status_output, staged=True))
                 self._set_update_available(False)
                 self._set_update_staged(True)
                 self._set_tray_state("staged")
                 self._set_status_text("Your update is ready. Restart your PC to finish installing it.")
-            elif any(marker in output for marker in ("No changes in:", "No update available.")):
+            elif any(marker in check_output for marker in ("No changes in:", "No update available.")):
+                self._set_image_details(*self._status_image_details(status_output))
                 self._set_update_available(False)
                 self._set_update_staged(False)
                 self._set_tray_state("idle")

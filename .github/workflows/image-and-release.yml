@@ -29,8 +29,12 @@ jobs:
           tag="${GITHUB_REF_NAME,,}"
           tag="${tag//\//-}"
           tag="${tag//[^a-z0-9_.-]/-}"
+          created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          version="${created%%T*}+${GITHUB_SHA:0:7}"
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "created=$created" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Read and validate package manifest
         id: packages
@@ -67,3 +71,5 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.image.outputs.created }}
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}

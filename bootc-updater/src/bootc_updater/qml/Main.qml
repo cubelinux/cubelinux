@@ -83,6 +83,33 @@ Kirigami.ApplicationWindow {
                                 opacity: 0.75
                                 wrapMode: Text.Wrap
                             }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.smallSpacing
+                                visible: updateController.latestVersion.length > 0
+                                         || updateController.latestUpdated.length > 0
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    visible: updateController.latestVersion.length > 0
+                                    text: (updateController.updateAvailable || updateController.updateStaged)
+                                          ? qsTr("Available version: %1").arg(updateController.latestVersion)
+                                          : qsTr("Installed version: %1").arg(updateController.latestVersion)
+                                    opacity: 0.75
+                                    wrapMode: Text.Wrap
+                                }
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    visible: updateController.latestUpdated.length > 0
+                                    text: (updateController.updateAvailable || updateController.updateStaged)
+                                          ? qsTr("Updated: %1").arg(updateController.latestUpdated)
+                                          : qsTr("Installed image date: %1").arg(updateController.latestUpdated)
+                                    opacity: 0.75
+                                    wrapMode: Text.Wrap
+                                }
+                            }
                         }
                     }
 

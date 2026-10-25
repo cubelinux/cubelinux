@@ -23,7 +23,9 @@ installing the update. The app shows plain-language progress and error
 messages, and shows a download percentage when bootc provides byte totals.
 Preparing the update after download may take additional time, so that phase
 uses an activity indicator. The tray icon animates while an operation is
-running.
+running. Available or installed image version and build date are shown when
+the image includes that metadata. Images built by this repository use
+`YYYY-MM-DD+SHORTSHA` as the image version.
 
 ## Development notes
 

@@ -6,7 +6,13 @@ fi
 
 case "$1" in
     check)
-        exec /usr/bin/bootc upgrade --check
+        /usr/bin/bootc upgrade --check
+        result=$?
+        if [ "$result" -ne 0 ]; then
+            exit "$result"
+        fi
+        printf '\nBOOTC_UPDATER_STATUS_JSON_BEGIN\n'
+        /usr/bin/bootc status --format=json || true
         ;;
     download)
         exec /usr/bin/bootc upgrade --download-only --progress-fd=1

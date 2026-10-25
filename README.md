@@ -28,8 +28,10 @@ rpm-ostree backends are excluded. Add RPM packages to the image's package list
 so they are included in the bootc image.
 The image build installs `bootc-updater/` directly, along with its Python/QML
 runtime dependencies. Its KDE launcher and session autostart entry make the
-updater available from the app menu and system tray after login. The SDDM
-Breeze theme is selected in `sddm-theme.conf`. The image enables
+updater available from the app menu and system tray after login. The image
+workflow labels published images with their build date and short commit ID, so
+the updater can show the available image version and date. The SDDM Breeze
+theme is selected in `sddm-theme.conf`. The image enables
 NetworkManager, Firewalld, SDDM and Plasma Setup and sets
 `graphical.target` as the default. Plasma Setup runs before the login manager
 on the first boot so you can create the initial user. After setup completes,
