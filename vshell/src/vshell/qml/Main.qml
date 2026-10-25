@@ -17,6 +17,11 @@ Kirigami.ApplicationWindow {
         title: qsTr("Virtual Shell Setup")
         padding: Kirigami.Units.largeSpacing
 
+        Component.onCompleted: {
+            if (setupController.ready)
+                steps.currentIndex = 2
+        }
+
         ColumnLayout {
             width: parent.width
             spacing: Kirigami.Units.largeSpacing
@@ -92,8 +97,14 @@ Kirigami.ApplicationWindow {
 
                     Controls.Label {
                         Layout.fillWidth: true
-                        text: qsTr("Virtual Shell will use the Fedora LXC image. Your home folder will be shared automatically, so your files are available in both Fedora and the host.")
+                        text: qsTr("Virtual Shell uses Fedora. Your home folder is shared automatically, so your files are available in both Fedora and the host.")
                         opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Programs running in Fedora can read and change files in your shared home folder.")
                         wrapMode: Text.Wrap
                     }
                 }
@@ -103,7 +114,7 @@ Kirigami.ApplicationWindow {
 
                     Kirigami.Heading {
                         Layout.fillWidth: true
-                        text: qsTr("Everything is ready")
+                        text: setupController.ready ? qsTr("Your Fedora shell is ready") : qsTr("Ready to set up")
                         level: 2
                         wrapMode: Text.Wrap
                     }
@@ -117,7 +128,22 @@ Kirigami.ApplicationWindow {
 
                     Controls.Label {
                         Layout.fillWidth: true
-                        text: qsTr("You can start using Virtual Shell after setup finishes.")
+                        visible: !setupController.ready
+                        text: qsTr("You may be asked to approve a one-time change to enable container networking.")
+                        opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
+
+                    Controls.ProgressBar {
+                        Layout.fillWidth: true
+                        visible: setupController.busy
+                        indeterminate: true
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        visible: setupController.busy || setupController.progress.length > 0
+                        text: setupController.progress
                         opacity: 0.75
                         wrapMode: Text.Wrap
                     }
@@ -143,22 +169,18 @@ Kirigami.ApplicationWindow {
                 }
 
                 Controls.Button {
-                    text: qsTr("Set up Fedora")
+                    text: setupController.ready ? qsTr("Open Virtual Shell") :
+                        (setupController.busy ? qsTr("Setting up…") : qsTr("Set up Fedora"))
                     visible: steps.currentIndex === 2
-                    enabled: false
+                    enabled: !setupController.busy
                     highlighted: true
-                    Controls.ToolTip.visible: hovered
-                    Controls.ToolTip.text: qsTr("Setup will be available when the LXC backend is ready.")
+                    onClicked: {
+                        if (setupController.ready)
+                            setupController.openShell()
+                        else
+                            setupController.setup()
+                    }
                 }
-            }
-
-            Controls.Label {
-                Layout.fillWidth: true
-                visible: steps.currentIndex === 2
-                text: qsTr("Container setup is not connected yet.")
-                horizontalAlignment: Text.AlignHCenter
-                opacity: 0.65
-                wrapMode: Text.Wrap
             }
         }
     }

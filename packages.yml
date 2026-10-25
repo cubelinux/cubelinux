@@ -3,6 +3,7 @@ packages:
   - konsole
   - lxc
   - lxc-templates
+  - dnsmasq
   - polkit
   - python3-pyside6
   - kf6-kirigami

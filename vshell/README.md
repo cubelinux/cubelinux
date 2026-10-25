@@ -1,15 +1,18 @@
 # vshell
 
-`vshell` is a KDE application for setting up and opening a persistent Fedora
-environment managed with LXC.
+`vshell` is a KDE setup application and shell launcher for a persistent Fedora
+LXC environment.
 
-The initial setup is intentionally simple: Fedora is the only image choice,
-and the signed-in user's home folder is shared automatically. Users do not
-need to choose a distribution or enter a folder path.
+The wizard downloads a Fedora 44 LXC image, creates an unprivileged container,
+and shares the signed-in user's home folder automatically. The host setup asks
+for administrator authentication once to allocate subordinate IDs and enable
+one LXC network interface for that user. Programs in the container can read
+and modify files in the shared home folder.
 
-The current version is still a UI prototype. It does not create or start
-containers yet. The setup button remains disabled until the LXC backend and
-Fedora unprivileged-user setup are ready.
+The container runs as an unprivileged user namespace. Container root maps to
+subordinate host IDs; the Fedora login user maps to the desktop user's own ID
+so the shared home folder remains writable. The container has a persistent
+root filesystem under `~/.local/share/vshell/containers`.
 
 The image also provides a separate Konsole Host Terminal profile for host
 administration. Konsole's default profile will be redirected to VShell after
@@ -17,29 +20,29 @@ the container startup backend is working.
 
 ## Image sources
 
-The planned first supported source is an LXC system image (for example, a
-Fedora image from the Linux Containers image server). LXC does not directly
-launch a registry OCI image as a system container. An OCI image can be
-converted/unpacked into a root filesystem and supplied with LXC configuration,
-but that conversion must account for image layers, metadata, entrypoint, users,
-and container init behavior.
+The Fedora 44 system image is downloaded from the Linux Containers image
+server using LXC's `download` template. OCI application images are not used as
+system images.
 
-Incus, a system-container manager built on LXC, can launch OCI registry images
-as **application containers**. That runs the image's application entrypoint;
-it is different from a full distribution environment intended to provide an
-interactive Linux shell. Incus can also launch system containers from its own
-Linux distribution images. For the initial vshell workflow, use an
-LXC-compatible distro root filesystem. OCI system-image import/conversion can
-be designed as a later feature.
+## Use
 
-## UI prototype
+Open **Virtual Shell** from the application menu and follow the short wizard.
+Once setup completes, choose **Open Virtual Shell** to start a Konsole session
+inside Fedora. Konsole also provides a **Virtual Shell** profile. The separate
+**Host Terminal** profile remains available for host administration.
+Opening the Virtual Shell profile before setup is complete launches the wizard.
 
-The Qt Quick/Kirigami screen guides the user through a short setup wizard:
+The installed `vshell` command also supports these operations:
 
-- welcome and explain the container environment;
-- show Fedora and automatic home-folder sharing as fixed defaults;
-- review the setup before continuing;
-- finish setup (currently disabled until the backend is ready).
+```sh
+vshell status
+vshell enter
+vshell stop
+```
+
+`vshell enter` starts the container if needed and opens a login shell as the
+mapped Fedora user. The container user has passwordless `sudo` inside the
+unprivileged container only. `vshell stop` shuts down the persistent container.
 
 ## Run
 
