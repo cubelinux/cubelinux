@@ -15,7 +15,9 @@ case "$1" in
         /usr/bin/bootc status --format=json || true
         ;;
     download)
-        exec /usr/bin/bootc upgrade --download-only --progress-fd=1
+        # bootc reserves standard descriptors; expose the output pipe as fd 3.
+        exec 3>&1
+        exec /usr/bin/bootc upgrade --download-only --progress-fd=3
         ;;
     apply)
         exec /usr/bin/bootc upgrade --from-downloaded --apply
