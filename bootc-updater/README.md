@@ -34,4 +34,10 @@ then install the project with `python -m pip install --no-deps -e .` and launch
 it with `bootc-updater`.
 
 The current screen is a UI prototype. Bootc status checks and update staging
-are not connected yet.
+are not connected yet. The app stays in the KDE system tray, can start hidden
+with `--background`, and opens its window from the tray icon or KDE app
+launcher. Closing the window hides it; the tray menu has no quit action, so the
+process stays active until ended externally or the user session stops.
+`data/bootc-updater-autostart.desktop` is intended for the system autostart
+directory so it starts when the user's KDE session begins. Update notifications
+will be connected when the update backend is implemented.
