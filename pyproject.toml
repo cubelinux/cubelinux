@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bootc-updater"
+version = "0.1.0"
+description = "A KDE Plasma frontend for bootc image updates"
+requires-python = ">=3.10"
+dependencies = ["PySide6>=6.8"]
+
+[project.scripts]
+bootc-updater = "bootc_updater.main:main"
+
+[tool.setuptools.package-data]
+bootc_updater = ["qml/*.qml"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
