@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=bootc Updater
-Comment=Keep bootc update status available in the system tray
-Exec=bootc-updater --background
-Icon=system-software-update
-Terminal=false
-NoDisplay=true
-X-GNOME-Autostart-enabled=true

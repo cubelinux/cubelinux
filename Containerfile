@@ -8,6 +8,11 @@ RUN dnf -y install \
         ${PACKAGES} && \
     dnf clean all
 
+COPY distro.json /tmp/distro.json
+COPY scripts/configure-distro.py /tmp/configure-distro.py
+RUN python3 /tmp/configure-distro.py /tmp/distro.json && \
+    rm -f /tmp/configure-distro.py /tmp/distro.json
+
 # Plymouth must be present in the initramfs, which is shipped with the bootc image.
 RUN set -eux; \
     kver="$(ls /usr/lib/modules)"; \

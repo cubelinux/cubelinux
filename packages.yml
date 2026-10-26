@@ -24,3 +24,15 @@ packages:
   - sddm
   - sddm-breeze
   - sddm-wayland-plasma
+
+distro:
+  os_release:
+    NAME: cubelinux
+    ID: cubelinux
+    ID_LIKE: fedora
+    PRETTY_NAME: "cubelinux 44"
+    VERSION_ID: "44"
+    HOME_URL: https://cubelinux.github.io
+    LOGO: cubelinux-logo
+  logo:
+    url: https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/icon.svg

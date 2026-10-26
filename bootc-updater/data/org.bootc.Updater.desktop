@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=bootc Updater
-Comment=Check and stage bootc system image updates
-Exec=bootc-updater
-Icon=system-software-update
-Terminal=false
-Categories=System;Settings;

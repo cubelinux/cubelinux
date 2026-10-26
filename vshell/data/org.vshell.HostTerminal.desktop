@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=Host Terminal
-Comment=Open a terminal on the host system for administration
-Exec=konsole --profile HostTerminal
-Icon=utilities-terminal
-Terminal=false
-Type=Application
-Categories=System;TerminalEmulator;

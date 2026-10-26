@@ -31,16 +31,25 @@ apply it after a confirmed reboot; updates can also be staged from Konsole with
 `sudo bootc upgrade`. Discover and its PackageKit, Flatpak, and
 rpm-ostree backends are excluded. Add RPM packages to the image's package list
 so they are included in the bootc image.
-The image build installs `bootc-updater/` directly, along with its Python/QML
-runtime dependencies. Its KDE launcher and session autostart entry make the
-updater available from the app menu and system tray after login. The image
-workflow labels published images with their build date and short commit ID, so
-the updater can show the available image version and date. The SDDM Breeze
-theme is selected in `sddm-theme.conf`. The image enables
+The image workflow checks out `cubelinux/cubelinux-vshell` and
+`cubelinux/cubelinux-updater` from their `main` branches into `vshell/` and
+`bootc-updater/` before building. The image installs the updater directly,
+along with its Python/QML runtime dependencies. Its KDE launcher and session
+autostart entry make the updater available from the app menu and system tray
+after login. The image workflow labels published images with their build date
+and short commit ID, so the updater can show the available image version and
+date. The SDDM Breeze theme is selected in `sddm-theme.conf`. The image enables
 NetworkManager, Firewalld, SDDM and Plasma Setup and sets
 `graphical.target` as the default. Plasma Setup runs before the login manager
 on the first boot so you can create the initial user. After setup completes,
 SDDM provides the login screen on later boots.
+
+Edit the `distro` section in `packages.yml` to configure the image's
+`/etc/os-release` identity and logo. The image workflow prepares those settings
+for the build, which writes the OS metadata and downloads the configured SVG
+icon into the system icon theme. The current settings identify the image as
+cubelinux 44, based on Fedora, with `https://cubelinux.github.io` as its home
+page.
 
 Konsole has a separate Host Terminal profile and launcher for host
 administration, including commands such as `sudo bootc upgrade`. The default

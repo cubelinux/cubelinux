@@ -21,6 +21,20 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Check out VShell
+        uses: actions/checkout@v4
+        with:
+          repository: cubelinux/cubelinux-vshell
+          ref: main
+          path: vshell
+
+      - name: Check out bootc updater
+        uses: actions/checkout@v4
+        with:
+          repository: cubelinux/cubelinux-updater
+          ref: main
+          path: bootc-updater
+
       - name: Set image name and tag
         id: image
         shell: bash
@@ -40,12 +54,17 @@ jobs:
         id: packages
         shell: bash
         run: |
-          ruby -ryaml -e '
-            packages = YAML.safe_load_file("packages.yml").fetch("packages")
+          ruby -ryaml -rjson -e '
+            config = YAML.safe_load_file("packages.yml")
+            packages = config.fetch("packages")
             abort "packages must be a non-empty list" unless packages.is_a?(Array) && !packages.empty?
             packages.each do |package|
               abort "invalid package name: #{package.inspect}" unless package.is_a?(String) && package.match?(/\A[A-Za-z0-9_.+-]+\z/)
             end
+            distro = config.fetch("distro")
+            abort "distro.os_release must be a mapping" unless distro.fetch("os_release").is_a?(Hash)
+            abort "distro.logo.url must be an HTTPS URL" unless distro.fetch("logo").fetch("url").start_with?("https://")
+            File.write("distro.json", JSON.generate(distro))
             File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |file| file.puts("packages=#{packages.join(" ")}") }
           '
 
