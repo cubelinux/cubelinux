@@ -46,10 +46,10 @@ SDDM provides the login screen on later boots.
 
 Edit the `distro` section in `packages.yml` to configure the image's
 `/etc/os-release` identity and logo. The image workflow prepares those settings
-for the build, which writes the OS metadata and downloads the configured SVG
-icon into the system icon theme. The current settings identify the image as
-cubelinux 44, based on Fedora, with `https://cubelinux.github.io` as its home
-page.
+for the build, which writes the OS metadata, downloads the configured SVG icon,
+and points KInfoCenter's About System page at that icon. The current settings
+identify the image as cubelinux 44, based on Fedora, with
+`https://cubelinux.github.io` as its home page.
 
 Konsole has a separate Host Terminal profile and launcher for host
 administration, including commands such as `sudo bootc upgrade`. The default

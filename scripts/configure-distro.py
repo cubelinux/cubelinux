@@ -15,7 +15,7 @@ def main(config_path: Path) -> None:
     if not isinstance(fields, dict):
         raise ValueError("distro config must define an os_release mapping")
 
-    required_fields = {"NAME", "ID", "PRETTY_NAME", "VERSION_ID", "LOGO"}
+    required_fields = {"NAME", "ID", "PRETTY_NAME", "VERSION_ID", "HOME_URL", "LOGO"}
     missing = required_fields - fields.keys()
     if missing:
         raise ValueError(f"missing os-release fields: {', '.join(sorted(missing))}")
@@ -54,6 +54,15 @@ def main(config_path: Path) -> None:
     icon_path = Path("/usr/share/icons/hicolor/scalable/apps") / f"{logo_name}.svg"
     icon_path.parent.mkdir(parents=True, exist_ok=True)
     icon_path.write_bytes(icon_data)
+
+    about_distro = Path("/etc/xdg/kcm-about-distrorc")
+    about_distro.parent.mkdir(parents=True, exist_ok=True)
+    about_distro.write_text(
+        "[General]\n"
+        f"LogoPath={icon_path}\n"
+        f"Website={fields['HOME_URL']}\n",
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":
