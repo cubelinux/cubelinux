@@ -20,6 +20,7 @@ base = [
   "python3-pyside6",
   "librsvg2-tools",
   "kf6-kirigami",
+  "kf6-qqc2-desktop-style",
   "qt6-qtdeclarative",
   "plymouth",
   "plymouth-system-theme",
