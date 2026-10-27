@@ -3,27 +3,27 @@ packages = ["lxc", "lxc-templates", "dnsmasq", "shadow-utils"]
 services = ["lxc-net.service"]
 
 [[files]]
-source = "src/vshell"
-destination = "/usr/lib/vshell/vshell"
+source = "src/cubelinux_vshell"
+destination = "/usr/lib/cubelinux-vshell/cubelinux_vshell"
 mode = "0644"
 
 [[files]]
-source = "bin/vshell"
-destination = "/usr/bin/vshell"
+source = "bin/cubelinux-vshell"
+destination = "/usr/bin/cubelinux-vshell"
 mode = "0755"
 
 [[files]]
-source = "bin/vshell-host-setup"
-destination = "/usr/libexec/vshell-host-setup"
+source = "bin/cubelinux-vshell-host-setup"
+destination = "/usr/libexec/cubelinux-vshell-host-setup"
 mode = "0755"
 
 [[files]]
-source = "data/org.vshell.desktop"
-destination = "/usr/share/applications/org.vshell.desktop"
+source = "data/org.cubelinux.VShell.desktop"
+destination = "/usr/share/applications/org.cubelinux.VShell.desktop"
 
 [[files]]
-source = "data/org.vshell.HostTerminal.desktop"
-destination = "/usr/share/applications/org.vshell.HostTerminal.desktop"
+source = "data/org.cubelinux.HostTerminal.desktop"
+destination = "/usr/share/applications/org.cubelinux.HostTerminal.desktop"
 
 [[files]]
 source = "data/VShell.profile"
@@ -38,5 +38,5 @@ source = "data/lxc-sysconfig"
 destination = "/etc/sysconfig/lxc"
 
 [[files]]
-source = "data/org.vshell.LxcSetup.policy"
-destination = "/usr/share/polkit-1/actions/org.vshell.LxcSetup.policy"
+source = "data/org.cubelinux.VShell.LxcSetup.policy"
+destination = "/usr/share/polkit-1/actions/org.cubelinux.VShell.LxcSetup.policy"

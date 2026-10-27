@@ -1,4 +1,4 @@
-"""Launch VShell or operate its Fedora LXC environment."""
+"""Launch Virtual Shell or operate its Fedora LXC environment."""
 
 import argparse
 import sys
@@ -14,7 +14,7 @@ from .version import __version__
 
 
 def _run_command(arguments: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="vshell")
+    parser = argparse.ArgumentParser(prog="cubelinux-vshell")
     parser.add_argument("command", choices=("init", "enter", "stop", "status"))
     parsed = parser.parse_args(arguments)
     try:
@@ -29,7 +29,7 @@ def _run_command(arguments: list[str]) -> int:
         print(status())
         return 0
     except (VShellError, OSError) as error:
-        print(f"vshell: {error}", file=sys.stderr)
+        print(f"cubelinux-vshell: {error}", file=sys.stderr)
         return 1
 
 
@@ -38,8 +38,8 @@ def main() -> int:
         return _run_command(sys.argv[1:])
 
     app = QGuiApplication(sys.argv)
-    app.setApplicationName("vshell")
-    app.setOrganizationName("vshell")
+    app.setApplicationName("cubelinux-vshell")
+    app.setOrganizationName("cubelinux")
 
     controller = SetupController()
     engine = QQmlApplicationEngine()

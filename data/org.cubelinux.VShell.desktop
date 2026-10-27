@@ -2,7 +2,7 @@
 Type=Application
 Name=Virtual Shell
 Comment=Set up a separate Linux environment for terminal work
-Exec=vshell
+Exec=cubelinux-vshell
 Icon=utilities-terminal
 Terminal=false
 Categories=System;Utility;

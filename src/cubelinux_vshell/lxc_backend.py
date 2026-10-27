@@ -1,4 +1,4 @@
-"""Rootless Fedora LXC setup and shell entry for VShell."""
+"""Rootless Fedora LXC setup and shell entry for Virtual Shell."""
 
 from __future__ import annotations
 
@@ -156,7 +156,7 @@ def _id_ranges(account: pwd.struct_passwd) -> tuple[tuple[int, int], tuple[int, 
 
 
 def _host_setup(progress: Progress) -> None:
-    helper = "/usr/libexec/vshell-host-setup"
+    helper = "/usr/libexec/cubelinux-vshell-host-setup"
     pkexec = shutil.which("pkexec")
     if not pkexec or not Path(helper).is_file():
         raise VShellError(
@@ -354,7 +354,7 @@ def initialize(progress: Progress = print) -> None:
 
     if not config_path.exists():
         _report(progress, "Downloading the Fedora environment…")
-        with tempfile.TemporaryDirectory(prefix="vshell-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="cubelinux-vshell-") as temporary:
             create_config = Path(temporary) / "lxc.conf"
             _write_create_config(create_config, account, uid_range, gid_range)
             command = _rootless_scope(
@@ -438,7 +438,7 @@ def enter() -> int:
     """Start the persistent container and attach the mapped Fedora user."""
     if not is_initialized():
         if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
-            executable = shutil.which("vshell") or "/usr/bin/vshell"
+            executable = shutil.which("cubelinux-vshell") or "/usr/bin/cubelinux-vshell"
             subprocess.Popen(
                 [executable],
                 stdin=subprocess.DEVNULL,
