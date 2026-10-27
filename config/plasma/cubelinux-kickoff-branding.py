@@ -9,7 +9,7 @@ from PySide6.QtCore import QCoreApplication, QTimer
 from PySide6.QtDBus import QDBus, QDBusConnection, QDBusMessage
 
 
-LOGO = Path("/usr/share/icons/hicolor/scalable/apps/cubelinux-logo.svg")
+LOGO = Path("/usr/share/icons/hicolor/64x64/apps/cubelinux-logo.png")
 ICON_URL = f"file://{LOGO}"
 CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
 MARKER = CONFIG_HOME / "cubelinux" / "kickoff-logo-configured"

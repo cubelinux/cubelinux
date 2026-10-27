@@ -71,8 +71,9 @@ cubelinux-updater/ or cubelinux-vshell/
 ### What belongs where
 
 - **`config/image.toml`** is the source of truth for the Fedora base image,
-  shared packages, distro branding, and included component revisions. Use a
-  full 40-character commit hash for every component revision.
+  shared packages, distro branding, and included component revisions. The
+  image build renders the logo as 64px launcher and 256px About page PNGs. Use
+  a full 40-character commit hash for every component revision.
 - **`config/plasma/`** holds shared Plasma defaults and first-login appearance
   assets. Keep the selected global theme in `kdeglobals`; the launcher helper
   only updates the panel button after Plasma creates the user's panel.
@@ -127,14 +128,16 @@ python3 -m unittest discover -s tests -v
 
 They cover component file and asset staging, executable modes, optional
 component omission, safe destinations, distro `os-release` replacement, and
-SVG logo installation. These are fast unit tests that use temporary files.
+logo rasterization at launcher and About page sizes. These are fast unit tests
+that use temporary files.
 
 The GitHub image workflow also performs an end-to-end filesystem check. It
 builds the image locally, creates a **stopped** Docker container from it, copies
 out `/usr/lib/os-release`, the configured logo, KDE's distro settings, and all
 staged component files, then compares their contents and modes with the build
-inputs. It publishes the image only after those checks pass. The image is never
-started, so its desktop services do not run during verification.
+inputs. It also checks that Plasma Setup's installed account page matches the
+cubelinux source. It publishes the image only after those checks pass. The
+image is never started, so its desktop services do not run during verification.
 
 To inspect a locally built image, first run image preparation and build it with
 Docker, then run:

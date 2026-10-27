@@ -38,7 +38,7 @@ PlasmaSetupComponents.SetupModule {
                 spacing: Kirigami.Units.smallSpacing
 
                 Image {
-                    source: "file:///usr/share/icons/hicolor/scalable/apps/cubelinux-logo.svg"
+                    source: "file:///usr/share/icons/hicolor/64x64/apps/cubelinux-logo.png"
                     sourceSize.width: 30
                     sourceSize.height: 30
                     fillMode: Image.PreserveAspectFit

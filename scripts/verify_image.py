@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,9 @@ from configure_distro import render_os_release
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / ".image-build"
+ACCOUNT_QML = Path(
+    "/usr/share/plasma/packages/org.kde.plasmasetup.account/contents/ui/main.qml"
+)
 
 
 def copy_from_image(container: str, image_path: str, destination: Path) -> bytes:
@@ -39,7 +43,10 @@ def verify_image(image: str) -> None:
     fields = distro["os_release"]
     component_root = BUILD / "rootfs"
     logo_name = fields["LOGO"]
-    logo_image_path = f"/usr/share/icons/hicolor/scalable/apps/{logo_name}.svg"
+    logo_paths = {
+        size: f"/usr/share/icons/hicolor/{size}x{size}/apps/{logo_name}.png"
+        for size in (64, 256)
+    }
     about_image_path = "/etc/xdg/kcm-about-distrorc"
     container = f"cubelinux-image-verify-{uuid.uuid4().hex[:12]}"
 
@@ -61,21 +68,38 @@ def verify_image(image: str) -> None:
             if actual_os_release != expected_os_release:
                 raise ValueError("image /usr/lib/os-release does not match config/image.toml")
 
-            logo_bytes = copy_from_image(container, logo_image_path, scratch / "logo.svg")
-            logo_root = ET.fromstring(logo_bytes)
-            if logo_root.tag.rsplit("}", 1)[-1] != "svg":
-                raise ValueError(f"image logo at {logo_image_path} is not an SVG")
+            for size, logo_image_path in logo_paths.items():
+                logo_bytes = copy_from_image(
+                    container, logo_image_path, scratch / f"logo-{size}.png"
+                )
+                if (
+                    not logo_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+                    or len(logo_bytes) < 24
+                    or struct.unpack(">II", logo_bytes[16:24]) != (size, size)
+                ):
+                    raise ValueError(
+                        f"image logo at {logo_image_path} is not a {size}x{size} PNG"
+                    )
 
             actual_about = copy_from_image(
                 container, about_image_path, scratch / "kcm-about-distrorc"
             ).decode("utf-8")
             expected_about = (
                 "[General]\n"
-                f"LogoPath={logo_image_path}\n"
+                f"LogoPath={logo_paths[256]}\n"
                 f"Website={fields['HOME_URL']}\n"
             )
             if actual_about != expected_about:
                 raise ValueError("image KDE distro settings do not match configured logo and website")
+
+            actual_account_qml = copy_from_image(
+                container, ACCOUNT_QML.as_posix(), scratch / "plasma-setup-account-main.qml"
+            )
+            expected_account_qml = (ROOT / "setup" / "account-main.qml").read_bytes()
+            if actual_account_qml != expected_account_qml:
+                raise ValueError(
+                    "image Plasma Setup account page does not match cubelinux/setup/account-main.qml"
+                )
 
             staged_files = sorted(path for path in component_root.rglob("*") if path.is_file())
             for index, expected_path in enumerate(staged_files):

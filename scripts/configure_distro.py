@@ -3,7 +3,9 @@
 
 import json
 import re
+import subprocess
 import sys
+import tempfile
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -27,6 +29,70 @@ def render_os_release(fields: object) -> str:
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         lines.append(f'{key}="{escaped}"')
     return "\n".join(lines) + "\n"
+
+
+def resolve_svg_color_variables(root: ET.Element) -> None:
+    variables: dict[str, str] = {}
+    variable_pattern = re.compile(r"var\(\s*(--[A-Za-z0-9_-]+)\s*\)")
+
+    for element in root.iter():
+        for declaration in element.get("style", "").split(";"):
+            name, separator, value = declaration.partition(":")
+            name = name.strip()
+            if separator and name.startswith("--"):
+                variables[name] = value.strip()
+
+    for element in root.iter():
+        for attribute, original in element.attrib.items():
+            if "var(" not in original:
+                continue
+
+            def replace_variable(match: re.Match[str]) -> str:
+                name = match.group(1)
+                if name not in variables:
+                    raise ValueError(f"SVG references undefined color variable {name}")
+                return variables[name]
+
+            resolved = variable_pattern.sub(replace_variable, original)
+            if "var(" in resolved:
+                raise ValueError(f"unsupported CSS variable syntax in SVG attribute {attribute}")
+            element.set(attribute, resolved)
+
+
+def render_logo_pngs(root: ET.Element, logo_name: str, root_dir: Path) -> dict[int, Path]:
+    ET.register_namespace("", "http://www.w3.org/2000/svg")
+    resolve_svg_color_variables(root)
+
+    outputs = {
+        size: root_dir
+        / "usr/share/icons/hicolor"
+        / f"{size}x{size}"
+        / "apps"
+        / f"{logo_name}.png"
+        for size in (64, 256)
+    }
+    with tempfile.TemporaryDirectory(prefix="cubelinux-logo-") as temporary:
+        source = Path(temporary) / "logo.svg"
+        source.write_bytes(ET.tostring(root, encoding="utf-8", xml_declaration=True))
+        for size, output in outputs.items():
+            output.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                [
+                    "rsvg-convert",
+                    "--width",
+                    str(size),
+                    "--height",
+                    str(size),
+                    "--keep-aspect-ratio",
+                    "--output",
+                    str(output),
+                    str(source),
+                ],
+                check=True,
+            )
+            if not output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
+                raise RuntimeError(f"rsvg-convert did not create a valid PNG at {output}")
+    return outputs
 
 
 def configure(
@@ -61,19 +127,16 @@ def configure(
     root = ET.fromstring(icon_data)
     if root.tag.rsplit("}", 1)[-1] != "svg":
         raise ValueError("logo URL did not return an SVG document")
+    icon_paths = render_logo_pngs(root, logo_name, root_dir)
 
     os_release_path = root_dir / "usr/lib/os-release"
     os_release_path.parent.mkdir(parents=True, exist_ok=True)
     os_release_path.write_text(os_release, encoding="utf-8")
-    icon_path = root_dir / "usr/share/icons/hicolor/scalable/apps" / f"{logo_name}.svg"
-    icon_path.parent.mkdir(parents=True, exist_ok=True)
-    icon_path.write_bytes(icon_data)
-
     about_distro = root_dir / "etc/xdg/kcm-about-distrorc"
     about_distro.parent.mkdir(parents=True, exist_ok=True)
     about_distro.write_text(
         "[General]\n"
-        f"LogoPath={icon_path}\n"
+        f"LogoPath={icon_paths[256]}\n"
         f"Website={fields['HOME_URL']}\n",
         encoding="utf-8",
     )

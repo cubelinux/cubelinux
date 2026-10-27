@@ -18,6 +18,7 @@ base = [
   "konsole",
   "polkit",
   "python3-pyside6",
+  "librsvg2-tools",
   "kf6-kirigami",
   "qt6-qtdeclarative",
   "plymouth",

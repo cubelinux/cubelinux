@@ -1,11 +1,13 @@
 import json
 import os
+import struct
 import stat
 import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +18,7 @@ import prepare_image  # noqa: E402
 
 
 class ConfigureDistroTests(unittest.TestCase):
-    def test_replaces_os_release_and_installs_logo_assets(self):
+    def test_replaces_os_release_and_renders_logo_assets(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config_path = root / "distro.json"
@@ -40,9 +42,25 @@ class ConfigureDistroTests(unittest.TestCase):
             os_release = root / "usr/lib/os-release"
             os_release.parent.mkdir(parents=True)
             os_release.write_text('OLD_NAME="old image"\n', encoding="utf-8")
-            svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" />'
+            svg = (
+                b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1">'
+                b'<g style="--logo-color: #2d9bd2"><path fill="var(--logo-color)" />'
+                b"</g></svg>"
+            )
 
-            configure_distro.configure(config_path, root, logo_data=svg)
+            def fake_rsvg_convert(command, check):
+                source = Path(command[-1])
+                converted = ET.parse(source).getroot()[0][0]
+                self.assertEqual(converted.get("fill"), "#2d9bd2")
+                size = int(command[command.index("--width") + 1])
+                output = Path(command[command.index("--output") + 1])
+                output.write_bytes(
+                    b"\x89PNG\r\n\x1a\n"
+                    + struct.pack("!IIBBBBB", size, size, 8, 6, 0, 0, 0)
+                )
+
+            with patch.object(configure_distro.subprocess, "run", side_effect=fake_rsvg_convert):
+                configure_distro.configure(config_path, root, logo_data=svg)
 
             self.assertEqual(
                 os_release.read_text(encoding="utf-8"),
@@ -54,8 +72,10 @@ class ConfigureDistroTests(unittest.TestCase):
                 'LOGO="cubelinux-logo"\n'
                 'DESCRIPTION="cubelinux \\"desktop\\""\n',
             )
-            logo = root / "usr/share/icons/hicolor/scalable/apps/cubelinux-logo.svg"
-            self.assertEqual(logo.read_bytes(), svg)
+            logo = root / "usr/share/icons/hicolor/256x256/apps/cubelinux-logo.png"
+            small_logo = root / "usr/share/icons/hicolor/64x64/apps/cubelinux-logo.png"
+            self.assertTrue(logo.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+            self.assertTrue(small_logo.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
             about = root / "etc/xdg/kcm-about-distrorc"
             self.assertEqual(
                 about.read_text(encoding="utf-8"),
