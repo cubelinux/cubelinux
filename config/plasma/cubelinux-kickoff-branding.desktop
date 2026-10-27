@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=cubelinux launcher branding
+Exec=/usr/bin/python3 /usr/libexec/cubelinux-kickoff-branding.py
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=1
+NoDisplay=true

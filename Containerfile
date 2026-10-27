@@ -22,13 +22,15 @@ RUN set -eux; \
 
 COPY .image-build/rootfs/ /
 
-# Brand Plasma Setup's existing account page while retaining its AccountController
-# and KAuth user-creation backend. Reorder the built-in Wi-Fi module to the front.
+# Configure KDE defaults in the image and brand Plasma Setup's account page,
+# retaining its AccountController and KAuth user-creation backend.
 COPY setup/ /tmp/cubelinux-setup/
-RUN python3 /tmp/cubelinux-setup/configure_plasma_setup.py && \
-    rm -rf /tmp/cubelinux-setup
+COPY config/plasma/ /tmp/cubelinux-plasma/
+COPY scripts/configure_plasma.py /tmp/configure_plasma.py
+RUN python3 /tmp/configure_plasma.py && \
+    rm -rf /tmp/cubelinux-setup /tmp/cubelinux-plasma /tmp/configure_plasma.py
 
-COPY sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
+COPY config/sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
 COPY bootc/kargs.d/10-quiet-boot.toml /usr/lib/bootc/kargs.d/10-quiet-boot.toml
 
 COPY .image-build/services.txt /tmp/component-services.txt

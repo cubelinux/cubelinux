@@ -38,15 +38,22 @@ cubelinux/
 |-- bootc/
 |   `-- kargs.d/                # Shared bootc kernel arguments
 |-- config/
-|   `-- image.toml              # Image defaults, shared packages, components
+|   |-- image.toml              # Image defaults, shared packages, components
+|   |-- sddm-theme.conf         # Shared display-manager theme
+|   `-- plasma/                 # Shared KDE defaults and first-login branding
+|       |-- kdeglobals          # Default Breeze global theme
+|       |-- cubelinux-kickoff-branding.py
+|       `-- cubelinux-kickoff-branding.desktop
+|-- setup/
+|   `-- account-main.qml        # Branded Plasma Setup account page
 |-- scripts/
 |   |-- configure_distro.py     # Apply distro identity and logo in the image
+|   |-- configure_plasma.py     # Set Plasma defaults during image build
 |   |-- prepare_image.py        # Fetch, validate, and stage components
 |   `-- verify_image.py        # Inspect files in a built image
 |-- tests/
 |   `-- test_image_builder.py   # Offline tests for image preparation behavior
 |-- Containerfile               # Image build steps; no component-specific paths
-|-- sddm-theme.conf             # Shared display-manager configuration
 `-- README.md
 ```
 
@@ -66,6 +73,11 @@ cubelinux-updater/ or cubelinux-vshell/
 - **`config/image.toml`** is the source of truth for the Fedora base image,
   shared packages, distro branding, and included component revisions. Use a
   full 40-character commit hash for every component revision.
+- **`config/plasma/`** holds shared Plasma defaults and first-login appearance
+  assets. Keep the selected global theme in `kdeglobals`; the launcher helper
+  only updates the panel button after Plasma creates the user's panel.
+- **`setup/`** contains files that customize Plasma Setup itself. Keep its QML
+  overrides here and apply them with the image-build script.
 - **`component.toml`** describes one companion app's image contribution:
   packages it needs, systemd services to enable, and files to install with
   their source path, destination, and mode. Keep application logic and its
@@ -78,8 +90,10 @@ cubelinux-updater/ or cubelinux-vshell/
   not edit or commit it.
 - **`scripts/configure_distro.py`** applies the configured operating-system
   identity and logo. Keep distro branding values in `config/image.toml`.
-- **`bootc/` and `sddm-theme.conf`** are for settings shared by the base desktop,
-  not files owned by one optional component.
+- **`scripts/configure_plasma.py`** merges the checked-in KDE defaults into the
+  image during the build, preserving Fedora's other profile settings.
+- **`bootc/` and `config/`** hold settings shared by the base system and
+  desktop, not files owned by one optional component.
 
 Component manifests currently support files under `/usr` or `/etc`, package
 names, and systemd unit names. Sources must be relative to the component repo.
