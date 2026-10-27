@@ -38,5 +38,13 @@ source = "data/lxc-sysconfig"
 destination = "/etc/sysconfig/lxc"
 
 [[files]]
+source = "data/cubelinux-vshell.zone.xml"
+destination = "/usr/lib/firewalld/zones/cubelinux-vshell.xml"
+
+[[files]]
+source = "data/vshell-egress.policy.xml"
+destination = "/usr/lib/firewalld/policies/vshell-egress.xml"
+
+[[files]]
 source = "data/org.cubelinux.VShell.LxcSetup.policy"
 destination = "/usr/share/polkit-1/actions/org.cubelinux.VShell.LxcSetup.policy"

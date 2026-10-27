@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import platform
 import pwd
@@ -18,6 +19,10 @@ CONTAINER_NAME = "vshell"
 FEDORA_RELEASE = "44"
 GUEST_ID = 50000
 ID_COUNT = 65536
+SHUTDOWN_HOOK = """#!/bin/sh
+# Stop the CubeLinux Fedora container before the Plasma user manager exits.
+/usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
+"""
 Progress = Callable[[str], None]
 
 
@@ -36,6 +41,25 @@ def _lxc_path() -> Path:
 
 def _config_path() -> Path:
     return _lxc_path() / CONTAINER_NAME / "config"
+
+
+def install_shutdown_hook() -> None:
+    """Install a Plasma logout script that gracefully stops the container."""
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    hook = config_home / "plasma-workspace" / "shutdown" / "cubelinux-vshell-stop"
+    try:
+        if hook.is_file() and hook.read_text(encoding="utf-8") == SHUTDOWN_HOOK:
+            hook.chmod(0o755)
+            return
+        if hook.exists():
+            return
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        hook.write_text(SHUTDOWN_HOOK, encoding="utf-8")
+        hook.chmod(0o755)
+    except OSError as error:
+        raise VShellError(
+            f"Could not install the Fedora shutdown hook at {hook}: {error}"
+        ) from error
 
 
 def is_initialized() -> bool:
@@ -204,7 +228,8 @@ def _wait_until_running(progress: Progress) -> None:
 
 def _wait_for_network(progress: Progress) -> None:
     _report(progress, "Connecting Fedora to the network…")
-    deadline = time.monotonic() + 60
+    deadline = time.monotonic() + 30
+    reported_ips = ""
     while time.monotonic() < deadline:
         result = subprocess.run(
             [
@@ -220,10 +245,27 @@ def _wait_for_network(progress: Progress) -> None:
             text=True,
             check=False,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            return
+        reported_ips = result.stdout.strip()
+        if result.returncode == 0:
+            for value in reported_ips.split():
+                try:
+                    address = ipaddress.ip_address(value)
+                except ValueError:
+                    continue
+                if isinstance(address, ipaddress.IPv4Address) and not (
+                    address.is_loopback or address.is_unspecified
+                ):
+                    return
         time.sleep(1)
-    raise VShellError("Fedora could not connect to the LXC network. Check the host network and retry.")
+    if reported_ips:
+        detail = f" LXC only reported: {reported_ips}."
+    else:
+        detail = " LXC reported no IP addresses."
+    raise VShellError(
+        "Fedora did not receive an IPv4 DHCP lease within 30 seconds. "
+        "Check that lxc-net and dnsmasq are running and the host firewall allows DHCP on lxcbr0."
+        + detail
+    )
 
 
 def _mapping_lines(uid_start: int, gid_start: int, uid: int, gid: int) -> list[str]:
@@ -520,6 +562,8 @@ def stop() -> None:
                     CONTAINER_NAME,
                     "--lxcpath",
                     str(_lxc_path()),
+                    "--timeout",
+                    "25",
                 ]
             ),
             print,

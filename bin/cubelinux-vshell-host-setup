@@ -4,6 +4,7 @@
 import os
 import pwd
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 RANGE_SIZE = 65536
 RANGE_MIN = 100000
 RANGE_LIMIT = 600100000
+FIREWALL_ZONE = "cubelinux-vshell"
 
 
 class SetupError(Exception):
@@ -121,6 +123,34 @@ def start_bridge():
         raise SetupError(result.stdout.strip() or "Could not start the LXC network bridge.")
 
 
+def assign_bridge_firewall_zone():
+    firewall_cmd = shutil.which("firewall-cmd")
+    if not firewall_cmd:
+        return
+    state = subprocess.run(
+        [firewall_cmd, "--state"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if state.returncode or state.stdout.strip() != "running":
+        return
+
+    result = subprocess.run(
+        [firewall_cmd, "--zone=" + FIREWALL_ZONE, "--change-interface=lxcbr0"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise SetupError(
+            result.stdout.strip()
+            or f"Could not assign lxcbr0 to the {FIREWALL_ZONE} firewall zone."
+        )
+
+
 def main():
     if os.geteuid() != 0:
         raise SetupError("This helper must be started through Polkit.")
@@ -139,6 +169,7 @@ def main():
     ensure_subids(user)
     ensure_network_permission(user)
     start_bridge()
+    assign_bridge_firewall_zone()
     print("Rootless LXC is ready for this user.")
     return 0
 

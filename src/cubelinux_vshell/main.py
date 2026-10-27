@@ -9,7 +9,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
 from .controller import SetupController
-from .lxc_backend import VShellError, enter, initialize, status, stop
+from .lxc_backend import VShellError, enter, initialize, install_shutdown_hook, status, stop
 from .version import __version__
 
 
@@ -34,6 +34,11 @@ def _run_command(arguments: list[str]) -> int:
 
 
 def main() -> int:
+    try:
+        install_shutdown_hook()
+    except VShellError as error:
+        print(f"cubelinux-vshell: {error}", file=sys.stderr)
+
     if len(sys.argv) > 1:
         return _run_command(sys.argv[1:])
 

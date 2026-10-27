@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policy target="ACCEPT">
+  <short>CubeLinux Virtual Shell outbound</short>
+  <description>Allow connections initiated by Fedora through the LXC bridge and their stateful replies.</description>
+  <ingress-zone name="cubelinux-vshell"/>
+  <egress-zone name="ANY"/>
+</policy>
