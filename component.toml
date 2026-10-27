@@ -3,32 +3,32 @@ packages = []
 services = []
 
 [[files]]
-source = "src/bootc_updater"
-destination = "/usr/lib/bootc-updater/bootc_updater"
+source = "src/cubelinux_updater"
+destination = "/usr/lib/cubelinux-updater/cubelinux_updater"
 mode = "0644"
 
 [[files]]
-source = "bin/bootc-updater"
-destination = "/usr/bin/bootc-updater"
+source = "bin/cubelinux-updater"
+destination = "/usr/bin/cubelinux-updater"
 mode = "0755"
 
 [[files]]
-source = "bin/bootc-updater-helper"
-destination = "/usr/libexec/bootc-updater-helper"
+source = "bin/cubelinux-updater-helper"
+destination = "/usr/libexec/cubelinux-updater-helper"
 mode = "0755"
 
 [[files]]
-source = "data/org.bootc.Updater.desktop"
-destination = "/usr/share/applications/org.bootc.Updater.desktop"
+source = "data/org.cubelinux.Updater.desktop"
+destination = "/usr/share/applications/org.cubelinux.Updater.desktop"
 
 [[files]]
-source = "data/bootc-updater-autostart.desktop"
-destination = "/etc/xdg/autostart/bootc-updater-autostart.desktop"
+source = "data/cubelinux-updater-autostart.desktop"
+destination = "/etc/xdg/autostart/cubelinux-updater-autostart.desktop"
 
 [[files]]
-source = "data/org.bootc.Updater.policy"
-destination = "/usr/share/polkit-1/actions/org.bootc.Updater.policy"
+source = "data/org.cubelinux.Updater.policy"
+destination = "/usr/share/polkit-1/actions/org.cubelinux.Updater.policy"
 
 [[files]]
-source = "data/50-bootc-updater.rules"
-destination = "/usr/share/polkit-1/rules.d/50-bootc-updater.rules"
+source = "data/50-cubelinux-updater.rules"
+destination = "/usr/share/polkit-1/rules.d/50-cubelinux-updater.rules"

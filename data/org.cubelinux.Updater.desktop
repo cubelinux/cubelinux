@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=bootc Updater
+Name=Updater
 Comment=Check and stage bootc system image updates
-Exec=bootc-updater
+Exec=cubelinux-updater
 Icon=system-software-update
 Terminal=false
 Categories=System;Settings;

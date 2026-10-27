@@ -3,8 +3,8 @@
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <policyconfig>
-  <vendor>bootc Updater</vendor>
-  <action id="org.bootc.Updater.check">
+  <vendor>cubelinux</vendor>
+  <action id="org.cubelinux.Updater.check">
     <description>Check for system updates</description>
     <message>Authentication is required to check for updates</message>
     <defaults>
@@ -12,10 +12,10 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bootc-updater-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/cubelinux-updater-helper</annotate>
     <annotate key="org.freedesktop.policykit.exec.argv1">check</annotate>
   </action>
-  <action id="org.bootc.Updater.download">
+  <action id="org.cubelinux.Updater.download">
     <description>Download a system update</description>
     <message>Authentication is required to download an update</message>
     <defaults>
@@ -23,10 +23,10 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bootc-updater-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/cubelinux-updater-helper</annotate>
     <annotate key="org.freedesktop.policykit.exec.argv1">download</annotate>
   </action>
-  <action id="org.bootc.Updater.apply">
+  <action id="org.cubelinux.Updater.apply">
     <description>Apply the downloaded system update and restart</description>
     <message>Authentication is required to apply an update and restart</message>
     <defaults>
@@ -34,7 +34,7 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bootc-updater-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/cubelinux-updater-helper</annotate>
     <annotate key="org.freedesktop.policykit.exec.argv1">apply</annotate>
   </action>
 </policyconfig>

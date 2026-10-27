@@ -6,7 +6,7 @@ import org.kde.kirigami as Kirigami
 Kirigami.ApplicationWindow {
     id: root
 
-    title: qsTr("bootc Updater")
+    title: qsTr("Updater")
     visible: false
     width: 760
     height: 560
@@ -162,7 +162,7 @@ Kirigami.ApplicationWindow {
 
             Controls.Label {
                 Layout.alignment: Qt.AlignRight
-                text: qsTr("bootc Updater · %1").arg(softwareVersion)
+                text: qsTr("Updater · %1").arg(softwareVersion)
                 opacity: 0.55
                 font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
             }

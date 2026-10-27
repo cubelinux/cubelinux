@@ -1,21 +1,21 @@
 #!/usr/bin/python3
-"""Start the image-installed bootc-updater application."""
+"""Start the image-installed cubelinux updater application."""
 
 import sys
 import traceback
 from pathlib import Path
 
-sys.path.insert(0, "/usr/lib/bootc-updater")
+sys.path.insert(0, "/usr/lib/cubelinux-updater")
 
 try:
-    from bootc_updater.main import main
+    from cubelinux_updater.main import main
 
     raise SystemExit(main())
 except Exception:
     try:
-        log_dir = Path.home() / ".local" / "state" / "bootc-updater"
+        log_dir = Path.home() / ".local" / "state" / "cubelinux-updater"
         log_dir.mkdir(parents=True, exist_ok=True)
-        with (log_dir / "bootc-updater.log").open("a", encoding="utf-8") as log_file:
+        with (log_dir / "cubelinux-updater.log").open("a", encoding="utf-8") as log_file:
             log_file.write("\nBootstrap failure:\n")
             traceback.print_exc(file=log_file)
     except OSError:

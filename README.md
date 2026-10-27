@@ -1,7 +1,6 @@
-# bootc-updater
+# cubelinux-updater
 
-A small KDE Plasma application for checking for and installing Fedora bootc
-system updates.
+The KDE Plasma **Updater** app checks for and installs cubelinux system updates.
 
 ## UI stack
 
@@ -37,7 +36,7 @@ progress and errors to the interface.
 
 Install PySide6 and the Kirigami QML runtime module from your distribution,
 then install the project with `python -m pip install --no-deps -e .` and launch
-it with `bootc-updater`.
+it with `cubelinux-updater`.
 
 The app uses a root-owned helper with three fixed operations: check for system
 updates, download the current update, and apply the downloaded update while
@@ -53,9 +52,9 @@ ended externally or the user session stops.
 The updater window shows its software version at the bottom; it is currently
 `0.0.0`.
 Startup, QML, and update-operation diagnostics are written to
-`~/.local/state/bootc-updater/bootc-updater.log` so failures from the hidden
+`~/.local/state/cubelinux-updater/cubelinux-updater.log` so failures from the hidden
 autostart can be inspected after login.
-`data/bootc-updater-autostart.desktop` is intended for the system autostart
+`data/cubelinux-updater-autostart.desktop` is intended for the system autostart
 directory so it starts when the user's KDE session begins. Update notifications
 are not implemented yet.
 

@@ -27,17 +27,17 @@ from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 from .version import __version__
 
 
-SERVER_NAME = "bootc-updater-session"
-LOGGER = logging.getLogger("bootc_updater")
+SERVER_NAME = "cubelinux-updater-session"
+LOGGER = logging.getLogger("cubelinux_updater")
 
 
 def configure_logging() -> Path | None:
     """Write startup and operation diagnostics to the user's state directory."""
     try:
-        log_dir = Path.home() / ".local" / "state" / "bootc-updater"
+        log_dir = Path.home() / ".local" / "state" / "cubelinux-updater"
         log_dir.mkdir(parents=True, exist_ok=True)
         handler = RotatingFileHandler(
-            log_dir / "bootc-updater.log",
+            log_dir / "cubelinux-updater.log",
             maxBytes=1024 * 1024,
             backupCount=3,
             encoding="utf-8",
@@ -45,8 +45,8 @@ def configure_logging() -> Path | None:
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
         LOGGER.setLevel(logging.INFO)
         LOGGER.addHandler(handler)
-        LOGGER.info("Starting bootc-updater (arguments: %s)", sys.argv[1:])
-        return log_dir / "bootc-updater.log"
+        LOGGER.info("Starting cubelinux-updater (arguments: %s)", sys.argv[1:])
+        return log_dir / "cubelinux-updater.log"
     except OSError as error:
         logging.basicConfig(level=logging.INFO)
         LOGGER.warning("Could not open the updater log file: %s", error)
@@ -240,7 +240,7 @@ class UpdateController(QObject):
         self._set_tray_state("busy")
         self._process.start(
             "/usr/bin/pkexec",
-            ["/usr/libexec/bootc-updater-helper", *arguments],
+            ["/usr/libexec/cubelinux-updater-helper", *arguments],
         )
 
     @Slot()
@@ -323,7 +323,7 @@ class UpdateController(QObject):
             self._set_has_checked(True)
 
         check_output, marker, status_output = output.partition(
-            "BOOTC_UPDATER_STATUS_JSON_BEGIN"
+            "CUBELINUX_UPDATER_STATUS_JSON_BEGIN"
         )
         if not marker:
             check_output = output
@@ -443,8 +443,8 @@ def main() -> int:
     arguments = [argument for argument in sys.argv if argument != "--background"]
 
     app = QApplication(arguments)
-    app.setApplicationName("bootc-updater")
-    app.setOrganizationName("bootc-updater")
+    app.setApplicationName("cubelinux-updater")
+    app.setOrganizationName("cubelinux")
     app.setQuitOnLastWindowClosed(False)
     sys.excepthook = lambda exception_type, exception, traceback: LOGGER.critical(
         "Uncaught application exception",
@@ -477,9 +477,9 @@ def main() -> int:
         LOGGER.error("QML interface failed to load from %s", qml_file)
         QMessageBox.critical(
             None,
-            "bootc Updater could not start",
+            "Updater could not start",
             "The updater interface failed to load. Check "
-            "~/.local/state/bootc-updater/bootc-updater.log for details.",
+            "~/.local/state/cubelinux-updater/cubelinux-updater.log for details.",
         )
         return 1
 
@@ -508,7 +508,7 @@ def main() -> int:
     icon = QIcon.fromTheme("system-software-update")
     app.setWindowIcon(icon)
     tray = QSystemTrayIcon(icon, app)
-    tray.setToolTip("bootc Updater")
+    tray.setToolTip("Updater")
 
     spinner_icons = create_spinner_icons()
     tray_icons = {
@@ -529,26 +529,26 @@ def main() -> int:
 
     def set_tray_state(state: str) -> None:
         if state == "busy":
-            tray.setToolTip("bootc Updater: working")
+            tray.setToolTip("Updater: working")
             spinner_timer.start()
             return
 
         spinner_timer.stop()
         tray.setIcon(tray_icons.get(state, icon))
         tooltip = {
-            "available": "bootc Updater: update available",
-            "staged": "bootc Updater: restart to finish installing the update",
-            "rebooting": "bootc Updater: restarting to finish the update",
-            "error": "bootc Updater: operation failed",
-            "idle": "bootc Updater",
+            "available": "Updater: update available",
+            "staged": "Updater: restart to finish installing the update",
+            "rebooting": "Updater: restarting to finish the update",
+            "error": "Updater: operation failed",
+            "idle": "Updater",
         }
-        tray.setToolTip(tooltip.get(state, "bootc Updater"))
+        tray.setToolTip(tooltip.get(state, "Updater"))
 
     spinner_timer.timeout.connect(advance_spinner)
     update_controller.trayStateChanged.connect(set_tray_state)
 
     menu = QMenu()
-    open_action = QAction("Open bootc Updater", menu)
+    open_action = QAction("Open Updater", menu)
     open_action.triggered.connect(show_window)
     menu.addAction(open_action)
     tray.setContextMenu(menu)
