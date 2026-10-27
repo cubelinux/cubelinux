@@ -160,6 +160,13 @@ Kirigami.ApplicationWindow {
                 }
             }
 
+            Controls.Label {
+                Layout.alignment: Qt.AlignRight
+                text: qsTr("bootc Updater · %1").arg(softwareVersion)
+                opacity: 0.55
+                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
+            }
+
         }
     }
 

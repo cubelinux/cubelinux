@@ -24,6 +24,8 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+from .version import __version__
+
 
 SERVER_NAME = "bootc-updater-session"
 LOGGER = logging.getLogger("bootc_updater")
@@ -468,6 +470,7 @@ def main() -> int:
     engine.warnings.connect(log_qml_warnings)
     update_controller = UpdateController()
     engine.rootContext().setContextProperty("updateController", update_controller)
+    engine.rootContext().setContextProperty("softwareVersion", __version__)
     qml_file = Path(__file__).parent / "qml" / "Main.qml"
     engine.load(qml_file)
     if not engine.rootObjects():

@@ -1,0 +1,34 @@
+id = "updater"
+packages = []
+services = []
+
+[[files]]
+source = "src/bootc_updater"
+destination = "/usr/lib/bootc-updater/bootc_updater"
+mode = "0644"
+
+[[files]]
+source = "bin/bootc-updater"
+destination = "/usr/bin/bootc-updater"
+mode = "0755"
+
+[[files]]
+source = "bin/bootc-updater-helper"
+destination = "/usr/libexec/bootc-updater-helper"
+mode = "0755"
+
+[[files]]
+source = "data/org.bootc.Updater.desktop"
+destination = "/usr/share/applications/org.bootc.Updater.desktop"
+
+[[files]]
+source = "data/bootc-updater-autostart.desktop"
+destination = "/etc/xdg/autostart/bootc-updater-autostart.desktop"
+
+[[files]]
+source = "data/org.bootc.Updater.policy"
+destination = "/usr/share/polkit-1/actions/org.bootc.Updater.policy"
+
+[[files]]
+source = "data/50-bootc-updater.rules"
+destination = "/usr/share/polkit-1/rules.d/50-bootc-updater.rules"
