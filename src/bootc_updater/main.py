@@ -22,7 +22,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .version import __version__
 
@@ -472,9 +472,15 @@ def main() -> int:
     engine.rootContext().setContextProperty("updateController", update_controller)
     engine.rootContext().setContextProperty("softwareVersion", __version__)
     qml_file = Path(__file__).parent / "qml" / "Main.qml"
-    engine.load(qml_file)
+    engine.load(str(qml_file))
     if not engine.rootObjects():
         LOGGER.error("QML interface failed to load from %s", qml_file)
+        QMessageBox.critical(
+            None,
+            "bootc Updater could not start",
+            "The updater interface failed to load. Check "
+            "~/.local/state/bootc-updater/bootc-updater.log for details.",
+        )
         return 1
 
     window = engine.rootObjects()[0]
