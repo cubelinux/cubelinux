@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <zone>
-  <short>CubeLinux Virtual Shell</short>
-  <description>DHCP and DNS for the CubeLinux Fedora container bridge.</description>
+  <short>cubelinux Virtual Shell</short>
+  <description>DHCP and DNS for the cubelinux Fedora container bridge.</description>
   <interface name="lxcbr0"/>
   <service name="dhcp"/>
   <service name="dns"/>

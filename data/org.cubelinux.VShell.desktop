@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=Virtual Shell
-Comment=Set up a separate Linux environment for terminal work
+Name=Setup Terminal
+Comment=Set up and open your cubelinux Fedora environment
 Exec=cubelinux-vshell
 Icon=utilities-terminal
 Terminal=false

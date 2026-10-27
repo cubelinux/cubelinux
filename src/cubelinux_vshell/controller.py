@@ -1,10 +1,10 @@
-"""Qt controller for setting up and opening the Virtual Shell."""
+"""Qt controller for setting up and opening Setup Terminal."""
 
 import re
 
 from PySide6.QtCore import Property, QObject, QProcess, QThread, Signal, Slot
 
-from .lxc_backend import VShellError, initialize, is_initialized
+from .lxc_backend import VShellError, initialize, is_initialized, status
 
 
 class SetupWorker(QThread):
@@ -26,6 +26,7 @@ class SetupWorker(QThread):
 class SetupController(QObject):
     progressChanged = Signal()
     stateChanged = Signal()
+    containerStatusChanged = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -33,6 +34,8 @@ class SetupController(QObject):
         self._progress_title = ""
         self._progress_percent = -1
         self._worker: SetupWorker | None = None
+        self._container_status = "not-set-up"
+        self.refreshStatus()
 
     @Property(str, notify=progressChanged)
     def progress(self) -> str:
@@ -53,6 +56,20 @@ class SetupController(QObject):
     @Property(bool, notify=stateChanged)
     def ready(self) -> bool:
         return is_initialized()
+
+    @Property(str, notify=containerStatusChanged)
+    def containerStatus(self) -> str:
+        return self._container_status
+
+    @Slot()
+    def refreshStatus(self) -> None:
+        try:
+            current = status()
+        except (VShellError, OSError):
+            current = "unknown"
+        if current != self._container_status:
+            self._container_status = current
+            self.containerStatusChanged.emit()
 
     @Slot()
     def setup(self) -> None:
@@ -107,10 +124,11 @@ class SetupController(QObject):
 
     @Slot()
     def _setup_succeeded(self) -> None:
-        self._progress = "Fedora Virtual Shell is ready."
+        self._progress = "Setup Terminal is ready."
         self._progress_title = "Setup complete"
         self._progress_percent = 100
         self.progressChanged.emit()
+        self.refreshStatus()
         self.stateChanged.emit()
 
     @Slot(str)

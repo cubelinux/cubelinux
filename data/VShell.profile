@@ -1,5 +1,5 @@
 [General]
 Command=/usr/bin/cubelinux-vshell enter
 Icon=utilities-terminal
-Name=Virtual Shell
+Name=Terminal
 Parent=FALLBACK/

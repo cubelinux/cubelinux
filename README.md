@@ -1,7 +1,7 @@
 # cubelinux-vshell
 
-`cubelinux-vshell` is the command and application ID for the cubelinux Virtual
-Shell setup application and persistent Fedora LXC environment.
+`cubelinux-vshell` is the command and application ID for Setup Terminal and its
+persistent Fedora LXC environment.
 
 The wizard downloads a Fedora 44 LXC image, creates an unprivileged container,
 and shares the signed-in user's home folder automatically. The host setup asks
@@ -17,8 +17,7 @@ location and LXC container name stay unchanged so configured environments are
 preserved when the command is renamed.
 
 The image also provides a separate Konsole Host Terminal profile for host
-administration. Konsole's default profile will be redirected to Virtual Shell
-after the container startup backend is working.
+administration.
 
 ## Image sources
 
@@ -28,11 +27,11 @@ system images.
 
 ## Use
 
-Open **Virtual Shell** from the application menu and follow the short wizard.
-Once setup completes, choose **Open Virtual Shell** to start a Konsole session
-inside Fedora. Konsole also provides a **Virtual Shell** profile. The separate
+Open **Setup Terminal** from the application menu and follow the short wizard.
+Once setup completes, choose **Open terminal** to start a Konsole session
+inside Fedora. Konsole also provides a **Terminal** profile. The separate
 **Host Terminal** profile remains available for host administration.
-Opening the Virtual Shell profile before setup is complete launches the wizard.
+Opening the Terminal profile before setup is complete launches the wizard.
 
 The installed `cubelinux-vshell` command also supports these operations:
 
