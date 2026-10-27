@@ -1,0 +1,48 @@
+base_image = "quay.io/fedora/fedora-bootc:44"
+
+[distro.os_release]
+NAME = "cubelinux"
+ID = "cubelinux"
+ID_LIKE = "fedora"
+PRETTY_NAME = "cubelinux 44"
+VERSION_ID = "44"
+HOME_URL = "https://cubelinux.github.io"
+LOGO = "cubelinux-logo"
+
+[distro.logo]
+url = "https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/icon.svg"
+
+[packages]
+base = [
+  "dolphin",
+  "konsole",
+  "polkit",
+  "python3-pyside6",
+  "kf6-kirigami",
+  "qt6-qtdeclarative",
+  "plymouth",
+  "plymouth-system-theme",
+  "fedora-logos",
+  "NetworkManager-wifi",
+  "plasma-nm",
+  "plasma-pa",
+  "plasma-firewall",
+  "plasma-setup",
+  "kscreen",
+  "kinfocenter",
+  "pipewire",
+  "pipewire-alsa",
+  "sddm",
+  "sddm-breeze",
+  "sddm-wayland-plasma",
+]
+
+[[components]]
+id = "updater"
+repository = "https://github.com/cubelinux/cubelinux-updater.git"
+revision = "6760901732da987c22af5fcfb35e8a27ce4a51eb"
+
+[[components]]
+id = "vshell"
+repository = "https://github.com/cubelinux/cubelinux-vshell.git"
+revision = "39112fd3be21a1f2ef397326cadd49fe12da3ab9"
