@@ -161,6 +161,14 @@ Kirigami.ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
 
+                Controls.Label {
+                    text: qsTr("Virtual Shell · %1").arg(softwareVersion)
+                    opacity: 0.55
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
+                }
+
+                Item { Layout.fillWidth: true }
+
                 Controls.Button {
                     text: qsTr("Back")
                     visible: steps.currentIndex > 0

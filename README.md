@@ -43,6 +43,8 @@ vshell stop
 `vshell enter` starts the container if needed and opens a login shell as the
 mapped Fedora user. The container user has passwordless `sudo` inside the
 unprivileged container only. `vshell stop` shuts down the persistent container.
+The setup window shows the application version at the bottom; it is currently
+`0.0.0`.
 
 ## Run
 

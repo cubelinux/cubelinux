@@ -1,0 +1,42 @@
+id = "vshell"
+packages = ["lxc", "lxc-templates", "dnsmasq", "shadow-utils"]
+services = ["lxc-net.service"]
+
+[[files]]
+source = "src/vshell"
+destination = "/usr/lib/vshell/vshell"
+mode = "0644"
+
+[[files]]
+source = "bin/vshell"
+destination = "/usr/bin/vshell"
+mode = "0755"
+
+[[files]]
+source = "bin/vshell-host-setup"
+destination = "/usr/libexec/vshell-host-setup"
+mode = "0755"
+
+[[files]]
+source = "data/org.vshell.desktop"
+destination = "/usr/share/applications/org.vshell.desktop"
+
+[[files]]
+source = "data/org.vshell.HostTerminal.desktop"
+destination = "/usr/share/applications/org.vshell.HostTerminal.desktop"
+
+[[files]]
+source = "data/VShell.profile"
+destination = "/usr/share/konsole/VShell.profile"
+
+[[files]]
+source = "data/HostTerminal.profile"
+destination = "/usr/share/konsole/HostTerminal.profile"
+
+[[files]]
+source = "data/lxc-sysconfig"
+destination = "/etc/sysconfig/lxc"
+
+[[files]]
+source = "data/org.vshell.LxcSetup.policy"
+destination = "/usr/share/polkit-1/actions/org.vshell.LxcSetup.policy"

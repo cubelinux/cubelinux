@@ -10,6 +10,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 
 from .controller import SetupController
 from .lxc_backend import VShellError, enter, initialize, status, stop
+from .version import __version__
 
 
 def _run_command(arguments: list[str]) -> int:
@@ -43,6 +44,7 @@ def main() -> int:
     controller = SetupController()
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("setupController", controller)
+    engine.rootContext().setContextProperty("softwareVersion", __version__)
     qml_file = Path(__file__).parent / "qml" / "Main.qml"
     engine.load(QUrl.fromLocalFile(str(qml_file)))
     if not engine.rootObjects():
