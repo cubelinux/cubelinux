@@ -13,8 +13,18 @@ destination = "/usr/bin/cubelinux-vshell"
 mode = "0755"
 
 [[files]]
+source = "bin/cubelinux-konsole"
+destination = "/usr/bin/cubelinux-konsole"
+mode = "0755"
+
+[[files]]
 source = "bin/cubelinux-vshell-host-setup"
 destination = "/usr/libexec/cubelinux-vshell-host-setup"
+mode = "0755"
+
+[[files]]
+source = "bin/cubelinux-vshell-useradd-hook"
+destination = "/etc/shadow-maint/useradd-post.d/80-cubelinux-vshell"
 mode = "0755"
 
 [[files]]
@@ -32,6 +42,14 @@ destination = "/usr/share/konsole/VShell.profile"
 [[files]]
 source = "data/HostTerminal.profile"
 destination = "/usr/share/konsole/HostTerminal.profile"
+
+[[files]]
+source = "data/konsolerc"
+destination = "/etc/xdg/konsolerc"
+
+[[files]]
+source = "data/org.kde.konsole.desktop"
+destination = "/usr/share/applications/org.kde.konsole.desktop"
 
 [[files]]
 source = "data/lxc-sysconfig"

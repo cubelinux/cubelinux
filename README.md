@@ -4,10 +4,13 @@
 persistent Fedora LXC environment.
 
 The wizard downloads a Fedora 44 LXC image, creates an unprivileged container,
-and shares the signed-in user's home folder automatically. The host setup asks
-for administrator authentication once to allocate subordinate IDs and enable
-one LXC network interface for that user. Programs in the container can read
-and modify files in the shared home folder.
+and shares the signed-in user's home folder automatically. The system image
+starts the LXC bridge and configures its firewall access. When Plasma Setup
+creates the desktop account, a system hook allocates that account's subordinate
+IDs and one LXC network interface permission, so a fresh installation does not
+need another administrator password prompt in Setup Terminal. Existing accounts
+without this provisioning can still use the one-time administrator setup.
+Programs in the container can read and modify files in the shared home folder.
 
 The container runs as an unprivileged user namespace. Container root maps to
 subordinate host IDs; the Fedora login user maps to the desktop user's own ID
@@ -29,9 +32,10 @@ system images.
 
 Open **Setup Terminal** from the application menu and follow the short wizard.
 Once setup completes, choose **Open terminal** to start a Konsole session
-inside Fedora. Konsole also provides a **Terminal** profile. The separate
-**Host Terminal** profile remains available for host administration.
-Opening the Terminal profile before setup is complete launches the wizard.
+inside Fedora. Before setup is complete, the Konsole launcher opens Setup
+Terminal directly. After setup, Konsole uses the **Terminal** profile by
+default, which opens Fedora. The separate **Host Terminal** profile remains
+available for host administration.
 
 The installed `cubelinux-vshell` command also supports these operations:
 
@@ -50,8 +54,9 @@ The setup window shows the application version at the bottom; it is currently
 
 ## Run
 
-The intended target is the KDE image, which already includes PySide6 and
-Kirigami. From a development environment with those dependencies installed:
+The intended target is the KDE image, which includes PySide6, Kirigami, and
+the KDE Qt Quick Controls style. From a development environment with those
+dependencies installed:
 
 ```sh
 PYTHONPATH=src python3 -m cubelinux_vshell

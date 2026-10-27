@@ -180,6 +180,36 @@ def _id_ranges(account: pwd.struct_passwd) -> tuple[tuple[int, int], tuple[int, 
     return uid_range, gid_range
 
 
+def _has_network_permission(account: pwd.struct_passwd) -> bool:
+    config = Path("/etc/lxc/lxc-usernet")
+    if not config.is_file():
+        return False
+    try:
+        lines = config.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    for line in lines:
+        fields = line.split()
+        if len(fields) != 4 or fields[:3] != [account.pw_name, "veth", "lxcbr0"]:
+            continue
+        try:
+            if int(fields[3]) > 0:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _host_network_ready(account: pwd.struct_passwd) -> bool:
+    if not Path("/sys/class/net/lxcbr0").exists() or not _has_network_permission(account):
+        return False
+    try:
+        _id_ranges(account)
+    except VShellError:
+        return False
+    return True
+
+
 def _host_setup(progress: Progress) -> None:
     helper = "/usr/libexec/cubelinux-vshell-host-setup"
     pkexec = shutil.which("pkexec")
@@ -397,7 +427,10 @@ def initialize(progress: Progress = print) -> None:
     if not lxc_create:
         raise VShellError("LXC is not installed. Update to the current Vireak OS image and reboot.")
 
-    _host_setup(progress)
+    if _host_network_ready(account):
+        _report(progress, "Host container networking is ready.")
+    else:
+        _host_setup(progress)
     _report(progress, "Checking your rootless container ID mappings…")
     uid_range, gid_range = _id_ranges(account)
     root = _lxc_path()

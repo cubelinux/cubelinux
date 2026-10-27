@@ -151,7 +151,29 @@ def assign_bridge_firewall_zone():
         )
 
 
+def provision_user_from_useradd():
+    if os.geteuid() != 0:
+        raise SetupError("The user-creation hook must run as root.")
+    username = os.environ.get("SUBJECT", "")
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]*", username):
+        raise SetupError("useradd did not provide a valid account name to the LXC hook.")
+    try:
+        user = pwd.getpwnam(username)
+    except KeyError as error:
+        raise SetupError(f"Could not find the newly created account {username}.") from error
+
+    # System accounts do not need rootless container mappings or a bridge quota.
+    if user.pw_uid < 1000:
+        return 0
+
+    ensure_subids(user)
+    ensure_network_permission(user)
+    return 0
+
+
 def main():
+    if sys.argv[1:] == ["--useradd-post"]:
+        return provision_user_from_useradd()
     if os.geteuid() != 0:
         raise SetupError("This helper must be started through Polkit.")
     if len(sys.argv) != 1:
