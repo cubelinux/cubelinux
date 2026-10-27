@@ -22,6 +22,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
@@ -134,6 +135,16 @@ class UpdateController(QObject):
             "check": "Checking...",
             "apply": "Restarting...",
         }.get(self._operation, "Please wait...")
+
+    @Property(str, notify=statusTextChanged)
+    def busyPhase(self) -> str:
+        if self._operation == "check":
+            return "check"
+        if self._operation == "stage":
+            return "prepare" if self._progress_phase == "prepare" else "download"
+        if self._operation == "apply":
+            return "apply"
+        return ""
 
     @Property(int, notify=progressChanged)
     def progressPercent(self) -> int:
@@ -362,7 +373,7 @@ class UpdateController(QObject):
                 self._set_update_available(True)
                 self._set_update_staged(False)
                 self._set_tray_state("available")
-                self._set_status_text("An update is available. Select Update now to download it.")
+                self._set_status_text("A system update is available. Download it when you're ready.")
             elif "Staged update present, not changed" in check_output:
                 self._set_image_details(*self._status_image_details(status_output, staged=True))
                 self._set_update_available(False)
@@ -377,6 +388,13 @@ class UpdateController(QObject):
                 self._set_status_text("You're up to date.")
             else:
                 self._set_tray_state("error")
+                details = (
+                    self._stderr_output.strip()
+                    or self._stdout_diagnostics.strip()
+                    or check_output.strip()
+                    or "The updater returned an unrecognized status."
+                )
+                self._set_error_details(details[-2000:])
                 self._set_status_text("Couldn't tell whether an update is available. Try again.")
         elif operation == "stage":
             self._set_update_available(False)
@@ -451,6 +469,9 @@ def main() -> int:
     qInstallMessageHandler(_qt_message_handler)
     start_in_background = "--background" in sys.argv
     arguments = [argument for argument in sys.argv if argument != "--background"]
+
+    if not os.environ.get("QT_QUICK_CONTROLS_STYLE"):
+        QQuickStyle.setStyle("org.kde.desktop")
 
     app = QApplication(arguments)
     app.setApplicationName("cubelinux-updater")

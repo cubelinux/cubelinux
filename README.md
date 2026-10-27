@@ -34,9 +34,9 @@ progress and errors to the interface.
 
 ## Run the prototype
 
-Install PySide6 and the Kirigami QML runtime module from your distribution,
-then install the project with `python -m pip install --no-deps -e .` and launch
-it with `cubelinux-updater`.
+Install PySide6, the Kirigami QML runtime module, and the KDE Qt Quick Controls
+desktop style from your distribution, then install the project with
+`python -m pip install --no-deps -e .` and launch it with `cubelinux-updater`.
 
 The app uses a root-owned helper with three fixed operations: check for system
 updates, download the current update, and apply the downloaded update while
