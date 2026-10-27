@@ -73,7 +73,8 @@ cubelinux-updater/ or cubelinux-vshell/
 - **`config/image.toml`** is the source of truth for the Fedora base image,
   shared packages, distro branding, and included component revisions. The
   image build renders the logo as 64px launcher and 256px About page PNGs. Use
-  a full 40-character commit hash for every component revision.
+  `main` to follow a component's latest main branch or a full commit hash to pin
+  an exact revision. The builder logs the commit it fetched for each component.
 - **`config/plasma/`** holds shared Plasma defaults and first-login appearance
   assets. Keep the selected global theme in `kdeglobals`; the launcher helper
   only updates the panel button after Plasma creates the user's panel.
@@ -106,16 +107,16 @@ to the image configuration.
 1. Add or update the component's `component.toml` in its own repository.
 2. Commit and publish that component change.
 3. Add a `[[components]]` entry to `config/image.toml`, or update its `revision`
-   to the published commit's full hash. The component ID must match the
-   repository suffix: for example, `id = "updater"` maps to
-   `cubelinux/cubelinux-updater`.
+   to `"main"` to track the latest main branch or to a full commit hash to pin
+   an exact version. The component ID must match the repository suffix: for
+   example, `id = "updater"` maps to `cubelinux/cubelinux-updater`.
 4. To exclude a component from an image, remove its `[[components]]` entry.
    The workflow discovers components from this config; it needs no separate
    checkout or `COPY` edits.
 
-Publish component changes before publishing the image-repository pin update,
-so the configured commit already contains its manifest. Then the image build
-uses the exact reviewed component revisions and can be reproduced later.
+Publish component changes before building the image so a `main` revision can
+fetch them. Builds that follow `main` can change when component repositories
+change; use commit hashes when you need reproducible image inputs.
 
 ### Run image-builder tests
 

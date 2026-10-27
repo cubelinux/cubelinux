@@ -41,9 +41,9 @@ base = [
 [[components]]
 id = "updater"
 repository = "https://github.com/cubelinux/cubelinux-updater.git"
-revision = "890b7f56645244af860a0971032afeda318cebd1"
+revision = "main"
 
 [[components]]
 id = "vshell"
 repository = "https://github.com/cubelinux/cubelinux-vshell.git"
-revision = "0c60abe01718509fe9432b33d29cbcbacde0ad26"
+revision = "main"

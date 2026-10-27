@@ -19,6 +19,7 @@ OUTPUT = ROOT / ".image-build"
 PACKAGE_RE = re.compile(r"[A-Za-z0-9_.+-]+\Z")
 COMPONENT_RE = re.compile(r"[a-z][a-z0-9-]*\Z")
 SERVICE_RE = re.compile(r"[A-Za-z0-9_.@:-]+\Z")
+REVISION_RE = re.compile(r"[0-9a-f]{40}\Z")
 
 
 def fail(message: str) -> None:
@@ -122,8 +123,10 @@ def checkout_component(component_id: str, repository: str, revision: str, output
     run_git("-C", str(checkout), "remote", "add", "origin", repository)
     run_git("-C", str(checkout), "fetch", "--depth", "1", "origin", revision)
     run_git("-C", str(checkout), "checkout", "--detach", "FETCH_HEAD")
-    if run_git("-C", str(checkout), "rev-parse", "HEAD") != revision:
+    resolved_revision = run_git("-C", str(checkout), "rev-parse", "HEAD")
+    if REVISION_RE.fullmatch(revision) and resolved_revision != revision:
         fail(f"{component_id}: checked out revision does not match the configured pin")
+    print(f"Fetched component {component_id} from {revision} at {resolved_revision}")
     return checkout
 
 
@@ -154,8 +157,10 @@ def stage_components(
         expected_repo = f"https://github.com/cubelinux/cubelinux-{component_id}.git"
         if repository != expected_repo:
             fail(f"{component_id}: repository must be {expected_repo}")
-        if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
-            fail(f"{component_id}: revision must be a full 40-character commit hash")
+        if not isinstance(revision, str) or not (
+            revision == "main" or REVISION_RE.fullmatch(revision)
+        ):
+            fail(f"{component_id}: revision must be 'main' or a full 40-character commit hash")
 
         checkout = fetch_component(component_id, repository, revision, output_dir)
         manifest_path = checkout / "component.toml"
