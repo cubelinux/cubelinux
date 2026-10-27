@@ -38,7 +38,7 @@ def set_weight(path: Path, expected_id: str, weight: int) -> None:
 
 
 def set_ini_value(path: Path, section: str, key: str, value: str) -> None:
-    lines = path.read_text(encoding="utf-8").splitlines()
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
     section_header = f"[{section}]"
     section_start = next(
         (index for index, line in enumerate(lines) if line.strip() == section_header),
