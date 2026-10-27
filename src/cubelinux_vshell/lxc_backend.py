@@ -90,6 +90,7 @@ def _run(
             line = line.rstrip()
             if line:
                 output_lines.append(line)
+                _report(progress, line)
         result = process.wait()
         output = "\n".join(output_lines)
     else:
@@ -290,9 +291,17 @@ def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
         # The Fedora container image may use a systemd-resolved stub address,
         # but systemd-resolved is not running yet in this LXC container. Use
         # the DHCP-provided bridge gateway, where lxc-net's dnsmasq serves DNS.
+        # The address can appear before DHCP installs the default route, so
+        # allow that route time to arrive before reporting a network failure.
+        "gateway=\"\"; "
+        "attempt=0; "
+        "while [ \"$attempt\" -lt 30 ]; do "
         "gateway=\"$(ip -4 route show default | awk 'NR == 1 {print $3}')\"; "
+        "if [ -n \"$gateway\" ]; then break; fi; "
+        "attempt=$((attempt + 1)); sleep 1; done; "
         "if [ -z \"$gateway\" ]; then "
-        "echo 'Fedora did not receive a network gateway.' >&2; exit 1; fi; "
+        "echo 'Fedora did not receive a network gateway after 30 seconds. Current routes and addresses:' >&2; "
+        "ip -4 route show >&2; ip -4 address show >&2; exit 1; fi; "
         "rm -f /etc/resolv.conf; "
         "printf 'nameserver %s\\n' \"$gateway\" > /etc/resolv.conf; "
         "dns_ready=0; "
@@ -347,6 +356,7 @@ def initialize(progress: Progress = print) -> None:
         raise VShellError("LXC is not installed. Update to the current Vireak OS image and reboot.")
 
     _host_setup(progress)
+    _report(progress, "Checking your rootless container ID mappings…")
     uid_range, gid_range = _id_ranges(account)
     root = _lxc_path()
     config_path = _config_path()
@@ -403,6 +413,7 @@ def initialize(progress: Progress = print) -> None:
     _bind_home(account)
 
     # Restart once so LXC applies the bind mount before the user opens a shell.
+    _report(progress, "Restarting Fedora to apply your shared home folder…")
     _run(
         _rootless_scope(
             [

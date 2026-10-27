@@ -142,16 +142,33 @@ Kirigami.ApplicationWindow {
                         wrapMode: Text.Wrap
                     }
 
-                    Controls.ProgressBar {
+                    RowLayout {
                         Layout.fillWidth: true
                         visible: setupController.busy
-                        indeterminate: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Controls.ProgressBar {
+                            Layout.fillWidth: true
+                            from: 0
+                            to: 100
+                            value: Math.max(0, setupController.progressPercent)
+                            indeterminate: setupController.progressPercent < 0
+                        }
+
+                        Controls.Label {
+                            visible: setupController.progressPercent >= 0
+                            text: qsTr("%1%").arg(setupController.progressPercent)
+                            Layout.minimumWidth: implicitWidth
+                        }
                     }
 
                     Controls.Label {
                         Layout.fillWidth: true
                         visible: setupController.busy || setupController.progress.length > 0
                         text: setupController.progress
+                        color: setupController.progressTitle === qsTr("Setup failed")
+                               ? Kirigami.Theme.negativeTextColor
+                               : Kirigami.Theme.textColor
                         opacity: 0.75
                         wrapMode: Text.Wrap
                     }
