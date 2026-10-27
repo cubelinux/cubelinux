@@ -3,6 +3,7 @@
 import json
 import logging
 import math
+import os
 import re
 import sys
 from pathlib import Path
@@ -27,7 +28,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 from .version import __version__
 
 
-SERVER_NAME = "cubelinux-updater-session"
+SERVER_NAME = f"cubelinux-updater-session-{os.getuid()}"
 LOGGER = logging.getLogger("cubelinux_updater")
 
 
@@ -446,6 +447,7 @@ def activate_existing_instance(show_window: bool = True) -> bool:
 
 def main() -> int:
     configure_logging()
+    LOGGER.info("Using updater activation socket %s", SERVER_NAME)
     qInstallMessageHandler(_qt_message_handler)
     start_in_background = "--background" in sys.argv
     arguments = [argument for argument in sys.argv if argument != "--background"]
