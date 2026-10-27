@@ -430,8 +430,16 @@ def activate_existing_instance(show_window: bool = True) -> bool:
     if not socket.waitForConnected(250):
         return False
 
-    socket.write(b"show" if show_window else b"background")
-    socket.waitForBytesWritten(1000)
+    command = (b"show" if show_window else b"background") + b"\n"
+    if socket.write(command) != len(command) or not socket.waitForBytesWritten(1000):
+        LOGGER.warning("Could not send the activation request to the running updater")
+        return False
+    if not socket.waitForReadyRead(5000):
+        LOGGER.warning("The running updater did not acknowledge the activation request")
+        return False
+    if bytes(socket.readAll()).strip() != b"ok":
+        LOGGER.warning("The running updater returned an invalid activation response")
+        return False
     socket.disconnectFromServer()
     return True
 
@@ -455,10 +463,19 @@ def main() -> int:
         LOGGER.info("Activated the existing updater process")
         return 0
 
-    QLocalServer.removeServer(SERVER_NAME)
     server = QLocalServer()
     if not server.listen(SERVER_NAME):
-        LOGGER.error("Could not listen on the session socket: %s", server.errorString())
+        if activate_existing_instance(show_window=not start_in_background):
+            LOGGER.info("Activated the updater after a simultaneous startup")
+            return 0
+
+        error = server.errorString()
+        LOGGER.error("Could not listen on the session socket: %s", error)
+        QMessageBox.critical(
+            None,
+            "Updater could not start",
+            f"Another updater instance may be starting, or its session socket is unavailable.\n\n{error}\n\nCheck ~/.local/state/cubelinux-updater/cubelinux-updater.log for details.",
+        )
         return 1
 
     engine = QQmlApplicationEngine()
@@ -493,17 +510,38 @@ def main() -> int:
     def handle_connections() -> None:
         while server.hasPendingConnections():
             connection = server.nextPendingConnection()
+            connection.disconnected.connect(connection.deleteLater)
 
             def read_command(current=connection) -> None:
-                command = bytes(current.readAll())
-                current.disconnectFromServer()
-                current.deleteLater()
+                if current.property("cubelinuxActivationHandled"):
+                    return
+                request = bytes(current.property("cubelinuxActivationBuffer") or b"")
+                request += bytes(current.readAll())
+                if b"\n" not in request:
+                    current.setProperty("cubelinuxActivationBuffer", request)
+                    return
+                command = request.split(b"\n", 1)[0]
+                current.setProperty("cubelinuxActivationHandled", True)
                 if command == b"show":
                     show_window()
+                elif command != b"background":
+                    LOGGER.warning("Ignoring an invalid updater activation request")
+                    current.write(b"error")
+                    current.disconnectFromServer()
+                    return
+
+                current.write(b"ok\n")
+                current.flush()
+                current.disconnectFromServer()
 
             connection.readyRead.connect(read_command)
+            if connection.bytesAvailable():
+                read_command()
 
     server.newConnection.connect(handle_connections)
+    # A connection can arrive while QML is loading, before the handler above is
+    # connected. Qt does not replay newConnection for sockets already pending.
+    handle_connections()
 
     icon = QIcon.fromTheme("system-software-update")
     app.setWindowIcon(icon)
