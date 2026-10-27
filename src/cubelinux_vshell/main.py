@@ -1,11 +1,13 @@
 """Launch Virtual Shell or operate its Fedora LXC environment."""
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QGuiApplication
+from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtQml import QQmlApplicationEngine
 
 from .controller import SetupController
@@ -41,6 +43,9 @@ def main() -> int:
 
     if len(sys.argv) > 1:
         return _run_command(sys.argv[1:])
+
+    if not os.environ.get("QT_QUICK_CONTROLS_STYLE"):
+        QQuickStyle.setStyle("org.kde.desktop")
 
     app = QGuiApplication(sys.argv)
     app.setApplicationName("cubelinux-vshell")
