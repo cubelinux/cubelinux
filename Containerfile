@@ -22,13 +22,11 @@ RUN set -eux; \
 
 COPY .image-build/rootfs/ /
 
-# Configure KDE defaults in the image and brand Plasma Setup's account page,
-# retaining its AccountController and KAuth user-creation backend.
-COPY setup/ /tmp/cubelinux-setup/
+# Configure KDE defaults and cubelinux launcher branding in the image.
 COPY config/plasma/ /tmp/cubelinux-plasma/
 COPY scripts/configure_plasma.py /tmp/configure_plasma.py
 RUN python3 /tmp/configure_plasma.py && \
-    rm -rf /tmp/cubelinux-setup /tmp/cubelinux-plasma /tmp/configure_plasma.py
+    rm -rf /tmp/cubelinux-plasma /tmp/configure_plasma.py
 
 COPY config/sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
 COPY bootc/kargs.d/10-quiet-boot.toml /usr/lib/bootc/kargs.d/10-quiet-boot.toml

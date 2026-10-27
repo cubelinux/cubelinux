@@ -44,8 +44,6 @@ cubelinux/
 |       |-- kdeglobals          # Default Breeze global theme
 |       |-- cubelinux-kickoff-branding.py
 |       `-- cubelinux-kickoff-branding.desktop
-|-- setup/
-|   `-- account-main.qml        # Branded Plasma Setup account page
 |-- scripts/
 |   |-- configure_distro.py     # Apply distro identity and logo in the image
 |   |-- configure_plasma.py     # Set Plasma defaults during image build
@@ -78,8 +76,6 @@ cubelinux-updater/ or cubelinux-vshell/
 - **`config/plasma/`** holds shared Plasma defaults and first-login appearance
   assets. Keep the selected global theme in `kdeglobals`; the launcher helper
   only updates the panel button after Plasma creates the user's panel.
-- **`setup/`** contains files that customize Plasma Setup itself. Keep its QML
-  overrides here and apply them with the image-build script.
 - **`component.toml`** describes one companion app's image contribution:
   packages it needs, systemd services to enable, and files to install with
   their source path, destination, and mode. Keep application logic and its

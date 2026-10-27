@@ -21,9 +21,6 @@ from configure_distro import render_os_release
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / ".image-build"
-ACCOUNT_QML = Path(
-    "/usr/share/plasma/packages/org.kde.plasmasetup.account/contents/ui/main.qml"
-)
 
 
 def copy_from_image(container: str, image_path: str, destination: Path) -> bytes:
@@ -91,15 +88,6 @@ def verify_image(image: str) -> None:
             )
             if actual_about != expected_about:
                 raise ValueError("image KDE distro settings do not match configured logo and website")
-
-            actual_account_qml = copy_from_image(
-                container, ACCOUNT_QML.as_posix(), scratch / "plasma-setup-account-main.qml"
-            )
-            expected_account_qml = (ROOT / "setup" / "account-main.qml").read_bytes()
-            if actual_account_qml != expected_account_qml:
-                raise ValueError(
-                    "image Plasma Setup account page does not match cubelinux/setup/account-main.qml"
-                )
 
             staged_files = sorted(path for path in component_root.rglob("*") if path.is_file())
             for index, expected_path in enumerate(staged_files):
