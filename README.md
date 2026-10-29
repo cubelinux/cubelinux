@@ -6,6 +6,8 @@
 
 <p align="center">A KDE Plasma desktop built for everyday computing.</p>
 
+[![Build and publish bootc image](https://github.com/cubelinux/cubelinux/actions/workflows/image-and-release.yml/badge.svg)](https://github.com/cubelinux/cubelinux/actions/workflows/image-and-release.yml)
+
 ## About cubelinux
 
 cubelinux brings a complete desktop experience together in one operating
