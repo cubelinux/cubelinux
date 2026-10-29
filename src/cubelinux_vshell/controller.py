@@ -41,6 +41,7 @@ class SetupController(QObject):
         self._progress_title = ""
         self._progress_percent = -1
         self._worker: SetupWorker | None = None
+        self._busy = False
         self._resetting = False
         self._container_status = "not-set-up"
         self.refreshStatus()
@@ -59,11 +60,15 @@ class SetupController(QObject):
 
     @Property(bool, notify=stateChanged)
     def busy(self) -> bool:
-        return self._worker is not None and self._worker.isRunning()
+        return self._busy
 
     @Property(bool, notify=stateChanged)
     def ready(self) -> bool:
         return self._resetting or is_initialized()
+
+    @Property(bool, notify=stateChanged)
+    def resetting(self) -> bool:
+        return self._resetting
 
     @Property(str, notify=containerStatusChanged)
     def containerStatus(self) -> str:
@@ -98,6 +103,7 @@ class SetupController(QObject):
         self._progress_title = "Resetting Fedora" if reset else "Getting ready"
         self._progress_percent = -1
         self.progressChanged.emit()
+        self._busy = True
         self._worker = SetupWorker(reset=reset, parent=self)
         self._worker.progress.connect(self._set_progress)
         if reset:
@@ -106,9 +112,14 @@ class SetupController(QObject):
         else:
             self._worker.succeeded.connect(self._setup_succeeded)
             self._worker.failed.connect(self._setup_failed)
-        self._worker.finished.connect(self.stateChanged.emit)
+        self._worker.finished.connect(self._worker_finished)
         self.stateChanged.emit()
         self._worker.start()
+
+    @Slot()
+    def _worker_finished(self) -> None:
+        self._busy = False
+        self.stateChanged.emit()
 
     @Slot(str)
     def _set_progress(self, message: str) -> None:

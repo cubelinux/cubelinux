@@ -1,6 +1,10 @@
 #!/bin/sh
 
 # Send first-time users to Setup Terminal without opening a host shell.
+if /usr/bin/cubelinux-vshell activate-if-busy >/dev/null 2>&1; then
+    exit 0
+fi
+
 state=$(/usr/bin/cubelinux-vshell status 2>/dev/null) || state=not-set-up
 
 case "$state" in

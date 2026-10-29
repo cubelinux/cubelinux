@@ -12,8 +12,84 @@ Kirigami.ApplicationWindow {
     minimumWidth: 760
     minimumHeight: 600
     visible: true
+    property bool closeAfterSetup: false
+
+    onClosing: function(close) {
+        if (setupController.busy) {
+            close.accepted = false
+            closeAfterSetup = true
+            root.hide()
+        } else {
+            Qt.callLater(Qt.quit)
+        }
+    }
 
     property int wizardStep: 0
+    readonly property string containerStatusLabel: setupController.resetting
+                                                     ? qsTr("Resetting Fedora")
+                                                     : setupController.containerStatus === "running"
+                                                       ? qsTr("Running") : qsTr("Stopped")
+    readonly property string containerStatusIcon: setupController.resetting
+                                                    ? "view-refresh"
+                                                    : setupController.containerStatus === "running"
+                                                      ? "media-playback-start" : "media-playback-stop"
+    readonly property color containerStatusColor: setupController.resetting
+                                                    ? Kirigami.Theme.neutralTextColor
+                                                    : setupController.containerStatus === "running"
+                                                      ? Kirigami.Theme.positiveTextColor
+                                                      : Kirigami.Theme.negativeTextColor
+
+    globalDrawer: Kirigami.GlobalDrawer {
+        isMenu: true
+        actions: [
+            Kirigami.Action {
+                text: qsTr("About Setup Terminal")
+                icon.name: "help-about"
+                onTriggered: root.pageStack.layers.push(aboutPage)
+            }
+        ]
+    }
+
+    Component {
+        id: aboutPage
+
+        Kirigami.AboutPage {
+            aboutData: {
+                "displayName": qsTr("Setup Terminal"),
+                "productName": qsTr("CubeLinux VShell"),
+                "componentName": "cubelinux-vshell",
+                "shortDescription": qsTr("Manage your Fedora Linux environment."),
+                "homepage": "https://github.com/cubelinux/cubelinux-vshell",
+                "bugAddress": "",
+                "version": softwareVersion,
+                "otherText": "",
+                "authors": [],
+                "credits": [],
+                "translators": [],
+                "licenses": [],
+                "copyrightStatement": "",
+                "desktopFileName": "org.cubelinux.VShell"
+            }
+            getInvolvedUrl: "https://github.com/cubelinux/cubelinux-vshell"
+        }
+    }
+
+    Connections {
+        target: setupController
+        function onStateChanged() {
+            if (root.closeAfterSetup && !setupController.busy) {
+                root.closeAfterSetup = false
+                if (setupController.progressTitle === qsTr("Setup failed")
+                        || setupController.progressTitle === qsTr("Reset failed")) {
+                    root.showNormal()
+                    root.raise()
+                    root.requestActivate()
+                } else {
+                    Qt.callLater(Qt.quit)
+                }
+            }
+        }
+    }
 
     pageStack.initialPage: Kirigami.Page {
         title: qsTr("Setup Terminal")
@@ -223,12 +299,6 @@ Kirigami.ApplicationWindow {
                         RowLayout {
                             Layout.fillWidth: true
 
-                            Controls.Label {
-                                text: qsTr("cubelinux · %1").arg(softwareVersion)
-                                opacity: 0.55
-                                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
-                            }
-
                             Item { Layout.fillWidth: true }
 
                             Controls.Button {
@@ -245,8 +315,7 @@ Kirigami.ApplicationWindow {
                             }
 
                             Controls.Button {
-                                visible: wizardStep === 2
-                                enabled: !setupController.busy
+                                visible: wizardStep === 2 && !setupController.busy
                                 highlighted: true
                                 text: setupController.progressTitle === qsTr("Setup failed")
                                       ? qsTr("Try again") : qsTr("Set up")
@@ -285,20 +354,7 @@ Kirigami.ApplicationWindow {
                                         text: qsTr("Setup Terminal")
                                         font.bold: true
                                     }
-
-                                    Controls.Label {
-                                        text: qsTr("cubelinux")
-                                        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 2
-                                        opacity: 0.65
-                                    }
                                 }
-                            }
-
-                            Controls.Button {
-                                Layout.fillWidth: true
-                                text: qsTr("Overview")
-                                icon.name: "view-dashboard"
-                                highlighted: true
                             }
 
                             Item { Layout.fillHeight: true }
@@ -306,18 +362,38 @@ Kirigami.ApplicationWindow {
                             RowLayout {
                                 spacing: Kirigami.Units.smallSpacing
 
-                                Kirigami.Icon {
-                                    source: setupController.containerStatus === "running"
-                                            ? "emblem-success" : "media-playback-stop"
+                                Item {
                                     Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                     Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                }
 
-                                Controls.Label {
-                                    text: setupController.containerStatus === "running"
-                                          ? qsTr("Fedora is running") : qsTr("Fedora is ready")
-                                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 2
-                                    opacity: 0.8
+                                    Kirigami.Icon {
+                                        id: sidebarStatusIcon
+                                        anchors.fill: parent
+                                        source: root.containerStatusIcon
+                                        color: root.containerStatusColor
+                                        Accessible.name: root.containerStatusLabel
+
+                                        RotationAnimation on rotation {
+                                            from: 0
+                                            to: 360
+                                            duration: 1000
+                                            loops: Animation.Infinite
+                                            running: setupController.resetting
+                                            onRunningChanged: {
+                                                if (!running) sidebarStatusIcon.rotation = 0
+                                            }
+                                        }
+                                    }
+
+                                    Controls.ToolTip.visible: statusHover.containsMouse
+                                    Controls.ToolTip.text: root.containerStatusLabel
+
+                                    MouseArea {
+                                        id: statusHover
+                                        anchors.fill: parent
+                                        acceptedButtons: Qt.NoButton
+                                        hoverEnabled: true
+                                    }
                                 }
                             }
                         }
@@ -368,6 +444,7 @@ Kirigami.ApplicationWindow {
                         Kirigami.Card {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 380
+                            padding: Kirigami.Units.mediumSpacing
 
                             contentItem: ColumnLayout {
                                 spacing: Kirigami.Units.mediumSpacing
@@ -397,10 +474,38 @@ Kirigami.ApplicationWindow {
                                         }
                                     }
 
-                                    Controls.Label {
-                                        text: setupController.containerStatus === "running"
-                                              ? qsTr("Running") : qsTr("Stopped")
-                                        font.bold: true
+                                    Item {
+                                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+
+                                        Kirigami.Icon {
+                                            id: workspaceStatusIcon
+                                            anchors.fill: parent
+                                            source: root.containerStatusIcon
+                                            color: root.containerStatusColor
+                                            Accessible.name: root.containerStatusLabel
+
+                                            RotationAnimation on rotation {
+                                                from: 0
+                                                to: 360
+                                                duration: 1000
+                                                loops: Animation.Infinite
+                                                running: setupController.resetting
+                                                onRunningChanged: {
+                                                    if (!running) workspaceStatusIcon.rotation = 0
+                                                }
+                                            }
+                                        }
+
+                                        Controls.ToolTip.visible: workspaceStatusHover.containsMouse
+                                        Controls.ToolTip.text: root.containerStatusLabel
+
+                                        MouseArea {
+                                            id: workspaceStatusHover
+                                            anchors.fill: parent
+                                            acceptedButtons: Qt.NoButton
+                                            hoverEnabled: true
+                                        }
                                     }
                                 }
 
@@ -439,11 +544,10 @@ Kirigami.ApplicationWindow {
 
                                 Controls.Button {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 48
                                     text: qsTr("Open terminal")
                                     icon.name: "utilities-terminal"
                                     highlighted: true
-                                    enabled: !setupController.busy
+                                    enabled: !setupController.busy && !resetDialog.visible
                                     onClicked: setupController.openShell()
                                 }
 
@@ -451,19 +555,13 @@ Kirigami.ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: qsTr("Reset Fedora environment…")
                                     icon.name: "edit-delete"
-                                    enabled: !setupController.busy
+                                    enabled: !setupController.busy && !resetDialog.visible
                                     onClicked: resetDialog.open()
                                 }
                             }
                         }
 
                         Item { Layout.fillHeight: true }
-
-                        Controls.Label {
-                            text: qsTr("cubelinux · Setup Terminal %1").arg(softwareVersion)
-                            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
-                            opacity: 0.55
-                        }
                     }
                 }
             }

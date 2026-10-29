@@ -51,6 +51,11 @@ Terminal directly. After setup, Konsole uses the **Terminal** profile by
 default, which opens Fedora. The separate **Host Terminal** profile remains
 available for host administration.
 
+Closing Setup Terminal while setup or reset is running hides its window while
+the operation continues. Open **Setup Terminal** or **Konsole** to bring the
+progress window back. If the operation finishes successfully while hidden,
+the app exits; if it fails, the window reopens with the error.
+
 The installed `cubelinux-vshell` command also supports these operations:
 
 ```sh
@@ -69,8 +74,8 @@ host home folder remains untouched. During reset, VShell asks LXC to check for
 a newer Fedora 44 image and reuse the cached image if it is still current. If an
 update check fails, it retries with the cached image. When a newer image is
 downloaded, LXC replaces the previous cached image.
-The setup window shows the application version at the bottom; it is currently
-`0.0.0`.
+Open **About Setup Terminal** from the hamburger menu to see the application
+version and project information.
 
 ## Run
 
