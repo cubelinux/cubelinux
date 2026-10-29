@@ -207,6 +207,9 @@ Kirigami.ApplicationWindow {
                 rowSpacing: Kirigami.Units.largeSpacing
                 visible: updateController.latestVersion.length > 0
                          || updateController.latestUpdated.length > 0
+                         || updateController.downloadSize.length > 0
+                         || updateController.updateAvailable
+                         || updateController.updateStaged
 
                 Controls.Label {
                     Layout.columnSpan: 2
@@ -252,6 +255,35 @@ Kirigami.ApplicationWindow {
                     visible: updateController.latestUpdated.length > 0
                     text: updateController.latestUpdated
                     horizontalAlignment: Text.AlignRight
+                }
+
+                Kirigami.Separator {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: updateController.latestUpdated.length > 0
+                             && updateController.downloadSize.length > 0
+                }
+
+                Controls.Label {
+                    visible: updateController.downloadSize.length > 0
+                    text: qsTr("Download size")
+                    opacity: 0.75
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    visible: updateController.downloadSize.length > 0
+                    text: updateController.downloadSize
+                    horizontalAlignment: Text.AlignRight
+                }
+
+                Controls.Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: updateController.updateAvailable || updateController.updateStaged
+                    text: qsTr("<a href='https://github.com/cubelinux/cubelinux/releases'>View release notes</a>")
+                    textFormat: Text.RichText
+                    onLinkActivated: Qt.openUrlExternally(link)
                 }
             }
 

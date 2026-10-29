@@ -26,7 +26,11 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
-from .version import __version__
+if __package__:
+    from .version import __version__
+else:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from cubelinux_updater.version import __version__
 
 
 SESSION_ID = (
@@ -110,6 +114,8 @@ class UpdateController(QObject):
         self._progress_buffer = ""
         self._progress_percent = -1
         self._progress_phase = "download"
+        self._download_bytes = 0
+        self._download_bytes_total = 0
         self._latest_version = ""
         self._latest_updated = ""
         self._tray_state = "idle"
@@ -168,6 +174,10 @@ class UpdateController(QObject):
     def progressPercent(self) -> int:
         return self._progress_percent
 
+    @Property(str, notify=progressChanged)
+    def downloadSize(self) -> str:
+        return self._format_size(self._download_bytes_total)
+
     @Property(str, notify=imageDetailsChanged)
     def latestVersion(self) -> str:
         return self._latest_version
@@ -212,6 +222,26 @@ class UpdateController(QObject):
         self._progress_phase = phase
         self.progressChanged.emit()
         self.statusTextChanged.emit()
+
+    def _set_download_progress(self, downloaded: int, total: int) -> None:
+        downloaded = max(0, downloaded)
+        total = max(0, total)
+        if (self._download_bytes, self._download_bytes_total) == (downloaded, total):
+            return
+        self._download_bytes = downloaded
+        self._download_bytes_total = total
+        self.progressChanged.emit()
+
+    @staticmethod
+    def _format_size(size: int) -> str:
+        if size <= 0:
+            return ""
+        value = float(size)
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if value < 1024 or unit == "TB":
+                return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} B"
+            value /= 1024
+        return ""
 
     def _set_image_details(self, version: str, updated: str) -> None:
         if self._latest_version == version and self._latest_updated == updated:
@@ -262,6 +292,7 @@ class UpdateController(QObject):
         self._set_has_checked(False)
         self._set_error_details("")
         self._set_progress(-1)
+        self._set_download_progress(0, 0)
         self._set_image_details("", "")
         self._set_tray_state("idle")
 
@@ -274,6 +305,7 @@ class UpdateController(QObject):
         elif state in ("available", "staged", "downloading", "preparing"):
             self._set_has_checked(True)
             self._set_image_details("2026.10", "2026-10-29")
+            self._set_download_progress(0, 1_200_000_000)
             if state == "available":
                 self._set_update_available(True)
                 self._set_status_text("A system update is available.")
@@ -285,9 +317,11 @@ class UpdateController(QObject):
                 self._set_busy(True)
                 self._operation = "stage"
                 if state == "downloading":
+                    self._set_download_progress(684_000_000, 1_200_000_000)
                     self._set_progress(57)
                     self._set_status_text("Downloading the update...")
                 else:
+                    self._set_download_progress(1_200_000_000, 1_200_000_000)
                     self._set_progress(-1, "prepare")
                     self._set_status_text("Preparing the update...")
         elif state == "checking":
@@ -310,6 +344,8 @@ class UpdateController(QObject):
         self._set_error_details("")
         self._progress_buffer = ""
         self._set_progress(-1)
+        if operation in ("check", "stage"):
+            self._set_download_progress(0, 0)
         self._set_status_text(message)
         self._set_busy(True)
         self._set_tray_state("busy")
@@ -382,6 +418,7 @@ class UpdateController(QObject):
             total = event.get("bytesTotal", 0)
             downloaded = event.get("bytes", 0)
             if isinstance(total, int) and isinstance(downloaded, int) and total > 0:
+                self._set_download_progress(downloaded, total)
                 percent = (downloaded * 100) // total
                 self._set_progress(percent)
             else:

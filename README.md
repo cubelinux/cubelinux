@@ -20,6 +20,8 @@ Select **Check for updates** to see whether an update is available. Select
 When the download finishes, select **Restart now** and confirm to finish
 installing the update. The app shows plain-language progress and error
 messages, and shows a download percentage when bootc provides byte totals.
+When bootc reports a total byte count, the update details also show the
+download size. The release-notes link opens the Cubelinux image releases page.
 Preparing the update after download may take additional time, so that phase
 uses an activity indicator. The tray icon animates while an operation is
 running. Available or installed image version and build date are shown when
@@ -65,19 +67,20 @@ authorization, or call the Linux update helper. Install Python and PySide6,
 then run this from the repository root in PowerShell:
 
 ```powershell
-python .\main.py --preview
+python .\src\cubelinux_updater\main.py --preview
 ```
 
-The root launcher adds `src` to Python's import path, so an editable project
-install is not needed. On Windows, the preview uses a Qt Quick Controls screen
-with the same layout because the production QML depends on KDE Kirigami. The
-preview uses Qt's Fusion style; the regular Linux updater keeps the KDE desktop
-style.
+The existing source entry point adds `src` to Python's import path when run
+directly, so an editable project install is not needed. On Windows, the preview
+uses a Qt Quick Controls screen with the same layout because the production QML
+depends on KDE Kirigami. The preview uses Qt's Fusion style; the regular Linux
+updater keeps the KDE desktop style.
 
 Available states are `ready`, `up-to-date`, `available`, `staged`, `checking`,
 `downloading`, `preparing`, and `error`. The buttons simulate the flow: checking
 shows an available update, downloading stages it, and restarting returns to the
-up-to-date state.
+up-to-date state. The preview uses a sample 1.2 GB size and the same
+release-notes link as the live interface.
 
 The Containerfile copies the Python/QML application, launcher, desktop entry,
 and KDE session autostart entry directly into the image. Runtime dependencies
