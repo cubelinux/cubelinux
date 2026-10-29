@@ -547,7 +547,9 @@ Kirigami.ApplicationWindow {
                                     text: qsTr("Open terminal")
                                     icon.name: "utilities-terminal"
                                     highlighted: true
-                                    enabled: !setupController.busy && !resetDialog.visible
+                                    enabled: !setupController.busy
+                                             && !setupController.resetting
+                                             && !resetDialog.visible
                                     onClicked: setupController.openShell()
                                 }
 
@@ -555,7 +557,9 @@ Kirigami.ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: qsTr("Reset Fedora environment…")
                                     icon.name: "edit-delete"
-                                    enabled: !setupController.busy && !resetDialog.visible
+                                    enabled: !setupController.busy
+                                             && !setupController.resetting
+                                             && !resetDialog.visible
                                     onClicked: resetDialog.open()
                                 }
                             }
@@ -620,9 +624,9 @@ Kirigami.ApplicationWindow {
                     icon.name: "edit-delete"
                     enabled: resetAcknowledged.checked && !setupController.busy
                     onClicked: {
-                        resetDialog.close()
                         resetAcknowledged.checked = false
                         setupController.resetContainer()
+                        resetDialog.close()
                     }
                 }
             }

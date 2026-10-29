@@ -95,15 +95,14 @@ class SetupController(QObject):
         if self.busy or not self.ready:
             return
         self._resetting = True
-        self.stateChanged.emit()
         self._start_worker(reset=True)
 
     def _start_worker(self, *, reset: bool) -> None:
+        self._busy = True
         self._progress = "Getting ready…"
         self._progress_title = "Resetting Fedora" if reset else "Getting ready"
         self._progress_percent = -1
         self.progressChanged.emit()
-        self._busy = True
         self._worker = SetupWorker(reset=reset, parent=self)
         self._worker.progress.connect(self._set_progress)
         if reset:
