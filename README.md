@@ -11,6 +11,16 @@ IDs and one LXC network interface permission, so a fresh installation does not
 need another administrator password prompt in Setup Terminal. Existing accounts
 without this provisioning can still use the one-time administrator setup.
 Programs in the container can read and modify files in the shared home folder.
+The host user's runtime directory and X11 socket directory are also mounted so
+terminal-launched applications can connect to the host's Wayland/XWayland,
+D-Bus, and PipeWire/PulseAudio session. The container user is mapped to the
+desktop user's host ID, so those sockets accept connections as that user.
+
+Install graphical applications inside Fedora with DNF, then start them from the
+VShell terminal. For example, install `vlc` and run `vlc`. The app and its
+toolkit libraries come from the container's Fedora repositories; VShell passes
+the host display/audio sockets and the session environment needed to use them.
+Applications are not automatically exported to the host application menu yet.
 
 The container runs as an unprivileged user namespace. Container root maps to
 subordinate host IDs; the Fedora login user maps to the desktop user's own ID
@@ -18,6 +28,10 @@ so the shared home folder remains writable. The container has a persistent
 root filesystem under `~/.local/share/vshell/containers`. That existing data
 location and LXC container name stay unchanged so configured environments are
 preserved when the command is renamed.
+
+VShell is a tightly integrated workspace, not a desktop-app sandbox. Programs
+inside Fedora can access the shared home folder and the host user's display,
+audio, and session-bus sockets.
 
 The image also provides a separate Konsole Host Terminal profile for host
 administration.
@@ -48,7 +62,13 @@ cubelinux-vshell stop
 `cubelinux-vshell enter` starts the container if needed and opens a login shell
 as the mapped Fedora user. The container user has passwordless `sudo` inside
 the unprivileged container only. `cubelinux-vshell stop` shuts down the
-persistent container.
+persistent container. Use **Reset Fedora environment** in Setup Terminal to
+delete and recreate the container. Reset permanently removes installed
+packages, container settings, and files in the container filesystem. The shared
+host home folder remains untouched. During reset, VShell asks LXC to check for
+a newer Fedora 44 image and reuse the cached image if it is still current. If an
+update check fails, it retries with the cached image. When a newer image is
+downloaded, LXC replaces the previous cached image.
 The setup window shows the application version at the bottom; it is currently
 `0.0.0`.
 

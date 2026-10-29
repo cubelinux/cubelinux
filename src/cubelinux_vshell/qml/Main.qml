@@ -350,9 +350,24 @@ Kirigami.ApplicationWindow {
                             }
                         }
 
+                        Kirigami.InlineMessage {
+                            Layout.fillWidth: true
+                            visible: setupController.busy
+                                     || setupController.progressTitle === qsTr("Reset failed")
+                            text: setupController.progress
+                            type: setupController.progressTitle === qsTr("Reset failed")
+                                  ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
+                        }
+
+                        Controls.ProgressBar {
+                            Layout.fillWidth: true
+                            visible: setupController.busy
+                            indeterminate: true
+                        }
+
                         Kirigami.Card {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 290
+                            Layout.preferredHeight: 380
 
                             contentItem: ColumnLayout {
                                 spacing: Kirigami.Units.mediumSpacing
@@ -428,7 +443,16 @@ Kirigami.ApplicationWindow {
                                     text: qsTr("Open terminal")
                                     icon.name: "utilities-terminal"
                                     highlighted: true
+                                    enabled: !setupController.busy
                                     onClicked: setupController.openShell()
+                                }
+
+                                Controls.Button {
+                                    Layout.fillWidth: true
+                                    text: qsTr("Reset Fedora environment…")
+                                    icon.name: "edit-delete"
+                                    enabled: !setupController.busy
+                                    onClicked: resetDialog.open()
                                 }
                             }
                         }
@@ -450,6 +474,62 @@ Kirigami.ApplicationWindow {
             repeat: true
             running: setupController.ready
             onTriggered: setupController.refreshStatus()
+        }
+
+        Controls.Dialog {
+            id: resetDialog
+
+            modal: true
+            title: qsTr("Reset Fedora environment?")
+            width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, 520)
+            anchors.centerIn: parent
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.mediumSpacing
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("This permanently deletes the Fedora container, including installed apps, container settings, and files stored inside its filesystem. VShell will check whether a newer Fedora 44 LXC template is available, download it if needed, and otherwise reuse the cached template. If the update check fails, VShell will try the cached template. If recreating the container fails, you may need to run setup again. This cannot be undone.")
+                    wrapMode: Text.Wrap
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Your shared home folder is stored on cubelinux and will remain untouched.")
+                    wrapMode: Text.Wrap
+                    font.bold: true
+                }
+
+                Controls.CheckBox {
+                    id: resetAcknowledged
+                    Layout.fillWidth: true
+                    text: qsTr("I understand this permanently deletes the Fedora environment.")
+                }
+            }
+
+            footer: RowLayout {
+                spacing: Kirigami.Units.mediumSpacing
+
+                Item { Layout.fillWidth: true }
+
+                Controls.Button {
+                    text: qsTr("Cancel")
+                    onClicked: resetDialog.close()
+                }
+
+                Controls.Button {
+                    text: qsTr("Delete and reset")
+                    icon.name: "edit-delete"
+                    enabled: resetAcknowledged.checked && !setupController.busy
+                    onClicked: {
+                        resetDialog.close()
+                        resetAcknowledged.checked = false
+                        setupController.resetContainer()
+                    }
+                }
+            }
+
+            onClosed: resetAcknowledged.checked = false
         }
 
         Component.onCompleted: setupController.refreshStatus()

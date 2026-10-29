@@ -19,6 +19,7 @@ CONTAINER_NAME = "vshell"
 FEDORA_RELEASE = "44"
 GUEST_ID = 50000
 ID_COUNT = 65536
+CONTAINER_RUNTIME_DIR = "/mnt/vshell-host-runtime"
 SHUTDOWN_HOOK = """#!/bin/sh
 # Stop the CubeLinux Fedora container before the Plasma user manager exits.
 /usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
@@ -136,19 +137,22 @@ def _run(
     return output
 
 
-def _rootless_scope(command: Sequence[str]) -> list[str]:
+def _rootless_scope(
+    command: Sequence[str], *, cache_base: Path | None = None
+) -> list[str]:
     systemd_run = shutil.which("systemd-run")
     if not systemd_run:
         raise VShellError("systemd-run is required to start an unprivileged LXC container.")
-    return [
+    scope = [
         systemd_run,
         "--user",
         "--scope",
         "--quiet",
         "--property=Delegate=yes",
-        "--",
-        *command,
     ]
+    if cache_base:
+        scope.append(f"--setenv=LXC_CACHE_PATH={cache_base}")
+    return [*scope, "--", *command]
 
 
 def _find_subid_range(
@@ -312,6 +316,81 @@ def _mapping_lines(uid_start: int, gid_start: int, uid: int, gid: int) -> list[s
     return lines
 
 
+def _host_runtime_dir(account: pwd.struct_passwd) -> Path | None:
+    value = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{account.pw_uid}")
+    runtime_dir = Path(value)
+    if not runtime_dir.is_absolute() or not runtime_dir.is_dir():
+        return None
+    try:
+        if runtime_dir.stat().st_uid != account.pw_uid:
+            return None
+    except OSError:
+        return None
+    return runtime_dir
+
+
+def _container_runtime_value(value: str, host_runtime_dir: Path) -> str:
+    """Rewrite host runtime socket paths to their bind-mounted guest location."""
+    host_path = str(host_runtime_dir).rstrip("/")
+    return re.sub(
+        rf"(?<![A-Za-z0-9_./-]){re.escape(host_path)}(?=/|$)",
+        CONTAINER_RUNTIME_DIR,
+        value,
+    )
+
+
+def _host_desktop_mount_lines(account: pwd.struct_passwd) -> list[str]:
+    lines = ["# VShell host desktop sockets"]
+    runtime_dir = _host_runtime_dir(account)
+    if runtime_dir:
+        lines.append(
+            f"lxc.mount.entry = {_escape_mount_path(str(runtime_dir))} "
+            f"{CONTAINER_RUNTIME_DIR.lstrip('/')} none bind,create=dir 0 0"
+        )
+
+    x11_sockets = Path("/tmp/.X11-unix")
+    if x11_sockets.is_dir():
+        lines.append(
+            "lxc.mount.entry = /tmp/.X11-unix tmp/.X11-unix "
+            "none bind,create=dir 0 0"
+        )
+
+    return lines if len(lines) > 1 else []
+
+
+def _expire_cached_template() -> Path | None:
+    """Make LXC check an existing Fedora cache against its current image index."""
+    cache_roots = (Path.home() / ".cache/lxc", Path("/var/cache/lxc"))
+    image_path = Path("download") / "fedora" / FEDORA_RELEASE / _arch() / "default"
+
+    for cache_base in cache_roots:
+        cache = cache_base / image_path
+        build_ids = list(cache.glob("build_id*"))
+        if not build_ids:
+            continue
+
+        try:
+            for build_id in build_ids:
+                expiry_name = build_id.name.replace("build_id", "expiry", 1)
+                (cache / expiry_name).write_text("0\n", encoding="utf-8")
+        except OSError:
+            continue
+        return cache_base
+    return None
+
+
+def _remove_partial_container(root: Path) -> None:
+    """Remove only the incomplete VShell directory left by a failed create."""
+    container_path = root / CONTAINER_NAME
+    if not container_path.exists():
+        return
+    resolved_root = root.resolve()
+    resolved_container = container_path.resolve()
+    if resolved_container.parent != resolved_root or resolved_container.name != CONTAINER_NAME:
+        raise VShellError("Refusing to remove an unexpected LXC container path.")
+    shutil.rmtree(resolved_container)
+
+
 def _write_create_config(path: Path, account: pwd.struct_passwd, uid_range: tuple[int, int], gid_range: tuple[int, int]) -> None:
     uid_start, _ = uid_range
     gid_start, _ = gid_range
@@ -417,7 +496,64 @@ def _bind_home(account: pwd.struct_passwd) -> None:
     config.write_text(contents.rstrip() + "\n" + mount_line, encoding="utf-8")
 
 
-def initialize(progress: Progress = print) -> None:
+def _ensure_host_desktop_mounts(account: pwd.struct_passwd) -> bool:
+    """Expose the signed-in user's display and audio sockets to Fedora."""
+    config = _config_path()
+    contents = config.read_text(encoding="utf-8")
+    section = _host_desktop_mount_lines(account)
+    marker = "# VShell host desktop sockets"
+    if not section:
+        # Preserve existing mounts when called from a non-graphical shell.
+        return False
+
+    lines = contents.rstrip().splitlines()
+    if marker in lines:
+        start = lines.index(marker)
+        lines = lines[:start]
+    updated = "\n".join([*lines, *section]) + "\n"
+    if updated == contents:
+        return False
+    config.write_text(updated, encoding="utf-8")
+    return True
+
+
+def _stop_container(progress: Progress) -> None:
+    _run(
+        _rootless_scope(
+            [
+                "lxc-stop",
+                "--name",
+                CONTAINER_NAME,
+                "--lxcpath",
+                str(_lxc_path()),
+                "--timeout",
+                "25",
+            ]
+        ),
+        progress,
+        stream=True,
+    )
+
+
+def _start_container(progress: Progress) -> None:
+    _run(
+        _rootless_scope(
+            [
+                "lxc-start",
+                "--name",
+                CONTAINER_NAME,
+                "--lxcpath",
+                str(_lxc_path()),
+                "--daemon",
+            ]
+        ),
+        progress,
+        stream=True,
+    )
+    _wait_until_running(progress)
+
+
+def initialize(progress: Progress = print, *, refresh_template: bool = False) -> None:
     """Prepare the host and create a rootless Fedora shell with home shared."""
     if is_initialized():
         _report(progress, "Fedora Virtual Shell is already set up.")
@@ -438,21 +574,17 @@ def initialize(progress: Progress = print) -> None:
     root.mkdir(parents=True, exist_ok=True)
 
     if not config_path.exists():
-        _report(progress, "Downloading the Fedora environment…")
+        cache_base = _expire_cached_template() if refresh_template else None
+        if refresh_template and cache_base:
+            _report(progress, "Checking for Fedora template updates…")
+        else:
+            _report(progress, "Downloading the Fedora environment…")
         with tempfile.TemporaryDirectory(prefix="cubelinux-vshell-") as temporary:
             create_config = Path(temporary) / "lxc.conf"
             _write_create_config(create_config, account, uid_range, gid_range)
-            command = _rootless_scope(
-                [
-                    lxc_create,
-                    "--name",
-                    CONTAINER_NAME,
-                    "--lxcpath",
-                    str(root),
-                    "--config",
-                    str(create_config),
-                    "--template",
-                    "download",
+
+            def create_command(*, force_cache: bool = False) -> list[str]:
+                template_arguments = [
                     "--",
                     "--dist",
                     "fedora",
@@ -461,8 +593,38 @@ def initialize(progress: Progress = print) -> None:
                     "--arch",
                     _arch(),
                 ]
-            )
-            _run(command, progress, stream=True)
+                if force_cache:
+                    template_arguments.append("--force-cache")
+                return _rootless_scope(
+                    [
+                        lxc_create,
+                        "--name",
+                        CONTAINER_NAME,
+                        "--lxcpath",
+                        str(root),
+                        "--config",
+                        str(create_config),
+                        "--template",
+                        "download",
+                        *template_arguments,
+                    ],
+                    cache_base=cache_base,
+                )
+
+            try:
+                _run(create_command(), progress, stream=True)
+            except VShellError as update_error:
+                if not refresh_template or not cache_base:
+                    raise
+                _report(progress, "Template update check failed; reusing the cached Fedora image…")
+                _remove_partial_container(root)
+                try:
+                    _run(create_command(force_cache=True), progress, stream=True)
+                except VShellError as cache_error:
+                    raise VShellError(
+                        "Could not refresh Fedora's template, and the cached image could not be reused. "
+                        f"Update error: {update_error}; cached image error: {cache_error}"
+                    ) from cache_error
 
     if not _container_running(progress):
         _report(progress, "Starting Fedora for first-time setup…")
@@ -486,8 +648,10 @@ def initialize(progress: Progress = print) -> None:
     _configure_guest(account, progress)
     _report(progress, "Sharing your home folder…")
     _bind_home(account)
+    _report(progress, "Connecting Fedora to your desktop session...")
+    _ensure_host_desktop_mounts(account)
 
-    # Restart once so LXC applies the bind mount before the user opens a shell.
+    # Restart so LXC applies the home and desktop socket mounts.
     _report(progress, "Restarting Fedora to apply your shared home folder…")
     _run(
         _rootless_scope(
@@ -520,6 +684,35 @@ def initialize(progress: Progress = print) -> None:
     _report(progress, "Fedora Virtual Shell is ready.")
 
 
+def reset_container(progress: Progress = print) -> None:
+    """Delete and recreate Fedora, refreshing the cached LXC image first."""
+    if not is_initialized():
+        raise VShellError("Virtual Shell is not set up yet.")
+
+    root = _lxc_path()
+    if _container_running(progress):
+        _report(progress, "Stopping Fedora before reset…")
+        _stop_container(progress)
+
+    _report(progress, "Deleting the Fedora container and its installed data…")
+    _run(
+        _rootless_scope(
+            [
+                "lxc-destroy",
+                "--name",
+                CONTAINER_NAME,
+                "--lxcpath",
+                str(root),
+                "--force",
+            ]
+        ),
+        progress,
+        stream=True,
+    )
+    _report(progress, "Checking for a Fedora template update…")
+    initialize(progress, refresh_template=True)
+
+
 def enter() -> int:
     """Start the persistent container and attach the mapped Fedora user."""
     if not is_initialized():
@@ -537,22 +730,12 @@ def enter() -> int:
 
     account = _account()
     root = _lxc_path()
+    mounts_changed = _ensure_host_desktop_mounts(account)
+    if mounts_changed and _container_running(print):
+        print("Refreshing Fedora's host desktop socket mounts...")
+        _stop_container(print)
     if not _container_running(print):
-        _run(
-            _rootless_scope(
-                [
-                    "lxc-start",
-                    "--name",
-                    CONTAINER_NAME,
-                    "--lxcpath",
-                    str(root),
-                    "--daemon",
-                ]
-            ),
-            print,
-            stream=True,
-        )
-        _wait_until_running(print)
+        _start_container(print)
 
     term = os.environ.get("TERM", "xterm-256color")
     command = [
@@ -574,12 +757,35 @@ def enter() -> int:
         f"LOGNAME={account.pw_name}",
         "--set-var",
         f"TERM={term}",
-        "--",
-        "/bin/bash",
-        "--login",
-        "-c",
-        'cd "$HOME"; exec /bin/bash -i',
     ]
+    runtime_dir = _host_runtime_dir(account)
+    if runtime_dir:
+        command.extend(["--set-var", f"XDG_RUNTIME_DIR={CONTAINER_RUNTIME_DIR}"])
+    for name in (
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
+        "XAUTHORITY",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "PULSE_SERVER",
+        "PIPEWIRE_REMOTE",
+        "XDG_SESSION_TYPE",
+        "XDG_CURRENT_DESKTOP",
+        "QT_QPA_PLATFORM",
+    ):
+        value = os.environ.get(name)
+        if value:
+            if runtime_dir:
+                value = _container_runtime_value(value, runtime_dir)
+            command.extend(["--set-var", f"{name}={value}"])
+    command.extend(
+        [
+            "--",
+            "/bin/bash",
+            "--login",
+            "-c",
+            'cd "$HOME"; exec /bin/bash -i',
+        ]
+    )
     return subprocess.run(command, check=False).returncode
 
 

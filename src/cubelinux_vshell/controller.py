@@ -4,7 +4,7 @@ import re
 
 from PySide6.QtCore import Property, QObject, QProcess, QThread, Signal, Slot
 
-from .lxc_backend import VShellError, initialize, is_initialized, status
+from .lxc_backend import VShellError, initialize, is_initialized, reset_container, status
 
 
 class SetupWorker(QThread):
@@ -12,9 +12,16 @@ class SetupWorker(QThread):
     succeeded = Signal()
     failed = Signal(str)
 
+    def __init__(self, *, reset: bool = False, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self.reset = reset
+
     def run(self) -> None:
         try:
-            initialize(self.progress.emit)
+            if self.reset:
+                reset_container(self.progress.emit)
+            else:
+                initialize(self.progress.emit)
         except (VShellError, OSError) as error:
             self.failed.emit(str(error))
         except Exception as error:  # Present unexpected failures instead of leaving the UI stuck.
@@ -34,6 +41,7 @@ class SetupController(QObject):
         self._progress_title = ""
         self._progress_percent = -1
         self._worker: SetupWorker | None = None
+        self._resetting = False
         self._container_status = "not-set-up"
         self.refreshStatus()
 
@@ -55,7 +63,7 @@ class SetupController(QObject):
 
     @Property(bool, notify=stateChanged)
     def ready(self) -> bool:
-        return is_initialized()
+        return self._resetting or is_initialized()
 
     @Property(str, notify=containerStatusChanged)
     def containerStatus(self) -> str:
@@ -75,14 +83,29 @@ class SetupController(QObject):
     def setup(self) -> None:
         if self.busy or self.ready:
             return
+        self._start_worker(reset=False)
+
+    @Slot()
+    def resetContainer(self) -> None:
+        if self.busy or not self.ready:
+            return
+        self._resetting = True
+        self.stateChanged.emit()
+        self._start_worker(reset=True)
+
+    def _start_worker(self, *, reset: bool) -> None:
         self._progress = "Getting ready…"
-        self._progress_title = "Getting ready"
+        self._progress_title = "Resetting Fedora" if reset else "Getting ready"
         self._progress_percent = -1
         self.progressChanged.emit()
-        self._worker = SetupWorker(self)
+        self._worker = SetupWorker(reset=reset, parent=self)
         self._worker.progress.connect(self._set_progress)
-        self._worker.succeeded.connect(self._setup_succeeded)
-        self._worker.failed.connect(self._setup_failed)
+        if reset:
+            self._worker.succeeded.connect(self._reset_succeeded)
+            self._worker.failed.connect(self._reset_failed)
+        else:
+            self._worker.succeeded.connect(self._setup_succeeded)
+            self._worker.failed.connect(self._setup_failed)
         self._worker.finished.connect(self.stateChanged.emit)
         self.stateChanged.emit()
         self._worker.start()
@@ -106,6 +129,8 @@ class SetupController(QObject):
             ("requesting one-time permission", "Preparing container networking"),
             ("checking your rootless container id mappings", "Preparing your account"),
             ("downloading the fedora environment", "Downloading Fedora image"),
+            ("checking for fedora template updates", "Checking for Fedora image updates"),
+            ("template update check failed", "Using cached Fedora image"),
             ("downloading the image index", "Checking the Fedora image"),
             ("downloading the rootfs", "Downloading Fedora filesystem"),
             ("downloading the metadata", "Downloading image metadata"),
@@ -137,6 +162,26 @@ class SetupController(QObject):
         self._progress_title = "Setup failed"
         self._progress_percent = -1
         self.progressChanged.emit()
+        self.stateChanged.emit()
+
+    @Slot()
+    def _reset_succeeded(self) -> None:
+        self._resetting = False
+        self._progress = "Fedora has been reset with a fresh environment."
+        self._progress_title = "Reset complete"
+        self._progress_percent = 100
+        self.progressChanged.emit()
+        self.refreshStatus()
+        self.stateChanged.emit()
+
+    @Slot(str)
+    def _reset_failed(self, message: str) -> None:
+        self._resetting = False
+        self._progress = message
+        self._progress_title = "Reset failed"
+        self._progress_percent = -1
+        self.progressChanged.emit()
+        self.refreshStatus()
         self.stateChanged.emit()
 
     @Slot()
