@@ -12,6 +12,9 @@ LOGO = "cubelinux-logo"
 [distro.logo]
 url = "https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/icon.svg"
 
+[distro.plymouth_logo]
+url = "https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/primary-on-transparent.svg"
+
 [packages]
 base = [
   "dolphin",

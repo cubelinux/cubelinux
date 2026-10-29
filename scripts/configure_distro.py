@@ -59,10 +59,48 @@ def resolve_svg_color_variables(root: ET.Element) -> None:
             element.set(attribute, resolved)
 
 
-def render_logo_pngs(root: ET.Element, logo_name: str, root_dir: Path) -> dict[int, Path]:
+def download_svg(url: str, supplied_data: bytes | None = None) -> bytes:
+    if supplied_data is None:
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "cubelinux-image-builder"},
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            supplied_data = response.read(5 * 1024 * 1024 + 1)
+    if len(supplied_data) > 5 * 1024 * 1024:
+        raise ValueError("logo SVG exceeds the 5 MiB limit")
+    root = ET.fromstring(supplied_data)
+    if root.tag.rsplit("}", 1)[-1] != "svg":
+        raise ValueError("logo URL did not return an SVG document")
+    return supplied_data
+
+
+def render_svg_png(root: ET.Element, output: Path, size: int) -> None:
     ET.register_namespace("", "http://www.w3.org/2000/svg")
     resolve_svg_color_variables(root)
+    with tempfile.TemporaryDirectory(prefix="cubelinux-logo-") as temporary:
+        source = Path(temporary) / "logo.svg"
+        source.write_bytes(ET.tostring(root, encoding="utf-8", xml_declaration=True))
+        output.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [
+                "rsvg-convert",
+                "--width",
+                str(size),
+                "--height",
+                str(size),
+                "--keep-aspect-ratio",
+                "--output",
+                str(output),
+                str(source),
+            ],
+            check=True,
+        )
+        if not output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
+            raise RuntimeError(f"rsvg-convert did not create a valid PNG at {output}")
 
+
+def render_logo_pngs(root: ET.Element, logo_name: str, root_dir: Path) -> dict[int, Path]:
     outputs = {
         size: root_dir
         / "usr/share/icons/hicolor"
@@ -71,27 +109,8 @@ def render_logo_pngs(root: ET.Element, logo_name: str, root_dir: Path) -> dict[i
         / f"{logo_name}.png"
         for size in (64, 256)
     }
-    with tempfile.TemporaryDirectory(prefix="cubelinux-logo-") as temporary:
-        source = Path(temporary) / "logo.svg"
-        source.write_bytes(ET.tostring(root, encoding="utf-8", xml_declaration=True))
-        for size, output in outputs.items():
-            output.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run(
-                [
-                    "rsvg-convert",
-                    "--width",
-                    str(size),
-                    "--height",
-                    str(size),
-                    "--keep-aspect-ratio",
-                    "--output",
-                    str(output),
-                    str(source),
-                ],
-                check=True,
-            )
-            if not output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
-                raise RuntimeError(f"rsvg-convert did not create a valid PNG at {output}")
+    for size, output in outputs.items():
+        render_svg_png(ET.fromstring(ET.tostring(root)), output, size)
     return outputs
 
 
@@ -99,6 +118,7 @@ def configure(
     config_path: Path,
     root_dir: Path = Path("/"),
     logo_data: bytes | None = None,
+    plymouth_logo_data: bytes | None = None,
 ) -> None:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     fields = config.get("os_release")
@@ -113,21 +133,20 @@ def configure(
     if not isinstance(logo_url, str) or not logo_url.startswith("https://"):
         raise ValueError("distro config must provide an HTTPS URL in logo.url")
 
-    if logo_data is None:
-        request = urllib.request.Request(
-            logo_url,
-            headers={"User-Agent": "cubelinux-image-builder"},
-        )
-        with urllib.request.urlopen(request, timeout=30) as response:
-            icon_data = response.read(5 * 1024 * 1024 + 1)
-    else:
-        icon_data = logo_data
-    if len(icon_data) > 5 * 1024 * 1024:
-        raise ValueError("logo SVG exceeds the 5 MiB limit")
+    icon_data = download_svg(logo_url, logo_data)
     root = ET.fromstring(icon_data)
-    if root.tag.rsplit("}", 1)[-1] != "svg":
-        raise ValueError("logo URL did not return an SVG document")
     icon_paths = render_logo_pngs(root, logo_name, root_dir)
+
+    plymouth_watermark = root_dir / "usr/share/plymouth/themes/spinner/watermark.png"
+    plymouth_logo = config.get("plymouth_logo")
+    plymouth_logo_url = plymouth_logo.get("url") if isinstance(plymouth_logo, dict) else None
+    if plymouth_logo_url is None:
+        plymouth_icon_data = icon_data
+    elif not isinstance(plymouth_logo_url, str) or not plymouth_logo_url.startswith("https://"):
+        raise ValueError("distro.plymouth_logo.url must be an HTTPS URL")
+    else:
+        plymouth_icon_data = download_svg(plymouth_logo_url, plymouth_logo_data)
+    render_svg_png(ET.fromstring(plymouth_icon_data), plymouth_watermark, 256)
 
     os_release_path = root_dir / "usr/lib/os-release"
     os_release_path.parent.mkdir(parents=True, exist_ok=True)

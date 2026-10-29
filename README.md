@@ -72,9 +72,11 @@ cubelinux-updater/ or cubelinux-vshell/
 
 - **`config/image.toml`** is the source of truth for the Fedora base image,
   shared packages, distro branding, and included component revisions. The
-  image build renders the logo as 64px launcher and 256px About page PNGs. Use
-  `main` to follow a component's latest main branch or a full commit hash to pin
-  an exact revision. The builder logs the commit it fetched for each component.
+  image build renders `distro.logo.url` as a 64px launcher icon and a 256px
+  About page icon. It downloads `distro.plymouth_logo.url` and converts that
+  SVG into the PNG watermark included in the initramfs. Use `main` to follow a
+  component's latest main branch or a full commit hash to pin an exact
+  revision. The builder logs the commit it fetched for each component.
 - **`config/plasma/`** holds shared Plasma defaults and first-login appearance
   assets. Keep the selected global theme in `kdeglobals`; the launcher helper
   only updates the panel button after Plasma creates the user's panel.

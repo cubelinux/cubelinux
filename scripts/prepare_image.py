@@ -203,6 +203,13 @@ def main() -> None:
     logo_url = distro.get("logo", {}).get("url") if isinstance(distro.get("logo"), dict) else None
     if not isinstance(logo_url, str) or not logo_url.startswith("https://"):
         fail("distro.logo.url must be an HTTPS URL")
+    plymouth_logo = distro.get("plymouth_logo")
+    if plymouth_logo is not None:
+        plymouth_logo_url = (
+            plymouth_logo.get("url") if isinstance(plymouth_logo, dict) else None
+        )
+        if not isinstance(plymouth_logo_url, str) or not plymouth_logo_url.startswith("https://"):
+            fail("distro.plymouth_logo.url must be an HTTPS URL")
 
     if OUTPUT.is_symlink():
         fail("refusing to write through a symlink at .image-build")
