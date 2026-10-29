@@ -50,4 +50,4 @@ revision = "main"
 [[components]]
 id = "vshell"
 repository = "https://github.com/cubelinux/cubelinux-vshell.git"
-revision = "d97f3890f16f7a24ea216df9713ce17b70070ae7"
+revision = "main"
