@@ -345,7 +345,7 @@ def _host_desktop_mount_lines(account: pwd.struct_passwd) -> list[str]:
     if runtime_dir:
         lines.append(
             f"lxc.mount.entry = {_escape_mount_path(str(runtime_dir))} "
-            f"{CONTAINER_RUNTIME_DIR.lstrip('/')} none bind,create=dir 0 0"
+            f"{CONTAINER_RUNTIME_DIR.lstrip('/')} none rbind,create=dir,rslave 0 0"
         )
 
     x11_sockets = Path("/tmp/.X11-unix")
