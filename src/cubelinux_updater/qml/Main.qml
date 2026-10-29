@@ -8,10 +8,12 @@ Kirigami.ApplicationWindow {
 
     title: qsTr("Updater")
     visible: false
-    width: 680
-    height: 500
-    minimumWidth: 520
-    minimumHeight: 420
+    width: 640
+    height: 680
+    minimumWidth: 540
+    minimumHeight: 520
+
+    pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
 
     function statusHeading() {
         if (updateController.errorDetails.length > 0) {
@@ -126,11 +128,22 @@ Kirigami.ApplicationWindow {
             width: parent.width
             spacing: Kirigami.Units.largeSpacing
 
-            Controls.Label {
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: qsTr("Keep cubelinux up to date.")
-                opacity: 0.75
-                wrapMode: Text.Wrap
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.Heading {
+                    Layout.fillWidth: true
+                    text: qsTr("System updates")
+                    level: 1
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Keep cubelinux up to date.")
+                    opacity: 0.75
+                    wrapMode: Text.Wrap
+                }
             }
 
             Kirigami.Card {
