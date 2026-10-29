@@ -58,6 +58,27 @@ autostart can be inspected after login.
 directory so it starts when the user's KDE session begins. Update notifications
 are not implemented yet.
 
+### UI-only preview on Windows
+
+The preview uses simulated update data. It does not start the tray, ask for
+authorization, or call the Linux update helper. Install Python and PySide6,
+then run this from the repository root in PowerShell:
+
+```powershell
+python .\main.py --preview
+```
+
+The root launcher adds `src` to Python's import path, so an editable project
+install is not needed. On Windows, the preview uses a Qt Quick Controls screen
+with the same layout because the production QML depends on KDE Kirigami. The
+preview uses Qt's Fusion style; the regular Linux updater keeps the KDE desktop
+style.
+
+Available states are `ready`, `up-to-date`, `available`, `staged`, `checking`,
+`downloading`, `preparing`, and `error`. The buttons simulate the flow: checking
+shows an available update, downloading stages it, and restarting returns to the
+up-to-date state.
+
 The Containerfile copies the Python/QML application, launcher, desktop entry,
 and KDE session autostart entry directly into the image. Runtime dependencies
 are listed in the root `packages.yml` manifest.

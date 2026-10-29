@@ -29,8 +29,23 @@ from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 from .version import __version__
 
 
-SERVER_NAME = f"cubelinux-updater-session-{os.getuid()}"
+SESSION_ID = (
+    str(os.getuid())
+    if hasattr(os, "getuid")
+    else os.environ.get("USERNAME", "preview")
+)
+SERVER_NAME = f"cubelinux-updater-session-{SESSION_ID}"
 LOGGER = logging.getLogger("cubelinux_updater")
+PREVIEW_STATES = (
+    "ready",
+    "up-to-date",
+    "available",
+    "staged",
+    "checking",
+    "downloading",
+    "preparing",
+    "error",
+)
 
 
 def configure_logging() -> Path | None:
@@ -79,8 +94,9 @@ class UpdateController(QObject):
     errorDetailsChanged = Signal()
     trayStateChanged = Signal(str)
 
-    def __init__(self) -> None:
+    def __init__(self, preview_state: str | None = None) -> None:
         super().__init__()
+        self._preview_mode = preview_state is not None
         self._status_text = "Check for updates to see if one is available."
         self._busy = False
         self._update_available = False
@@ -102,6 +118,8 @@ class UpdateController(QObject):
         self._process.readyReadStandardError.connect(self._read_process_error)
         self._process.finished.connect(self._operation_finished)
         self._process.errorOccurred.connect(self._process_error)
+        if preview_state is not None:
+            self._set_preview_state(preview_state)
 
     @Property(str, notify=statusTextChanged)
     def statusText(self) -> str:
@@ -236,6 +254,51 @@ class UpdateController(QObject):
             self._tray_state = value
             self.trayStateChanged.emit(value)
 
+    def _set_preview_state(self, state: str) -> None:
+        self._operation = ""
+        self._set_busy(False)
+        self._set_update_available(False)
+        self._set_update_staged(False)
+        self._set_has_checked(False)
+        self._set_error_details("")
+        self._set_progress(-1)
+        self._set_image_details("", "")
+        self._set_tray_state("idle")
+
+        if state == "ready":
+            self._set_status_text("Check for updates to see if one is available.")
+        elif state == "up-to-date":
+            self._set_has_checked(True)
+            self._set_image_details("2026-10-29+a5c583a", "2026-10-29")
+            self._set_status_text("No updates are available right now.")
+        elif state in ("available", "staged", "downloading", "preparing"):
+            self._set_has_checked(True)
+            self._set_image_details("2026.10", "2026-10-29")
+            if state == "available":
+                self._set_update_available(True)
+                self._set_status_text("A system update is available.")
+            elif state == "staged":
+                self._set_update_staged(True)
+                self._set_status_text("Your update is ready to finish installing.")
+            else:
+                self._set_update_available(True)
+                self._set_busy(True)
+                self._operation = "stage"
+                if state == "downloading":
+                    self._set_progress(57)
+                    self._set_status_text("Downloading the update...")
+                else:
+                    self._set_progress(-1, "prepare")
+                    self._set_status_text("Preparing the update...")
+        elif state == "checking":
+            self._set_busy(True)
+            self._operation = "check"
+            self._set_status_text("Checking for updates...")
+        elif state == "error":
+            self._set_has_checked(True)
+            self._set_error_details("Sample preview error details.")
+            self._set_status_text("Couldn't check for updates. Try again.")
+
     def _start_command(self, operation: str, arguments: list[str], message: str) -> None:
         if self._process.state() != QProcess.ProcessState.NotRunning:
             return
@@ -257,6 +320,9 @@ class UpdateController(QObject):
 
     @Slot()
     def checkForUpdates(self) -> None:
+        if self._preview_mode:
+            self._set_preview_state("available")
+            return
         self._start_command(
             "check",
             ["check"],
@@ -266,6 +332,9 @@ class UpdateController(QObject):
     @Slot()
     def stageUpdate(self) -> None:
         if self._update_available:
+            if self._preview_mode:
+                self._set_preview_state("staged")
+                return
             self._start_command(
                 "stage",
                 ["download"],
@@ -275,6 +344,9 @@ class UpdateController(QObject):
     @Slot()
     def applyAndReboot(self) -> None:
         if self._update_staged:
+            if self._preview_mode:
+                self._set_preview_state("up-to-date")
+                return
             self._start_command(
                 "apply",
                 ["apply"],
@@ -463,7 +535,74 @@ def activate_existing_instance(show_window: bool = True) -> bool:
     return True
 
 
+def _preview_state_from_arguments(arguments: list[str]) -> str | None:
+    for argument in arguments:
+        if argument == "--preview":
+            return "available"
+        if argument.startswith("--preview="):
+            return argument.partition("=")[2] or "available"
+    return None
+
+
+def run_preview(preview_state: str, arguments: list[str]) -> int:
+    """Run the QML interface with simulated data and no system operations."""
+    logging.basicConfig(level=logging.INFO)
+    LOGGER.info("Starting UI-only preview in the %s state", preview_state)
+    qInstallMessageHandler(_qt_message_handler)
+
+    if not os.environ.get("QT_QUICK_CONTROLS_STYLE"):
+        style = "Fusion" if sys.platform == "win32" else "org.kde.desktop"
+        QQuickStyle.setStyle(style)
+
+    app = QApplication(arguments)
+    app.setApplicationName("cubelinux-updater-preview")
+    app.setOrganizationName("cubelinux")
+
+    engine = QQmlApplicationEngine()
+
+    def log_qml_warnings(warnings) -> None:
+        for warning in warnings:
+            LOGGER.error("QML: %s", warning.toString())
+
+    engine.warnings.connect(log_qml_warnings)
+    update_controller = UpdateController(preview_state=preview_state)
+    update_controller.setParent(app)
+    engine.rootContext().setContextProperty("updateController", update_controller)
+    engine.rootContext().setContextProperty("softwareVersion", __version__)
+    engine.rootContext().setContextProperty("previewMode", True)
+    qml_name = "Preview.qml" if sys.platform == "win32" else "Main.qml"
+    qml_file = Path(__file__).parent / "qml" / qml_name
+    engine.load(str(qml_file))
+    if not engine.rootObjects():
+        QMessageBox.critical(
+            None,
+            "Updater preview could not start",
+            "The QML interface failed to load. Confirm that the Qt Quick and KDE Kirigami QML modules are installed.",
+        )
+        return 1
+
+    window = engine.rootObjects()[0]
+    window.show()
+    return app.exec()
+
+
 def main() -> int:
+    arguments = sys.argv[1:]
+    preview_state = _preview_state_from_arguments(arguments)
+    if preview_state is not None:
+        if preview_state not in PREVIEW_STATES:
+            choices = ", ".join(PREVIEW_STATES)
+            print(
+                f"Unknown preview state '{preview_state}'. Choose one of: {choices}.",
+                file=sys.stderr,
+            )
+            return 2
+        qt_arguments = [
+            sys.argv[0],
+            *(argument for argument in arguments if not argument.startswith("--preview")),
+        ]
+        return run_preview(preview_state, qt_arguments)
+
     configure_logging()
     LOGGER.info("Using updater activation socket %s", SERVER_NAME)
     qInstallMessageHandler(_qt_message_handler)
@@ -511,6 +650,7 @@ def main() -> int:
     update_controller = UpdateController()
     engine.rootContext().setContextProperty("updateController", update_controller)
     engine.rootContext().setContextProperty("softwareVersion", __version__)
+    engine.rootContext().setContextProperty("previewMode", False)
     qml_file = Path(__file__).parent / "qml" / "Main.qml"
     engine.load(str(qml_file))
     if not engine.rootObjects():

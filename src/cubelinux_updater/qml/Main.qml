@@ -9,7 +9,7 @@ Kirigami.ApplicationWindow {
     title: qsTr("Updater")
     visible: false
     width: 640
-    height: 680
+    height: 648
     minimumWidth: 540
     minimumHeight: 520
 
@@ -84,7 +84,7 @@ Kirigami.ApplicationWindow {
 
     pageStack.initialPage: Kirigami.ScrollablePage {
         title: qsTr("System updates")
-        padding: Kirigami.Units.largeSpacing
+        padding: Kirigami.Units.gridUnit * 2
         footer: Controls.ToolBar {
             RowLayout {
                 anchors.fill: parent
@@ -105,7 +105,11 @@ Kirigami.ApplicationWindow {
                 Controls.Button {
                     visible: updateController.updateAvailable || updateController.updateStaged
                     text: qsTr("Later")
-                    onClicked: root.hide()
+                    onClicked: {
+                        if (!previewMode) {
+                            root.hide()
+                        }
+                    }
                 }
 
                 Controls.Button {
@@ -128,6 +132,11 @@ Kirigami.ApplicationWindow {
             width: parent.width
             spacing: Kirigami.Units.largeSpacing
 
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 2.5
+            }
+
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
@@ -148,6 +157,7 @@ Kirigami.ApplicationWindow {
 
             Kirigami.Card {
                 Layout.fillWidth: true
+                Layout.minimumHeight: Kirigami.Units.gridUnit * 6
 
                 contentItem: RowLayout {
                     spacing: Kirigami.Units.mediumSpacing
@@ -191,9 +201,10 @@ Kirigami.ApplicationWindow {
 
             GridLayout {
                 Layout.fillWidth: true
+                Layout.topMargin: Kirigami.Units.gridUnit * 2
                 columns: 2
                 columnSpacing: Kirigami.Units.largeSpacing
-                rowSpacing: Kirigami.Units.smallSpacing
+                rowSpacing: Kirigami.Units.largeSpacing
                 visible: updateController.latestVersion.length > 0
                          || updateController.latestUpdated.length > 0
 
