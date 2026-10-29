@@ -1,7 +1,7 @@
 # cubelinux-vshell
 
 `cubelinux-vshell` is the command and application ID for Setup Terminal and its
-persistent Fedora LXC environment.
+persistent Fedora LXC environment on the cubelinux Fedora bootc desktop host.
 
 The wizard downloads a Fedora 44 LXC image, creates an unprivileged container,
 and shares the signed-in user's home folder automatically. The system image
@@ -13,8 +13,10 @@ without this provisioning can still use the one-time administrator setup.
 Programs in the container can read and modify files in the shared home folder.
 The host user's runtime directory and X11 socket directory are also mounted so
 terminal-launched applications can connect to the host's Wayland/XWayland,
-D-Bus, and PipeWire/PulseAudio session. The container user is mapped to the
-desktop user's host ID, so those sockets accept connections as that user.
+D-Bus, and PipeWire/PulseAudio session. The host X11 directory is mounted outside
+the guest's `/tmp` and linked back after the Fedora guest mounts its temporary
+filesystem there. The container user is mapped to the desktop user's host ID,
+so those sockets accept connections as that user.
 
 Install graphical applications inside Fedora with DNF, then start them from the
 VShell terminal. For example, install `vlc` and run `vlc`. The app and its

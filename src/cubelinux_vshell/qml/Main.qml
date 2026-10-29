@@ -56,7 +56,7 @@ Kirigami.ApplicationWindow {
         Kirigami.AboutPage {
             aboutData: {
                 "displayName": qsTr("Setup Terminal"),
-                "productName": qsTr("CubeLinux VShell"),
+                "productName": qsTr("cubelinux VShell"),
                 "componentName": "cubelinux-vshell",
                 "shortDescription": qsTr("Manage your Fedora Linux environment."),
                 "homepage": "https://github.com/cubelinux/cubelinux-vshell",
@@ -359,43 +359,6 @@ Kirigami.ApplicationWindow {
 
                             Item { Layout.fillHeight: true }
 
-                            RowLayout {
-                                spacing: Kirigami.Units.smallSpacing
-
-                                Item {
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-
-                                    Kirigami.Icon {
-                                        id: sidebarStatusIcon
-                                        anchors.fill: parent
-                                        source: root.containerStatusIcon
-                                        color: root.containerStatusColor
-                                        Accessible.name: root.containerStatusLabel
-
-                                        RotationAnimation on rotation {
-                                            from: 0
-                                            to: 360
-                                            duration: 1000
-                                            loops: Animation.Infinite
-                                            running: setupController.resetting
-                                            onRunningChanged: {
-                                                if (!running) sidebarStatusIcon.rotation = 0
-                                            }
-                                        }
-                                    }
-
-                                    Controls.ToolTip.visible: statusHover.containsMouse
-                                    Controls.ToolTip.text: root.containerStatusLabel
-
-                                    MouseArea {
-                                        id: statusHover
-                                        anchors.fill: parent
-                                        acceptedButtons: Qt.NoButton
-                                        hoverEnabled: true
-                                    }
-                                }
-                            }
                         }
                     }
 

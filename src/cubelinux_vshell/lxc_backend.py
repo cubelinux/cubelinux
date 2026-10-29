@@ -20,8 +20,10 @@ FEDORA_RELEASE = "44"
 GUEST_ID = 50000
 ID_COUNT = 65536
 CONTAINER_RUNTIME_DIR = "/mnt/vshell-host-runtime"
+CONTAINER_X11_DIR = "/mnt/vshell-host-x11"
+CONTAINER_X11_TMPFILES = "/etc/tmpfiles.d/cubelinux-vshell-x11.conf"
 SHUTDOWN_HOOK = """#!/bin/sh
-# Stop the CubeLinux Fedora container before the Plasma user manager exits.
+# Stop the cubelinux Fedora container before the Plasma user manager exits.
 /usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
 """
 Progress = Callable[[str], None]
@@ -351,7 +353,7 @@ def _host_desktop_mount_lines(account: pwd.struct_passwd) -> list[str]:
     x11_sockets = Path("/tmp/.X11-unix")
     if x11_sockets.is_dir():
         lines.append(
-            "lxc.mount.entry = /tmp/.X11-unix tmp/.X11-unix "
+            f"lxc.mount.entry = /tmp/.X11-unix {CONTAINER_X11_DIR.lstrip('/')} "
             "none bind,create=dir 0 0"
         )
 
@@ -515,6 +517,24 @@ def _ensure_host_desktop_mounts(account: pwd.struct_passwd) -> bool:
         return False
     config.write_text(updated, encoding="utf-8")
     return True
+
+
+def _ensure_guest_x11_socket_path(progress: Progress | None = None) -> None:
+    """Restore the X11 path after the Fedora LXC guest mounts tmpfs on /tmp."""
+    if not Path("/tmp/.X11-unix").is_dir():
+        return
+    script = (
+        "set -eu; "
+        f"if [ -d {CONTAINER_X11_DIR} ]; then "
+        "install -d -m 0755 /etc/tmpfiles.d; "
+        f"printf '%s\\n' 'L+ /tmp/.X11-unix - - - - {CONTAINER_X11_DIR}' "
+        f"> {CONTAINER_X11_TMPFILES}; "
+        f"if [ ! -L /tmp/.X11-unix ] || "
+        f"[ \"$(readlink /tmp/.X11-unix)\" != {CONTAINER_X11_DIR} ]; then "
+        f"systemd-tmpfiles --create {CONTAINER_X11_TMPFILES}; "
+        "fi; fi"
+    )
+    _attach("/usr/bin/bash", "-ceu", script, progress=progress)
 
 
 def _stop_container(progress: Progress) -> None:
@@ -681,6 +701,7 @@ def initialize(progress: Progress = print, *, refresh_template: bool = False) ->
         stream=True,
     )
     _wait_until_running(progress)
+    _ensure_guest_x11_socket_path(progress)
     _report(progress, "Fedora Virtual Shell is ready.")
 
 
@@ -736,6 +757,7 @@ def enter() -> int:
         _stop_container(print)
     if not _container_running(print):
         _start_container(print)
+    _ensure_guest_x11_socket_path()
 
     term = os.environ.get("TERM", "xterm-256color")
     command = [
