@@ -8,10 +8,10 @@ Kirigami.ApplicationWindow {
 
     title: qsTr("Updater")
     visible: false
-    width: 760
-    height: 560
-    minimumWidth: 500
-    minimumHeight: 460
+    width: 680
+    height: 500
+    minimumWidth: 520
+    minimumHeight: 420
 
     function statusHeading() {
         if (updateController.errorDetails.length > 0) {
@@ -62,198 +62,226 @@ Kirigami.ApplicationWindow {
         }
         if (updateController.hasChecked) {
             return updateController.errorDetails.length > 0
-                   ? qsTr("Try again") : qsTr("Check again")
+                   ? qsTr("Try again") : qsTr("Check for updates")
         }
         return qsTr("Check for updates")
+    }
+
+    function statusDescription() {
+        if (updateController.updateStaged) {
+            return qsTr("Restart your PC to finish applying the update.")
+        }
+        if (updateController.updateAvailable) {
+            return qsTr("Download it now. You can keep using your PC while it downloads.")
+        }
+        if (updateController.hasChecked) {
+            return qsTr("No updates are available right now.")
+        }
+        return updateController.statusText
     }
 
     pageStack.initialPage: Kirigami.ScrollablePage {
         title: qsTr("System updates")
         padding: Kirigami.Units.largeSpacing
+        footer: Controls.ToolBar {
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Kirigami.Units.largeSpacing
+                anchors.rightMargin: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.Label {
+                    text: qsTr("cubelinux · Updater %1").arg(softwareVersion)
+                    opacity: 0.65
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Controls.Button {
+                    visible: updateController.updateAvailable || updateController.updateStaged
+                    text: qsTr("Later")
+                    onClicked: root.hide()
+                }
+
+                Controls.Button {
+                    text: root.primaryActionText()
+                    enabled: !updateController.busy
+                    onClicked: {
+                        if (updateController.updateStaged) {
+                            rebootConfirmation.open()
+                        } else if (updateController.updateAvailable) {
+                            updateController.stageUpdate()
+                        } else {
+                            updateController.checkForUpdates()
+                        }
+                    }
+                }
+            }
+        }
 
         ColumnLayout {
             width: parent.width
             spacing: Kirigami.Units.largeSpacing
 
-            ColumnLayout {
+            Controls.Label {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Kirigami.Heading {
-                    Layout.fillWidth: true
-                    text: qsTr("System updates")
-                    level: 1
-                }
-
-                Controls.Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Keep cubelinux up to date.")
-                    opacity: 0.75
-                    wrapMode: Text.Wrap
-                }
+                text: qsTr("Keep cubelinux up to date.")
+                opacity: 0.75
+                wrapMode: Text.Wrap
             }
 
             Kirigami.Card {
                 Layout.fillWidth: true
 
-                contentItem: ColumnLayout {
+                contentItem: RowLayout {
                     spacing: Kirigami.Units.mediumSpacing
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Kirigami.Units.mediumSpacing
-
-                        Kirigami.Icon {
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.large
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.large
-                            source: updateController.errorDetails.length > 0
-                                    ? "dialog-error"
-                                    : updateController.updateStaged
-                                      ? "system-reboot"
-                                      : updateController.updateAvailable
-                                        ? "software-update-available"
-                                        : updateController.hasChecked
-                                          ? "emblem-success"
-                                          : "system-software-update"
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Kirigami.Heading {
-                                Layout.fillWidth: true
-                                text: root.statusHeading()
-                                level: 2
-                                wrapMode: Text.Wrap
-                            }
-
-                            Controls.Label {
-                                Layout.fillWidth: true
-                                visible: !updateController.busy
-                                         && updateController.errorDetails.length === 0
-                                text: updateController.statusText
-                                opacity: 0.78
-                                wrapMode: Text.Wrap
-                            }
-                        }
+                    Kirigami.Icon {
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.medium
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+                        source: updateController.errorDetails.length > 0
+                                ? "dialog-error"
+                                : updateController.updateStaged
+                                  ? "system-reboot"
+                                  : updateController.updateAvailable
+                                    ? "software-update-available"
+                                    : updateController.hasChecked
+                                      ? "emblem-success"
+                                      : "system-software-update"
                     }
 
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
-                        visible: updateController.latestVersion.length > 0
-                                 || updateController.latestUpdated.length > 0
 
-                        Kirigami.Separator {
+                        Kirigami.Heading {
                             Layout.fillWidth: true
-                        }
-
-                        Controls.Label {
-                            Layout.fillWidth: true
-                            visible: updateController.latestVersion.length > 0
-                            text: (updateController.updateAvailable || updateController.updateStaged)
-                                  ? qsTr("New system version: %1").arg(updateController.latestVersion)
-                                  : qsTr("Installed system version: %1").arg(updateController.latestVersion)
-                            font.bold: true
+                            text: root.statusHeading()
+                            level: 2
                             wrapMode: Text.Wrap
                         }
 
                         Controls.Label {
                             Layout.fillWidth: true
-                            visible: updateController.latestUpdated.length > 0
-                            text: (updateController.updateAvailable || updateController.updateStaged)
-                                  ? qsTr("Build date: %1").arg(updateController.latestUpdated)
-                                  : qsTr("Installed image date: %1").arg(updateController.latestUpdated)
-                            opacity: 0.75
+                            visible: !updateController.busy
+                                     && updateController.errorDetails.length === 0
+                            text: root.statusDescription()
+                            opacity: 0.78
                             wrapMode: Text.Wrap
-                        }
-                    }
-
-                    Kirigami.InlineMessage {
-                        Layout.fillWidth: true
-                        visible: updateController.errorDetails.length > 0
-                        type: Kirigami.MessageType.Error
-                        text: updateController.statusText
-                    }
-
-                    Controls.Label {
-                        Layout.fillWidth: true
-                        visible: updateController.errorDetails.length > 0
-                        text: updateController.errorDetails
-                        textFormat: Text.PlainText
-                        wrapMode: Text.Wrap
-                        opacity: 0.8
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Kirigami.Units.smallSpacing
-                        visible: updateController.busy
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: updateController.busyPhase === "download"
-                                     && updateController.progressPercent >= 0
-
-                            Controls.Label {
-                                Layout.fillWidth: true
-                                text: qsTr("Downloading system image")
-                                font.bold: true
-                            }
-
-                            Controls.Label {
-                                text: qsTr("%1%").arg(updateController.progressPercent)
-                                font.bold: true
-                            }
-                        }
-
-                        Controls.ProgressBar {
-                            Layout.fillWidth: true
-                            from: 0
-                            to: 100
-                            value: Math.max(0, updateController.progressPercent)
-                            indeterminate: updateController.progressPercent < 0
-                        }
-
-                        Controls.Label {
-                            Layout.fillWidth: true
-                            visible: updateController.busyPhase === "download"
-                            text: qsTr("You can keep using your PC while the update downloads.")
-                            opacity: 0.72
-                            wrapMode: Text.Wrap
-                        }
-                    }
-
-                    Controls.Button {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 46
-                        text: root.primaryActionText()
-                        icon.name: updateController.updateStaged
-                                   ? "system-reboot"
-                                   : updateController.updateAvailable
-                                     ? "download"
-                                     : "view-refresh"
-                        enabled: !updateController.busy
-                        highlighted: true
-                        onClicked: {
-                            if (updateController.updateStaged) {
-                                rebootConfirmation.open()
-                            } else if (updateController.updateAvailable) {
-                                updateController.stageUpdate()
-                            } else {
-                                updateController.checkForUpdates()
-                            }
                         }
                     }
                 }
             }
 
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: Kirigami.Units.largeSpacing
+                rowSpacing: Kirigami.Units.smallSpacing
+                visible: updateController.latestVersion.length > 0
+                         || updateController.latestUpdated.length > 0
+
+                Controls.Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    text: (updateController.updateAvailable || updateController.updateStaged)
+                          ? qsTr("UPDATE DETAILS") : qsTr("INSTALLED SYSTEM")
+                    opacity: 0.7
+                    font.bold: true
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
+                }
+
+                Controls.Label {
+                    visible: updateController.latestVersion.length > 0
+                    text: (updateController.updateAvailable || updateController.updateStaged)
+                          ? qsTr("Available version") : qsTr("Version")
+                    opacity: 0.75
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    visible: updateController.latestVersion.length > 0
+                    text: updateController.latestVersion
+                    horizontalAlignment: Text.AlignRight
+                    wrapMode: Text.Wrap
+                }
+
+                Kirigami.Separator {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: updateController.latestVersion.length > 0
+                             && updateController.latestUpdated.length > 0
+                }
+
+                Controls.Label {
+                    visible: updateController.latestUpdated.length > 0
+                    text: (updateController.updateAvailable || updateController.updateStaged)
+                          ? qsTr("Build date") : qsTr("Image date")
+                    opacity: 0.75
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    visible: updateController.latestUpdated.length > 0
+                    text: updateController.latestUpdated
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
+
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                visible: updateController.errorDetails.length > 0
+                type: Kirigami.MessageType.Error
+                text: updateController.statusText
+            }
+
             Controls.Label {
-                Layout.alignment: Qt.AlignRight
-                text: qsTr("cubelinux / Updater %1").arg(softwareVersion)
-                opacity: 0.55
-                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
+                Layout.fillWidth: true
+                visible: updateController.errorDetails.length > 0
+                text: updateController.errorDetails
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                opacity: 0.8
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+                visible: updateController.busy
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: updateController.busyPhase === "download"
+                             && updateController.progressPercent >= 0
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Downloading system image")
+                    }
+
+                    Controls.Label {
+                        text: qsTr("%1% download").arg(updateController.progressPercent)
+                    }
+                }
+
+                Controls.ProgressBar {
+                    Layout.fillWidth: true
+                    from: 0
+                    to: 100
+                    value: Math.max(0, updateController.progressPercent)
+                    indeterminate: updateController.progressPercent < 0
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    visible: updateController.busyPhase === "download"
+                    text: qsTr("You can keep using your PC while the update downloads.")
+                    opacity: 0.72
+                    wrapMode: Text.Wrap
+                }
             }
         }
     }
@@ -286,8 +314,6 @@ Kirigami.ApplicationWindow {
 
                 Controls.Button {
                     text: qsTr("Restart now")
-                    icon.name: "system-reboot"
-                    highlighted: true
                     onClicked: {
                         rebootConfirmation.accept()
                         updateController.applyAndReboot()
