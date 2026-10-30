@@ -118,6 +118,7 @@ class UpdateController(QObject):
         self._download_bytes_total = 0
         self._latest_version = ""
         self._latest_updated = ""
+        self._installed_version = ""
         self._tray_state = "idle"
         self._process = QProcess(self)
         self._process.readyReadStandardOutput.connect(self._read_process_output)
@@ -186,6 +187,10 @@ class UpdateController(QObject):
     def latestUpdated(self) -> str:
         return self._latest_updated
 
+    @Property(str, notify=imageDetailsChanged)
+    def installedVersion(self) -> str:
+        return self._installed_version
+
     @Property(str, notify=errorDetailsChanged)
     def errorDetails(self) -> str:
         return self._error_details
@@ -250,6 +255,12 @@ class UpdateController(QObject):
         self._latest_updated = updated
         self.imageDetailsChanged.emit()
 
+    def _set_installed_version(self, version: str) -> None:
+        if self._installed_version == version:
+            return
+        self._installed_version = version
+        self.imageDetailsChanged.emit()
+
     def _set_error_details(self, value: str) -> None:
         value = value.strip()
         if self._error_details == value:
@@ -294,6 +305,7 @@ class UpdateController(QObject):
         self._set_progress(-1)
         self._set_download_progress(0, 0)
         self._set_image_details("", "")
+        self._set_installed_version("")
         self._set_tray_state("idle")
 
         if state == "ready":
@@ -301,10 +313,12 @@ class UpdateController(QObject):
         elif state == "up-to-date":
             self._set_has_checked(True)
             self._set_image_details("2026-10-29+a5c583a", "2026-10-29")
+            self._set_installed_version("2026-10-29+a5c583a")
             self._set_status_text("No updates are available right now.")
         elif state in ("available", "staged", "downloading", "preparing"):
             self._set_has_checked(True)
             self._set_image_details("2026.10", "2026-10-29")
+            self._set_installed_version("2026-10-29+a5c583a")
             self._set_download_progress(0, 1_200_000_000)
             if state == "available":
                 self._set_update_available(True)
@@ -474,6 +488,8 @@ class UpdateController(QObject):
 
         if operation == "check":
             if "Update available for:" in check_output:
+                installed_version, _ = self._status_image_details(status_output)
+                self._set_installed_version(installed_version)
                 version_match = re.search(r"^\s*Version:\s*(.+)$", check_output, re.MULTILINE)
                 if version_match:
                     self._set_image_details(*self._format_image_details(version_match.group(1)))
@@ -484,6 +500,8 @@ class UpdateController(QObject):
                 self._set_tray_state("available")
                 self._set_status_text("A system update is available. Download it when you're ready.")
             elif "Staged update present, not changed" in check_output:
+                installed_version, _ = self._status_image_details(status_output)
+                self._set_installed_version(installed_version)
                 self._set_image_details(*self._status_image_details(status_output, staged=True))
                 self._set_update_available(False)
                 self._set_update_staged(True)
@@ -491,6 +509,7 @@ class UpdateController(QObject):
                 self._set_status_text("Your update is ready. Restart your PC to finish installing it.")
             elif any(marker in check_output for marker in ("No changes in:", "No update available.")):
                 self._set_image_details(*self._status_image_details(status_output))
+                self._set_installed_version(self._latest_version)
                 self._set_update_available(False)
                 self._set_update_staged(False)
                 self._set_tray_state("idle")

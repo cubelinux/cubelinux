@@ -215,10 +215,33 @@ Kirigami.ApplicationWindow {
                     Layout.columnSpan: 2
                     Layout.fillWidth: true
                     text: (updateController.updateAvailable || updateController.updateStaged)
-                          ? qsTr("UPDATE DETAILS") : qsTr("INSTALLED SYSTEM")
+                          ? qsTr("VERSION DETAILS") : qsTr("INSTALLED SYSTEM")
                     opacity: 0.7
                     font.bold: true
                     font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
+                }
+
+                Controls.Label {
+                    visible: (updateController.updateAvailable || updateController.updateStaged)
+                             && updateController.installedVersion.length > 0
+                    text: qsTr("Installed version")
+                    opacity: 0.75
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    visible: (updateController.updateAvailable || updateController.updateStaged)
+                             && updateController.installedVersion.length > 0
+                    text: updateController.installedVersion
+                    horizontalAlignment: Text.AlignRight
+                    wrapMode: Text.Wrap
+                }
+
+                Kirigami.Separator {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: (updateController.updateAvailable || updateController.updateStaged)
+                             && updateController.installedVersion.length > 0
                 }
 
                 Controls.Label {
@@ -275,6 +298,14 @@ Kirigami.ApplicationWindow {
                     visible: updateController.downloadSize.length > 0
                     text: updateController.downloadSize
                     horizontalAlignment: Text.AlignRight
+                }
+
+                Controls.Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: updateController.updateAvailable || updateController.updateStaged
+                    text: qsTr("Restart required after download to apply the update.")
+                    wrapMode: Text.Wrap
                 }
 
                 Controls.Label {
