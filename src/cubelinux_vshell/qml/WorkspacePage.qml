@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls as Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -75,6 +74,8 @@ ColumnLayout {
 
     Kirigami.Card {
         Layout.fillWidth: true
+        Layout.preferredHeight: 96
+        Layout.minimumHeight: 96
 
         contentItem: RowLayout {
             spacing: Kirigami.Units.largeSpacing
@@ -89,11 +90,13 @@ ColumnLayout {
                 smooth: true
                 Layout.preferredWidth: 64
                 Layout.preferredHeight: Kirigami.Units.iconSizes.large
+                Layout.alignment: Qt.AlignVCenter
             }
 
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
+                Layout.alignment: Qt.AlignVCenter
 
                 RowLayout {
                     spacing: Kirigami.Units.mediumSpacing
@@ -104,7 +107,9 @@ ColumnLayout {
                     }
 
                     Controls.Label {
-                        text: qsTr("Default environment")
+                        text: qsTr("DEFAULT")
+                        font.bold: true
+                        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
                         opacity: 0.7
                     }
                 }
@@ -115,15 +120,19 @@ ColumnLayout {
                 }
             }
 
-            RowLayout {
-                spacing: Kirigami.Units.smallSpacing
+            Item {
+                Layout.preferredWidth: Kirigami.Units.iconSizes.medium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+                Layout.alignment: Qt.AlignVCenter
 
                 Kirigami.Icon {
                     id: statusIcon
+                    anchors.centerIn: parent
                     source: page.containerStatusIcon
                     color: page.containerStatusColor
-                    implicitWidth: Kirigami.Units.iconSizes.small
-                    implicitHeight: Kirigami.Units.iconSizes.small
+                    implicitWidth: Kirigami.Units.iconSizes.medium
+                    implicitHeight: Kirigami.Units.iconSizes.medium
+                    Accessible.name: page.containerStatusLabel
 
                     RotationAnimation on rotation {
                         from: 0
@@ -134,13 +143,10 @@ ColumnLayout {
                         onRunningChanged: if (!running) statusIcon.rotation = 0
                     }
                 }
-
-                Controls.Label {
-                    text: page.containerStatusLabel
-                }
             }
 
             Controls.Button {
+                Layout.alignment: Qt.AlignVCenter
                 text: qsTr("Open terminal")
                 icon.name: "utilities-terminal"
                 highlighted: true
@@ -152,8 +158,10 @@ ColumnLayout {
             }
 
             Controls.ToolButton {
+                Layout.alignment: Qt.AlignVCenter
                 icon.name: "overflow-menu"
-                text: qsTr("Environment actions")
+                Accessible.name: qsTr("Environment actions")
+                Controls.ToolTip.text: qsTr("Environment actions")
                 enabled: !controller.busy && !controller.destroying && !controller.folderSharingBusy
                 onClicked: environmentMenu.open()
 
@@ -324,7 +332,7 @@ ColumnLayout {
                     icon.name: "folder-open"
                     enabled: !controller.busy && !controller.folderSharingBusy
                              && !controller.destroying
-                    onClicked: folderDialog.open()
+                    onClicked: controller.chooseSharedFolder()
                 }
             }
 
@@ -345,11 +353,5 @@ ColumnLayout {
         Layout.leftMargin: Kirigami.Units.smallSpacing
         text: qsTr("Linux Subsystem")
         opacity: 0.55
-    }
-
-    FolderDialog {
-        id: folderDialog
-        title: qsTr("Choose a folder to share with Fedora")
-        onAccepted: controller.addSharedFolder(selectedFolder.toLocalFile())
     }
 }

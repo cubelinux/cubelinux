@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from PySide6.QtCore import Property, QObject, QProcess, QThread, Signal, Slot
+from PySide6.QtWidgets import QFileDialog
 
 from .lxc_backend import VShellError, is_initialized, status
 from .lxc_setup import destroy_container, initialize
@@ -177,6 +178,19 @@ class SetupController(QObject):
     @Slot(str)
     def addSharedFolder(self, folder: str) -> None:
         self._start_folder_worker("add", folder)
+
+    @Slot()
+    def chooseSharedFolder(self) -> None:
+        if self.busy or self.folderSharingBusy or self.destroying or not self.ready:
+            return
+        folder = QFileDialog.getExistingDirectory(
+            None,
+            "Choose a folder to share with Fedora",
+            str(Path.home()),
+            QFileDialog.Option.ShowDirsOnly,
+        )
+        if folder:
+            self.addSharedFolder(folder)
 
     @Slot(str)
     def removeSharedFolder(self, share_id: str) -> None:

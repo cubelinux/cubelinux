@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QLockFile, QStandardPaths, QUrl
-from PySide6.QtGui import QGuiApplication
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtWidgets import QApplication
 
 from .controller import SetupController
 from .lxc_backend import VShellError, enter, install_shutdown_hook, status, stop
@@ -109,7 +109,7 @@ def main() -> int:
     if not os.environ.get("QT_QUICK_CONTROLS_STYLE"):
         QQuickStyle.setStyle("org.kde.desktop")
 
-    app = QGuiApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setApplicationName("cubelinux-vshell")
     app.setOrganizationName("cubelinux")
     app.setQuitOnLastWindowClosed(False)
