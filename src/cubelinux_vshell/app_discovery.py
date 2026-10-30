@@ -117,8 +117,6 @@ def _desktop_launcher(rootfs: Path, source: Path, output: Path, icons: Path) -> 
 def discover_apps() -> None:
     """Refresh generated host launchers from the Fedora root filesystem."""
     rootfs = _rootfs_path()
-    if not rootfs.is_dir():
-        return
     output = _applications_dir()
     icon_output = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons/hicolor/scalable/apps"
     live: set[Path] = set()
