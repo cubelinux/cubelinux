@@ -182,6 +182,8 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.minimumHeight: 250
+        padding: 0
+        background: null
 
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.mediumSpacing

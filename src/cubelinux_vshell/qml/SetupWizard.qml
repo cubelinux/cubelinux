@@ -9,6 +9,26 @@ Item {
     property var controller
     property bool darkTheme: false
     property int wizardStep: 0
+    readonly property var setupStages: [
+        qsTr("Preparing your account"),
+        qsTr("Downloading Fedora"),
+        qsTr("Creating your environment"),
+        qsTr("Connecting Linux to your desktop")
+    ]
+    readonly property int activeSetupStage: {
+        const title = controller.progressTitle.toLowerCase()
+        if (title === "setup complete") return setupStages.length
+        if (title.indexOf("preparing your account") >= 0
+                || title.indexOf("container networking") >= 0) return 0
+        if (title.indexOf("download") >= 0
+                || title.indexOf("checking for fedora") >= 0
+                || title.indexOf("checking the fedora image") >= 0
+                || title.indexOf("extracting fedora") >= 0
+                || title.indexOf("cached fedora image") >= 0) return 1
+        if (title.indexOf("desktop session") >= 0
+                || title.indexOf("restarting fedora") >= 0) return 3
+        return 2
+    }
 
     function startOver() {
         wizardStep = 0
@@ -22,11 +42,15 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        Item { Layout.fillHeight: true }
+        Item {
+            Layout.fillHeight: true
+            visible: wizard.wizardStep < 2
+        }
 
         Kirigami.Card {
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
+            Layout.fillHeight: wizard.wizardStep === 2
             Layout.maximumWidth: 620
             Layout.preferredHeight: 500
 
@@ -301,13 +325,12 @@ Item {
                             opacity: 0.7
                         }
 
-                        Kirigami.InlineMessage {
+                        Controls.Label {
                             Layout.fillWidth: true
-                            visible: controller.busy || controller.progress.length > 0
+                            visible: controller.busy && controller.progress.length > 0
                             text: controller.progress
-                            type: controller.progressTitle === qsTr("Setup failed")
-                                  || controller.progressTitle === qsTr("Destroy failed")
-                                  ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
+                            opacity: 0.7
+                            wrapMode: Text.Wrap
                         }
 
                         Controls.ProgressBar {
@@ -319,22 +342,84 @@ Item {
                             indeterminate: controller.progressPercent < 0
                         }
 
-                        Controls.Label {
+                        Repeater {
+                            model: wizard.setupStages
+
+                            delegate: RowLayout {
+                                required property int index
+                                required property string modelData
+
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.mediumSpacing
+
+                                Kirigami.Icon {
+                                    source: index < wizard.activeSetupStage
+                                            ? "emblem-checked"
+                                            : index === wizard.activeSetupStage
+                                              ? "media-playback-start" : "media-playback-stop"
+                                    color: index < wizard.activeSetupStage
+                                           ? Kirigami.Theme.positiveTextColor
+                                           : index === wizard.activeSetupStage
+                                             ? Kirigami.Theme.textColor
+                                             : Kirigami.Theme.neutralTextColor
+                                    implicitWidth: Kirigami.Units.iconSizes.small
+                                    implicitHeight: Kirigami.Units.iconSizes.small
+                                    Accessible.name: modelData
+                                }
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData
+                                    font.bold: index === wizard.activeSetupStage
+                                    opacity: index > wizard.activeSetupStage ? 0.55 : 1.0
+                                }
+                            }
+                        }
+
+                        Kirigami.Card {
                             Layout.fillWidth: true
+                            Layout.preferredHeight: 68
                             visible: controller.busy
-                            text: qsTr("You can close this window; setup will continue in the background.")
-                            opacity: 0.7
-                            wrapMode: Text.Wrap
+
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.mediumSpacing
+
+                                Kirigami.Icon {
+                                    source: "dialog-information"
+                                    implicitWidth: Kirigami.Units.iconSizes.small
+                                    implicitHeight: Kirigami.Units.iconSizes.small
+                                }
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: qsTr("You can close this window. Setup will continue, and you can reopen it to check.")
+                                    opacity: 0.75
+                                    wrapMode: Text.Wrap
+                                }
+                            }
+                        }
+
+                        Kirigami.InlineMessage {
+                            Layout.fillWidth: true
+                            visible: !controller.busy && controller.progress.length > 0
+                            text: controller.progress
+                            type: controller.progressTitle === qsTr("Setup failed")
+                                  || controller.progressTitle === qsTr("Destroy failed")
+                                  ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
                         }
 
                         Item { Layout.fillHeight: true }
                     }
                 }
 
-                Kirigami.Separator { Layout.fillWidth: true }
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                    visible: wizard.wizardStep < 2 || !controller.busy
+                }
 
                 RowLayout {
                     Layout.fillWidth: true
+                    visible: wizard.wizardStep < 2 || !controller.busy
 
                     Controls.Button {
                         visible: wizard.wizardStep === 0
@@ -380,6 +465,9 @@ Item {
             }
         }
 
-        Item { Layout.fillHeight: true }
+        Item {
+            Layout.fillHeight: true
+            visible: wizard.wizardStep < 2
+        }
     }
 }

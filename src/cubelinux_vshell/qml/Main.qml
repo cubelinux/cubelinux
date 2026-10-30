@@ -84,7 +84,6 @@ Kirigami.ApplicationWindow {
     }
 
     pageStack.initialPage: Kirigami.Page {
-        title: qsTr("Linux Subsystem")
         padding: Kirigami.Units.largeSpacing
 
         ColumnLayout {
