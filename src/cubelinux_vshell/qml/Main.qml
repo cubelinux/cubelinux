@@ -168,9 +168,15 @@ Kirigami.ApplicationWindow {
                                     contentItem: RowLayout {
                                         spacing: Kirigami.Units.largeSpacing
 
-                                        Kirigami.Icon {
-                                            source: "utilities-terminal"
-                                            Layout.preferredWidth: Kirigami.Units.iconSizes.large
+                                        Image {
+                                            source: root.palette.window.hslLightness < 0.5
+                                                    ? "file:///usr/share/fedora-logos/fedora_logo_darkbackground.svg"
+                                                    : "file:///usr/share/fedora-logos/fedora_logo.svg"
+                                            sourceSize.width: 192
+                                            sourceSize.height: 96
+                                            fillMode: Image.PreserveAspectFit
+                                            smooth: true
+                                            Layout.preferredWidth: 96
                                             Layout.preferredHeight: Kirigami.Units.iconSizes.large
                                         }
 

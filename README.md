@@ -23,6 +23,9 @@ VShell terminal. For example, install `vlc` and run `vlc`. The app and its
 toolkit libraries come from the container's Fedora repositories; VShell passes
 the host display/audio sockets and the session environment needed to use them.
 Applications are not automatically exported to the host application menu yet.
+The setup card uses Fedora's SVG logo from the `fedora-logos` package already
+included in the bootc image; it is available locally at runtime and is not
+downloaded when VShell starts.
 
 The container runs as an unprivileged user namespace. Container root maps to
 subordinate host IDs; the Fedora login user maps to the desktop user's own ID
