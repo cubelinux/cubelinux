@@ -12,7 +12,10 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtQml import QQmlApplicationEngine
 
 from .controller import SetupController
-from .lxc_backend import VShellError, enter, initialize, install_shutdown_hook, status, stop
+from .lxc_backend import VShellError, enter, install_shutdown_hook, status, stop
+from .lxc_apps import launch_app
+from .lxc_setup import initialize
+from .app_discovery import watch_apps
 from .version import __version__
 
 _USER_ID = os.getuid() if hasattr(os, "getuid") else os.getpid()
@@ -60,7 +63,9 @@ def _claim_setup_instance(lock: QLockFile) -> bool:
 
 def _run_command(arguments: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="cubelinux-vshell")
-    parser.add_argument("command", choices=("init", "enter", "stop", "status", "activate-if-busy"))
+    parser.add_argument("command", choices=("init", "enter", "stop", "status", "activate-if-busy", "watch-apps", "launch-app"))
+    parser.add_argument("app", nargs="?")
+    parser.add_argument("files", nargs="*")
     parsed = parser.parse_args(arguments)
     try:
         if parsed.command == "init":
@@ -73,6 +78,13 @@ def _run_command(arguments: list[str]) -> int:
             return 0
         if parsed.command == "activate-if-busy":
             return 0 if _request_setup_status() == "busy" else 1
+        if parsed.command == "watch-apps":
+            watch_apps()
+            return 0
+        if parsed.command == "launch-app":
+            if not parsed.app:
+                parser.error("launch-app requires a Fedora desktop file path")
+            return launch_app(parsed.app, parsed.files)
         print(status())
         return 0
     except (VShellError, OSError) as error:
@@ -81,13 +93,18 @@ def _run_command(arguments: list[str]) -> int:
 
 
 def main() -> int:
+    if len(sys.argv) > 1:
+        if sys.argv[1] not in ("watch-apps", "launch-app"):
+            try:
+                install_shutdown_hook()
+            except VShellError as error:
+                print(f"cubelinux-vshell: {error}", file=sys.stderr)
+        return _run_command(sys.argv[1:])
+
     try:
         install_shutdown_hook()
     except VShellError as error:
         print(f"cubelinux-vshell: {error}", file=sys.stderr)
-
-    if len(sys.argv) > 1:
-        return _run_command(sys.argv[1:])
 
     if not os.environ.get("QT_QUICK_CONTROLS_STYLE"):
         QQuickStyle.setStyle("org.kde.desktop")

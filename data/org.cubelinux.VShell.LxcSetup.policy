@@ -5,7 +5,7 @@
 <policyconfig>
   <vendor>Vireak OS</vendor>
   <action id="org.cubelinux.VShell.LxcSetup">
-    <description>Enable Setup Terminal container networking</description>
+    <description>Enable Linux Subsystem container networking</description>
     <message>Authentication is required to enable rootless LXC for your account</message>
     <defaults>
       <allow_any>no</allow_any>

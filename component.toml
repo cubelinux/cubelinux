@@ -32,6 +32,10 @@ source = "data/org.cubelinux.VShell.desktop"
 destination = "/usr/share/applications/org.cubelinux.VShell.desktop"
 
 [[files]]
+source = "data/org.cubelinux.VShellAppDiscovery.desktop"
+destination = "/etc/xdg/autostart/org.cubelinux.VShellAppDiscovery.desktop"
+
+[[files]]
 source = "data/org.cubelinux.HostTerminal.desktop"
 destination = "/usr/share/applications/org.cubelinux.HostTerminal.desktop"
 
