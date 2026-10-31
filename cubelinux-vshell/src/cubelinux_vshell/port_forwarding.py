@@ -16,6 +16,9 @@ from pathlib import Path
 from .lxc_backend import CONTAINER_NAME, VShellError, _container_running, _lxc_path
 
 _MIN_AUTOMATIC_PORT = 1024
+# systemd-resolved uses this for LLMNR in a base Fedora system. It is host
+# name-resolution infrastructure, not an application service to proxy.
+_NON_APPLICATION_PORTS = {5355}
 _STATE_MAX_AGE = 15
 
 
@@ -184,7 +187,11 @@ def _listening_tcp_ports(guest_ip: str) -> set[int]:
                 interface_bound = str(decoded) == guest_ip
             except ValueError:
                 pass
-        if _MIN_AUTOMATIC_PORT <= port <= 65535 and (wildcard or interface_bound):
+        if (
+            _MIN_AUTOMATIC_PORT <= port <= 65535
+            and port not in _NON_APPLICATION_PORTS
+            and (wildcard or interface_bound)
+        ):
             ports.add(port)
     return ports
 
