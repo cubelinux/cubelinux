@@ -48,11 +48,11 @@ Item {
         }
 
         Kirigami.Card {
-            Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
             Layout.fillHeight: wizard.wizardStep === 2
-            Layout.maximumWidth: 620
             Layout.preferredHeight: 500
+            padding: 0
+            background: null
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.mediumSpacing
