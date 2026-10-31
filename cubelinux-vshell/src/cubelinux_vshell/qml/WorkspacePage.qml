@@ -59,6 +59,13 @@ ColumnLayout {
               ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
     }
 
+    Kirigami.InlineMessage {
+        Layout.fillWidth: true
+        visible: controller.portForwardingMessage.length > 0
+        text: controller.portForwardingMessage
+        type: Kirigami.MessageType.Error
+    }
+
     Controls.Label {
         Layout.leftMargin: Kirigami.Units.smallSpacing
         text: qsTr("Installed environments")
@@ -335,6 +342,92 @@ ColumnLayout {
                     enabled: !controller.busy && !controller.folderSharingBusy
                              && !controller.destroying
                     onClicked: controller.chooseSharedFolder()
+                }
+            }
+
+            Kirigami.Separator { Layout.fillWidth: true }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.Heading {
+                    text: qsTr("Port forwarding")
+                    level: 4
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Fedora TCP services listening on its network interface at ports 1024 and above are forwarded to this host automatically.")
+                    opacity: 0.7
+                    wrapMode: Text.Wrap
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    visible: controller.forwardedPorts.length === 0
+                    text: qsTr("No forwarded ports detected. Start a service in Fedora on a network interface to see it here.")
+                    opacity: 0.7
+                    wrapMode: Text.Wrap
+                }
+
+                Controls.ScrollView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(portRows.implicitHeight, 220)
+                    visible: controller.forwardedPorts.length > 0
+                    clip: true
+
+                    ColumnLayout {
+                        id: portRows
+                        width: parent.width
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Repeater {
+                            model: controller.forwardedPorts
+
+                            delegate: RowLayout {
+                                required property var modelData
+
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.mediumSpacing
+
+                                Kirigami.Icon {
+                                    source: "network-server"
+                                    implicitWidth: Kirigami.Units.iconSizes.medium
+                                    implicitHeight: Kirigami.Units.iconSizes.medium
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+
+                                    Controls.Label {
+                                        text: qsTr("TCP port %1 in Fedora").arg(modelData.port)
+                                        font.bold: true
+                                    }
+
+                                    Controls.Label {
+                                        text: modelData.status === "Forwarding"
+                                              ? qsTr("Available on this host at %1").arg(modelData.hostAddress)
+                                              : qsTr("Could not forward this port: %1").arg(modelData.error)
+                                        opacity: modelData.status === "Forwarding" ? 0.7 : 1.0
+                                        color: modelData.status === "Forwarding"
+                                               ? Kirigami.Theme.textColor : Kirigami.Theme.negativeTextColor
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
+
+                                Controls.CheckBox {
+                                    text: qsTr("Expose to public")
+                                    checked: modelData.publicAccess
+                                    onToggled: controller.setPortPublicAccess(modelData.port, checked)
+
+                                    Controls.ToolTip.text: qsTr("Bind this port to all host IPv4 interfaces. The host firewall still controls incoming connections.")
+                                    Controls.ToolTip.visible: hovered
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

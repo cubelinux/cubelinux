@@ -134,15 +134,14 @@ class ComponentStagingTests(unittest.TestCase):
             )
             component = {
                 "id": "demo",
-                "repository": "https://github.com/cubelinux/cubelinux-demo.git",
-                "revision": "a" * 40,
+                "path": "component",
             }
 
             packages, services = prepare_image.stage_components(
                 [component],
                 output,
                 ["base-package"],
-                fetch_component=lambda *_args: component_root,
+                component_base=root,
             )
 
             self.assertEqual(packages, ["base-package", "demo-runtime"])
@@ -162,7 +161,6 @@ class ComponentStagingTests(unittest.TestCase):
                 [],
                 output,
                 ["base-package"],
-                fetch_component=lambda *_args: self.fail("no component should be fetched"),
             )
 
             self.assertEqual(packages, ["base-package"])

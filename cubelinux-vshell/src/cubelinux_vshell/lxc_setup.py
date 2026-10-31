@@ -19,6 +19,7 @@ from .lxc_backend import (
     is_initialized,
 )
 from .shared_folders import clear_shared_folders, sync_saved_shared_folders
+from .port_forwarding import clear_port_forwarding_settings
 
 Progress = Callable[[str], None]
 
@@ -353,6 +354,7 @@ def destroy_container(progress: Progress = print) -> None:
         container_path = root / CONTAINER_NAME
         if not container_path.exists() and not container_path.is_symlink():
             clear_shared_folders()
+            clear_port_forwarding_settings()
             _report(progress, "The Fedora environment is already destroyed.")
             return
         if _container_running(progress):
@@ -361,6 +363,7 @@ def destroy_container(progress: Progress = print) -> None:
         _report(progress, "Cleaning up the incomplete Fedora container…")
         _remove_partial_container(root)
         clear_shared_folders()
+        clear_port_forwarding_settings()
         return
 
     if _container_running(progress):
@@ -383,3 +386,4 @@ def destroy_container(progress: Progress = print) -> None:
         stream=True,
     )
     clear_shared_folders()
+    clear_port_forwarding_settings()

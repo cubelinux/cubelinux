@@ -70,6 +70,9 @@ Kirigami.ApplicationWindow {
     }
 
     function statusDescription() {
+        if (updateController.busyPhase === "apply") {
+            return updateController.statusText
+        }
         if (updateController.updateStaged) {
             return qsTr("Restart your PC to finish applying the update.")
         }

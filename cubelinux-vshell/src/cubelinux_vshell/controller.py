@@ -3,11 +3,12 @@
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Property, QObject, QProcess, QThread, Signal, Slot
+from PySide6.QtCore import Property, QObject, QProcess, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import QFileDialog
 
 from .lxc_backend import VShellError, is_initialized, status
 from .lxc_setup import destroy_container, initialize
+from .port_forwarding import list_forwarded_ports, set_public_access
 from .shared_folders import add_shared_folder, list_shared_folders, remove_shared_folder
 
 
@@ -64,6 +65,8 @@ class SetupController(QObject):
     containerStatusChanged = Signal()
     sharedFoldersChanged = Signal()
     folderSharingChanged = Signal()
+    forwardedPortsChanged = Signal()
+    portForwardingChanged = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -81,9 +84,15 @@ class SetupController(QObject):
             self._shared_folders = []
             self._folder_sharing_message = str(error)
             self._folder_sharing_error = True
+        self._forwarded_ports = list_forwarded_ports()
+        self._port_forwarding_message = ""
         self._busy = False
         self._destroying = False
         self._container_status = "not-set-up"
+        self._port_timer = QTimer(self)
+        self._port_timer.setInterval(2000)
+        self._port_timer.timeout.connect(self._refresh_forwarded_ports)
+        self._port_timer.start()
         self.refreshStatus()
 
     @Property(str, notify=progressChanged)
@@ -113,6 +122,14 @@ class SetupController(QObject):
     @Property(list, notify=sharedFoldersChanged)
     def sharedFolders(self) -> list[dict[str, str]]:
         return self._shared_folders
+
+    @Property(list, notify=forwardedPortsChanged)
+    def forwardedPorts(self) -> list[dict[str, object]]:
+        return self._forwarded_ports
+
+    @Property(str, notify=portForwardingChanged)
+    def portForwardingMessage(self) -> str:
+        return self._port_forwarding_message
 
     @Property(str, constant=True)
     def sharedHomePath(self) -> str:
@@ -195,6 +212,29 @@ class SetupController(QObject):
     @Slot(str)
     def removeSharedFolder(self, share_id: str) -> None:
         self._start_folder_worker("remove", share_id)
+
+    @Slot(int, bool)
+    def setPortPublicAccess(self, port: int, enabled: bool) -> None:
+        try:
+            set_public_access(port, enabled)
+        except VShellError as error:
+            self._port_forwarding_message = str(error)
+            self.portForwardingChanged.emit()
+            return
+        self._port_forwarding_message = ""
+        self._forwarded_ports = [
+            {**entry, "publicAccess": enabled} if entry.get("port") == port else entry
+            for entry in self._forwarded_ports
+        ]
+        self.forwardedPortsChanged.emit()
+        self.portForwardingChanged.emit()
+
+    @Slot()
+    def _refresh_forwarded_ports(self) -> None:
+        ports = list_forwarded_ports()
+        if ports != self._forwarded_ports:
+            self._forwarded_ports = ports
+            self.forwardedPortsChanged.emit()
 
     def _start_folder_worker(self, action: str, value: str) -> None:
         if self.busy or self.folderSharingBusy or self.destroying or not self.ready:

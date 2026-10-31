@@ -443,7 +443,7 @@ class UpdateController(QObject):
             return False
         return True
 
-    def _operation_finished(self, exit_code: int, _exit_status: QProcess.ExitStatus) -> None:
+    def _operation_finished(self, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
         self._read_process_output()
         self._read_process_error()
         if self._operation == "stage":
@@ -463,6 +463,22 @@ class UpdateController(QObject):
         if not marker:
             check_output = output
             status_output = ""
+
+        reboot_started = (
+            operation == "apply"
+            and exit_status == QProcess.ExitStatus.CrashExit
+            and "staged deployment will now be applied on reboot"
+            in f"{output}\n{self._stderr_output}".lower()
+        )
+        if reboot_started:
+            # bootc initiates the reboot, which terminates this helper before
+            # it can exit normally. Keep the UI in its restarting state.
+            self._operation = "apply"
+            self._set_busy(True)
+            self._set_tray_state("rebooting")
+            self._set_status_text("Your PC is restarting to finish installing the update.")
+            LOGGER.info("bootc initiated the reboot; updater helper ended during shutdown")
+            return
 
         if exit_code != 0:
             self._set_tray_state("error")
@@ -530,12 +546,16 @@ class UpdateController(QObject):
             self._set_tray_state("staged")
             self._set_status_text("Update downloaded. Restart your PC to finish installing it.")
         elif operation == "apply":
-            self._set_update_staged(False)
+            self._operation = "apply"
+            self._set_busy(True)
             self._set_tray_state("rebooting")
             self._set_status_text("Your PC is restarting to finish installing the update.")
 
     def _process_error(self, error: QProcess.ProcessError) -> None:
-        LOGGER.error("Update helper process error (%s): %s", error, self._process.errorString())
+        if error == QProcess.ProcessError.Crashed and self._operation == "apply":
+            LOGGER.info("Update helper ended during apply; checking whether bootc initiated a reboot")
+        else:
+            LOGGER.error("Update helper process error (%s): %s", error, self._process.errorString())
         if error == QProcess.ProcessError.FailedToStart:
             if self._operation == "check":
                 self._set_has_checked(True)

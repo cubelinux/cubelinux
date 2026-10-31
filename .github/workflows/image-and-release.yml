@@ -4,9 +4,15 @@ on:
   push:
     branches:
       - '**'
+    paths:
+      - 'cubelinux-image/**'
+      - 'cubelinux-updater/**'
+      - 'cubelinux-vshell/**'
+      - '.github/workflows/image-and-release.yml'
   release:
     types:
       - published
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,6 +33,7 @@ jobs:
           python-version: "3.11"
 
       - name: Run image builder unit tests
+        working-directory: cubelinux-image
         run: python -m unittest discover -s tests -v
 
       - name: Set image name and tag
@@ -46,6 +53,7 @@ jobs:
 
       - name: Prepare image configuration and components
         id: packages
+        working-directory: cubelinux-image
         run: python3 scripts/prepare_image.py
 
       - name: Log in to GitHub Container Registry
@@ -61,8 +69,8 @@ jobs:
       - name: Build and push customized image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Containerfile
+          context: ./cubelinux-image
+          file: ./cubelinux-image/Containerfile
           load: true
           tags: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
           build-args: |
@@ -75,7 +83,7 @@ jobs:
             org.opencontainers.image.version=${{ steps.image.outputs.version }}
 
       - name: Inspect the built image filesystem
-        run: python scripts/verify_image.py --image "${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}"
+        run: python cubelinux-image/scripts/verify_image.py --image "${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}"
 
       - name: Publish verified image
         run: docker push "${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}"

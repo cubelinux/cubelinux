@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from .lxc_backend import _rootfs_path
+from .port_forwarding import PortForwardingMonitor
 
 
 _MARKER = "X-CubeLinux-VShell-HostLauncher=true"
@@ -148,17 +149,22 @@ def discover_apps() -> None:
 def watch_apps(interval: float = 4.0) -> None:
     """Keep host launcher entries synchronized while the desktop session runs."""
     fingerprint: tuple[tuple[str, int, int], ...] | None = None
-    while True:
-        rootfs = _rootfs_path()
-        current: list[tuple[str, int, int]] = []
-        for source in _app_sources(rootfs):
-            try:
-                stat = source.stat()
-            except OSError:
-                continue
-            current.append((str(source), stat.st_mtime_ns, stat.st_size))
-        current_fingerprint = tuple(current)
-        if current_fingerprint != fingerprint:
-            discover_apps()
-            fingerprint = current_fingerprint
-        time.sleep(interval)
+    forwarding = PortForwardingMonitor()
+    try:
+        while True:
+            rootfs = _rootfs_path()
+            current: list[tuple[str, int, int]] = []
+            for source in _app_sources(rootfs):
+                try:
+                    stat = source.stat()
+                except OSError:
+                    continue
+                current.append((str(source), stat.st_mtime_ns, stat.st_size))
+            current_fingerprint = tuple(current)
+            if current_fingerprint != fingerprint:
+                discover_apps()
+                fingerprint = current_fingerprint
+            forwarding.refresh()
+            time.sleep(interval)
+    finally:
+        forwarding.close()

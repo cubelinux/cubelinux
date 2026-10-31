@@ -7,7 +7,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tomllib
 from pathlib import Path, PurePosixPath
@@ -19,18 +18,10 @@ OUTPUT = ROOT / ".image-build"
 PACKAGE_RE = re.compile(r"[A-Za-z0-9_.+-]+\Z")
 COMPONENT_RE = re.compile(r"[a-z][a-z0-9-]*\Z")
 SERVICE_RE = re.compile(r"[A-Za-z0-9_.@:-]+\Z")
-REVISION_RE = re.compile(r"[0-9a-f]{40}\Z")
 
 
 def fail(message: str) -> None:
     raise ValueError(message)
-
-
-def run_git(*args: str, cwd: Path | None = None) -> str:
-    result = subprocess.run(
-        ["git", *args], cwd=cwd, check=True, text=True, stdout=subprocess.PIPE
-    )
-    return result.stdout.strip()
 
 
 def validate_package_list(value: object, label: str) -> list[str]:
@@ -116,25 +107,27 @@ def copy_file(
     target.chmod(mode)
 
 
-def checkout_component(component_id: str, repository: str, revision: str, output_dir: Path) -> Path:
-    checkout = output_dir / "components" / component_id
-    checkout.parent.mkdir(parents=True, exist_ok=True)
-    run_git("init", str(checkout))
-    run_git("-C", str(checkout), "remote", "add", "origin", repository)
-    run_git("-C", str(checkout), "fetch", "--depth", "1", "origin", revision)
-    run_git("-C", str(checkout), "checkout", "--detach", "FETCH_HEAD")
-    resolved_revision = run_git("-C", str(checkout), "rev-parse", "HEAD")
-    if REVISION_RE.fullmatch(revision) and resolved_revision != revision:
-        fail(f"{component_id}: checked out revision does not match the configured pin")
-    print(f"Fetched component {component_id} from {revision} at {resolved_revision}")
-    return checkout
+def local_component_path(component_id: str, value: object, component_base: Path) -> Path:
+    if not isinstance(value, str) or not value:
+        fail(f"{component_id}: path must name a component directory")
+    relative = Path(value)
+    if relative.is_absolute() or any(part in (".", "..") for part in relative.parts):
+        fail(f"{component_id}: component path must be a safe relative path")
+    base = component_base.resolve()
+    try:
+        component = (base / relative).resolve(strict=True)
+    except OSError as error:
+        fail(f"{component_id}: component directory is unavailable: {error}")
+    if component == base or not component.is_relative_to(base) or not component.is_dir():
+        fail(f"{component_id}: component path must stay inside the monorepo")
+    return component
 
 
 def stage_components(
     components: object,
     output_dir: Path,
     component_packages: list[str] | None = None,
-    fetch_component=checkout_component,
+    component_base: Path = ROOT.parent,
 ) -> tuple[list[str], set[str]]:
     if not isinstance(components, list):
         fail("components must be an array of tables")
@@ -147,22 +140,14 @@ def stage_components(
         if not isinstance(component, dict):
             fail("each component must be a table")
         component_id = component.get("id")
-        repository = component.get("repository")
-        revision = component.get("revision")
+        component_path = component.get("path")
         if not isinstance(component_id, str) or not COMPONENT_RE.fullmatch(component_id):
             fail("component id must use lowercase letters, digits, and hyphens")
         if component_id in ids:
             fail(f"duplicate component id {component_id}")
         ids.add(component_id)
-        expected_repo = f"https://github.com/cubelinux/cubelinux-{component_id}.git"
-        if repository != expected_repo:
-            fail(f"{component_id}: repository must be {expected_repo}")
-        if not isinstance(revision, str) or not (
-            revision == "main" or REVISION_RE.fullmatch(revision)
-        ):
-            fail(f"{component_id}: revision must be 'main' or a full 40-character commit hash")
-
-        checkout = fetch_component(component_id, repository, revision, output_dir)
+        checkout = local_component_path(component_id, component_path, component_base)
+        print(f"Staging component {component_id} from {component_path}")
         manifest_path = checkout / "component.toml"
         if not manifest_path.is_file():
             fail(f"{component_id}: missing component.toml")
@@ -217,7 +202,9 @@ def main() -> None:
         shutil.rmtree(OUTPUT)
     (OUTPUT / "rootfs").mkdir(parents=True)
 
-    packages, services = stage_components(config.get("components", []), OUTPUT, packages)
+    packages, services = stage_components(
+        config.get("components", []), OUTPUT, packages, component_base=ROOT.parent
+    )
 
     distro_json = OUTPUT / "distro.json"
     distro_json.write_text(json.dumps(distro), encoding="utf-8")
@@ -238,6 +225,6 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, subprocess.CalledProcessError, tomllib.TOMLDecodeError, ValueError) as error:
+    except (OSError, tomllib.TOMLDecodeError, ValueError) as error:
         print(f"Image preparation failed: {error}", file=sys.stderr)
         raise SystemExit(1)

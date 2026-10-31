@@ -1,0 +1,4 @@
+/distro.json
+/.image-build/
+__pycache__/
+*.py[cod]

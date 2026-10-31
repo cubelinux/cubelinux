@@ -32,6 +32,17 @@ after packages are installed or removed, and each launcher starts the app inside
 the Fedora container with the host display/audio sockets and session environment.
 For example, install `vlc`; the Fedora launcher will appear in the host menu.
 Terminal-launched programs continue to work as before.
+
+While the KDE desktop session is running, its VShell watcher discovers Fedora
+TCP services listening on the container network interface at ports 1024 and
+above and forwards them to the host at `localhost:<port>`. Services bound only
+to Fedora's loopback address are not reachable by the host proxy. Each
+forwarded port has its own **Expose to public** option, off by default.
+Enabling it binds that port on all host IPv4 interfaces; the host firewall
+still controls incoming connections, and VShell does not change firewall
+rules. Ports below 1024 are not forwarded automatically, and manual forwarding
+rules are not implemented yet.
+
 The setup card uses Fedora's SVG logo from the `fedora-logos` package already
 included in the bootc image; it is available locally at runtime and is not
 downloaded when VShell starts.
