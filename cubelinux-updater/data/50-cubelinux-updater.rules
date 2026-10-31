@@ -1,0 +1,10 @@
+polkit.addRule(function(action, subject) {
+    if (["org.cubelinux.Updater.check",
+         "org.cubelinux.Updater.download",
+         "org.cubelinux.Updater.apply"].indexOf(action.id) !== -1 &&
+        subject.local &&
+        subject.active &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

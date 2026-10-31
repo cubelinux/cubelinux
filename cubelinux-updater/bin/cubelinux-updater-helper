@@ -1,0 +1,28 @@
+#!/bin/sh
+
+if [ "$#" -ne 1 ]; then
+    exit 2
+fi
+
+case "$1" in
+    check)
+        /usr/bin/bootc upgrade --check
+        result=$?
+        if [ "$result" -ne 0 ]; then
+            exit "$result"
+        fi
+        printf '\nCUBELINUX_UPDATER_STATUS_JSON_BEGIN\n'
+        /usr/bin/bootc status --format=json || true
+        ;;
+    download)
+        # bootc reserves standard descriptors; expose the output pipe as fd 3.
+        exec 3>&1
+        exec /usr/bin/bootc upgrade --download-only --progress-fd=3
+        ;;
+    apply)
+        exec /usr/bin/bootc upgrade --from-downloaded --apply
+        ;;
+    *)
+        exit 2
+        ;;
+esac

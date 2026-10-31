@@ -1,0 +1,34 @@
+id = "updater"
+packages = []
+services = []
+
+[[files]]
+source = "src/cubelinux_updater"
+destination = "/usr/lib/cubelinux-updater/cubelinux_updater"
+mode = "0644"
+
+[[files]]
+source = "bin/cubelinux-updater"
+destination = "/usr/bin/cubelinux-updater"
+mode = "0755"
+
+[[files]]
+source = "bin/cubelinux-updater-helper"
+destination = "/usr/libexec/cubelinux-updater-helper"
+mode = "0755"
+
+[[files]]
+source = "data/org.cubelinux.Updater.desktop"
+destination = "/usr/share/applications/org.cubelinux.Updater.desktop"
+
+[[files]]
+source = "data/cubelinux-updater-autostart.desktop"
+destination = "/etc/xdg/autostart/cubelinux-updater-autostart.desktop"
+
+[[files]]
+source = "data/org.cubelinux.Updater.policy"
+destination = "/usr/share/polkit-1/actions/org.cubelinux.Updater.policy"
+
+[[files]]
+source = "data/50-cubelinux-updater.rules"
+destination = "/usr/share/polkit-1/rules.d/50-cubelinux-updater.rules"
