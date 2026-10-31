@@ -1,0 +1,72 @@
+id = "vshell"
+packages = ["lxc", "lxc-templates", "dnsmasq", "shadow-utils", "qt6-qtsvg"]
+services = ["lxc-net.service"]
+
+[[files]]
+source = "src/cubelinux_vshell"
+destination = "/usr/lib/cubelinux-vshell/cubelinux_vshell"
+mode = "0644"
+
+[[files]]
+source = "bin/cubelinux-vshell"
+destination = "/usr/bin/cubelinux-vshell"
+mode = "0755"
+
+[[files]]
+source = "bin/cubelinux-konsole"
+destination = "/usr/bin/cubelinux-konsole"
+mode = "0755"
+
+[[files]]
+source = "bin/cubelinux-vshell-host-setup"
+destination = "/usr/libexec/cubelinux-vshell-host-setup"
+mode = "0755"
+
+[[files]]
+source = "bin/cubelinux-vshell-useradd-hook"
+destination = "/etc/shadow-maint/useradd-post.d/80-cubelinux-vshell"
+mode = "0755"
+
+[[files]]
+source = "data/org.cubelinux.VShell.desktop"
+destination = "/usr/share/applications/org.cubelinux.VShell.desktop"
+
+[[files]]
+source = "data/org.cubelinux.VShellAppDiscovery.desktop"
+destination = "/etc/xdg/autostart/org.cubelinux.VShellAppDiscovery.desktop"
+
+[[files]]
+source = "data/org.cubelinux.HostTerminal.desktop"
+destination = "/usr/share/applications/org.cubelinux.HostTerminal.desktop"
+
+[[files]]
+source = "data/VShell.profile"
+destination = "/usr/share/konsole/VShell.profile"
+
+[[files]]
+source = "data/HostTerminal.profile"
+destination = "/usr/share/konsole/HostTerminal.profile"
+
+[[files]]
+source = "data/konsolerc"
+destination = "/etc/xdg/konsolerc"
+
+[[files]]
+source = "data/org.kde.konsole.desktop"
+destination = "/usr/share/applications/org.kde.konsole.desktop"
+
+[[files]]
+source = "data/lxc-sysconfig"
+destination = "/etc/sysconfig/lxc"
+
+[[files]]
+source = "data/cubelinux-vshell.zone.xml"
+destination = "/usr/lib/firewalld/zones/cubelinux-vshell.xml"
+
+[[files]]
+source = "data/vshell-egress.policy.xml"
+destination = "/usr/lib/firewalld/policies/vshell-egress.xml"
+
+[[files]]
+source = "data/org.cubelinux.VShell.LxcSetup.policy"
+destination = "/usr/share/polkit-1/actions/org.cubelinux.VShell.LxcSetup.policy"

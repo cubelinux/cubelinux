@@ -1,0 +1,204 @@
+#!/usr/bin/python3
+"""Perform only the root-owned setup required for a user's rootless LXC."""
+
+import os
+import pwd
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+RANGE_SIZE = 65536
+RANGE_MIN = 100000
+RANGE_LIMIT = 600100000
+FIREWALL_ZONE = "cubelinux-vshell"
+
+
+class SetupError(Exception):
+    pass
+
+
+def subid_entries(path: Path):
+    if not path.exists():
+        return []
+    result = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        fields = line.split(":")
+        if len(fields) != 3:
+            continue
+        try:
+            start, count = int(fields[1]), int(fields[2])
+        except ValueError:
+            continue
+        result.append((fields[0], start, count))
+    return result
+
+
+def has_user_range(entries, user, uid, identity_id):
+    return any(
+        owner in (user, str(uid))
+        and count >= RANGE_SIZE
+        and not start <= identity_id < start + count
+        for owner, start, count in entries
+    )
+
+
+def free_range(entries, identity_id):
+    occupied = sorted((start, start + count) for _owner, start, count in entries)
+    candidate = RANGE_MIN
+    for start, end in occupied:
+        if candidate + RANGE_SIZE <= start:
+            if not candidate <= identity_id < candidate + RANGE_SIZE:
+                return candidate
+            candidate += RANGE_SIZE
+        if candidate < end:
+            candidate = ((end + RANGE_SIZE - 1) // RANGE_SIZE) * RANGE_SIZE
+    if candidate <= identity_id < candidate + RANGE_SIZE:
+        candidate += RANGE_SIZE
+    if candidate + RANGE_SIZE <= RANGE_LIMIT:
+        return candidate
+    raise SetupError("No free subordinate user/group ID range is available.")
+
+
+def ensure_subids(user):
+    uid_path = Path("/etc/subuid")
+    gid_path = Path("/etc/subgid")
+    uid_entries = subid_entries(uid_path)
+    gid_entries = subid_entries(gid_path)
+    additions = []
+
+    if not has_user_range(uid_entries, user.pw_name, user.pw_uid, user.pw_uid):
+        start = free_range(uid_entries, user.pw_uid)
+        additions.extend(["--add-subuids", f"{start}-{start + RANGE_SIZE - 1}"])
+    if not has_user_range(gid_entries, user.pw_name, user.pw_uid, user.pw_gid):
+        start = free_range(gid_entries, user.pw_gid)
+        additions.extend(["--add-subgids", f"{start}-{start + RANGE_SIZE - 1}"])
+    if additions:
+        result = subprocess.run(
+            ["/usr/sbin/usermod", *additions, user.pw_name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+            raise SetupError(result.stdout.strip() or "Could not allocate LXC user ID ranges.")
+
+    if not has_user_range(subid_entries(uid_path), user.pw_name, user.pw_uid, user.pw_uid):
+        raise SetupError("Could not verify the subordinate user ID range.")
+    if not has_user_range(subid_entries(gid_path), user.pw_name, user.pw_uid, user.pw_gid):
+        raise SetupError("Could not verify the subordinate group ID range.")
+
+
+def ensure_network_permission(user):
+    config_dir = Path("/etc/lxc")
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config = config_dir / "lxc-usernet"
+    if config.is_symlink():
+        raise SetupError("Refusing to update a symlink at /etc/lxc/lxc-usernet.")
+    if config.exists():
+        lines = config.read_text(encoding="utf-8").splitlines()
+    else:
+        lines = []
+    wanted = f"{user.pw_name} veth lxcbr0 1"
+    if wanted not in lines:
+        with config.open("a", encoding="utf-8") as output:
+            if lines and config.stat().st_size and not config.read_bytes().endswith(b"\n"):
+                output.write("\n")
+            output.write(wanted + "\n")
+        os.chmod(config, 0o644)
+
+
+def start_bridge():
+    result = subprocess.run(
+        ["/usr/bin/systemctl", "enable", "--now", "lxc-net.service"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise SetupError(result.stdout.strip() or "Could not start the LXC network bridge.")
+
+
+def assign_bridge_firewall_zone():
+    firewall_cmd = shutil.which("firewall-cmd")
+    if not firewall_cmd:
+        return
+    state = subprocess.run(
+        [firewall_cmd, "--state"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if state.returncode or state.stdout.strip() != "running":
+        return
+
+    result = subprocess.run(
+        [firewall_cmd, "--zone=" + FIREWALL_ZONE, "--change-interface=lxcbr0"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise SetupError(
+            result.stdout.strip()
+            or f"Could not assign lxcbr0 to the {FIREWALL_ZONE} firewall zone."
+        )
+
+
+def provision_user_from_useradd():
+    if os.geteuid() != 0:
+        raise SetupError("The user-creation hook must run as root.")
+    username = os.environ.get("SUBJECT", "")
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]*", username):
+        raise SetupError("useradd did not provide a valid account name to the LXC hook.")
+    try:
+        user = pwd.getpwnam(username)
+    except KeyError as error:
+        raise SetupError(f"Could not find the newly created account {username}.") from error
+
+    # System accounts do not need rootless container mappings or a bridge quota.
+    if user.pw_uid < 1000:
+        return 0
+
+    ensure_subids(user)
+    ensure_network_permission(user)
+    return 0
+
+
+def main():
+    if sys.argv[1:] == ["--useradd-post"]:
+        return provision_user_from_useradd()
+    if os.geteuid() != 0:
+        raise SetupError("This helper must be started through Polkit.")
+    if len(sys.argv) != 1:
+        raise SetupError("This helper does not accept command-line arguments.")
+    try:
+        caller_uid = int(os.environ["PKEXEC_UID"])
+    except (KeyError, ValueError):
+        raise SetupError("Polkit did not provide the requesting user identity.")
+    if caller_uid == 0:
+        raise SetupError("Run Virtual Shell from your normal desktop account.")
+    user = pwd.getpwuid(caller_uid)
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]*", user.pw_name):
+        raise SetupError("Your account name cannot be used for LXC network setup.")
+
+    ensure_subids(user)
+    ensure_network_permission(user)
+    start_bridge()
+    assign_bridge_firewall_zone()
+    print("Rootless LXC is ready for this user.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except SetupError as error:
+        print(f"Virtual Shell host setup failed: {error}", file=sys.stderr)
+        raise SystemExit(1)

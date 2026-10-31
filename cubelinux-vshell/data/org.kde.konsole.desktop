@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Konsole
+GenericName=Terminal
+Comment=Open a terminal in the cubelinux Fedora environment
+Exec=/usr/bin/cubelinux-konsole %U
+Icon=utilities-terminal
+Terminal=false
+DBusActivatable=false
+Categories=System;TerminalEmulator;Qt;KDE;
+Keywords=terminal;console;command;prompt;shell;
+StartupNotify=true

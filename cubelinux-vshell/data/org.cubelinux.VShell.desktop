@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Linux Subsystem
+Comment=Set up and open your cubelinux Fedora environment
+Exec=cubelinux-vshell
+Icon=utilities-terminal
+Terminal=false
+Categories=System;Utility;

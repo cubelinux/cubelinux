@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# Send first-time users to Linux Subsystem without opening a host shell.
+if /usr/bin/cubelinux-vshell activate-if-busy >/dev/null 2>&1; then
+    exit 0
+fi
+
+state=$(/usr/bin/cubelinux-vshell status 2>/dev/null) || state=not-set-up
+
+case "$state" in
+    running|stopped)
+        # Apply the Fedora profile as this user's Konsole default as well.
+        if command -v kwriteconfig6 >/dev/null 2>&1; then
+            kwriteconfig6 --file "$HOME/.config/konsolerc" \
+                --group "Desktop Entry" \
+                --key DefaultProfile "VShell.profile" >/dev/null 2>&1 || true
+        fi
+        exec /usr/bin/konsole --profile VShell "$@"
+        ;;
+    *)
+        exec /usr/bin/cubelinux-vshell
+        ;;
+esac

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Virtual Shell App Discovery
+Comment=Keep Fedora applications available in the host application menu
+Exec=/usr/bin/cubelinux-vshell watch-apps
+OnlyShowIn=KDE;
+NoDisplay=true
+X-KDE-autostart-after=panel
