@@ -7,11 +7,20 @@ Kirigami.ScrollablePage {
     id: page
 
     property var controller
-    title: qsTr("Fedora 44 settings")
+    signal backRequested()
+
+    title: qsTr("Environment settings")
 
     ColumnLayout {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
+
+        Controls.Button {
+            Layout.alignment: Qt.AlignLeft
+            text: qsTr("Back to environments")
+            icon.name: "go-previous"
+            onClicked: page.backRequested()
+        }
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true

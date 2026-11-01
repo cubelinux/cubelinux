@@ -46,6 +46,7 @@ base = [
   "sddm",
   "sddm-breeze",
   "sddm-wayland-plasma",
+  "spectacle",
 ]
 
 [[components]]

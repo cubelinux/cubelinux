@@ -68,6 +68,7 @@ Kirigami.ApplicationWindow {
 
         EnvironmentSettingsPage {
             controller: setupController
+            onBackRequested: root.pageStack.pop()
         }
     }
 
