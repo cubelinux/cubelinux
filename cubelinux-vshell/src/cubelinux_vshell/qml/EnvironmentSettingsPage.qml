@@ -7,7 +7,7 @@ Kirigami.ScrollablePage {
     id: page
 
     property var controller
-    signal backRequested()
+    signal returnToWorkspaceRequested()
 
     title: qsTr("Environment settings")
 
@@ -19,7 +19,7 @@ Kirigami.ScrollablePage {
             Layout.alignment: Qt.AlignLeft
             text: qsTr("Back to environments")
             icon.name: "go-previous"
-            onClicked: page.backRequested()
+            onClicked: page.returnToWorkspaceRequested()
         }
 
         Kirigami.InlineMessage {
