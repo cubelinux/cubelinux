@@ -90,7 +90,6 @@ Kirigami.ApplicationWindow {
             darkTheme: root.palette.window.hslLightness < 0.5
             onSetupRequested: {
                 if (!root.pageStack.layers.busy
-                        && root.pageStack.layers.depth === 1
                         && !setupController.busy
                         && !setupController.ready) {
                     root.pageStack.layers.push(setupProgressPage)
@@ -140,7 +139,6 @@ Kirigami.ApplicationWindow {
                 enabled: !setupController.busy && !root.pageStack.layers.busy
                 onTriggered: {
                     if (!setupController.ready
-                            && root.pageStack.layers.depth === 0
                             && !root.pageStack.layers.busy) {
                         root.pageStack.layers.push(setupConfirmPage)
                     }
