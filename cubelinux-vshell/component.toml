@@ -1,5 +1,5 @@
 id = "vshell"
-packages = ["lxc", "lxc-templates", "dnsmasq", "shadow-utils", "qt6-qtsvg", "xdg-terminal-exec"]
+packages = ["dnsmasq", "lxc", "lxc-templates", "qt6-qtsvg", "shadow-utils", "xdg-terminal-exec"]
 services = ["lxc-net.service"]
 
 [[files]]
