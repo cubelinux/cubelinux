@@ -123,48 +123,6 @@ Item {
                             }
                         }
 
-                        Kirigami.Card {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 80
-
-                            contentItem: RowLayout {
-                                spacing: Kirigami.Units.mediumSpacing
-
-                                Image {
-                                    source: wizard.darkTheme
-                                            ? "file:///usr/share/fedora-logos/fedora_logo_darkbackground.svg"
-                                            : "file:///usr/share/fedora-logos/fedora_logo.svg"
-                                    sourceSize.width: 96
-                                    sourceSize.height: 48
-                                    fillMode: Image.PreserveAspectFit
-                                    Layout.preferredWidth: 56
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.medium
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-
-                                    Controls.Label {
-                                        text: qsTr("Fedora Linux 44")
-                                        font.bold: true
-                                    }
-
-                                    Controls.Label {
-                                        text: qsTr("Default environment")
-                                        opacity: 0.7
-                                    }
-                                }
-
-                                Kirigami.Icon {
-                                    source: "emblem-checked"
-                                    color: Kirigami.Theme.positiveTextColor
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                }
-                            }
-                        }
-
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: Kirigami.Units.smallSpacing

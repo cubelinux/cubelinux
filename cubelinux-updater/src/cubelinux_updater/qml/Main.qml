@@ -10,7 +10,7 @@ Kirigami.ApplicationWindow {
     visible: false
     width: 640
     height: 648
-    minimumWidth: 540
+    minimumWidth: 480
     minimumHeight: 520
 
     pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
@@ -95,16 +95,6 @@ Kirigami.ApplicationWindow {
                 anchors.rightMargin: Kirigami.Units.largeSpacing
                 spacing: Kirigami.Units.smallSpacing
 
-                Controls.Label {
-                    text: qsTr("cubelinux · Updater %1").arg(softwareVersion)
-                    opacity: 0.65
-                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
                 Controls.Button {
                     visible: updateController.updateAvailable || updateController.updateStaged
                     text: qsTr("Later")
@@ -113,6 +103,10 @@ Kirigami.ApplicationWindow {
                             root.hide()
                         }
                     }
+                }
+
+                Item {
+                    Layout.fillWidth: true
                 }
 
                 Controls.Button {
@@ -137,7 +131,7 @@ Kirigami.ApplicationWindow {
 
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Kirigami.Units.gridUnit * 2.5
+                Layout.preferredHeight: Kirigami.Units.largeSpacing
             }
 
             ColumnLayout {
@@ -155,6 +149,13 @@ Kirigami.ApplicationWindow {
                     text: qsTr("Keep cubelinux up to date.")
                     opacity: 0.75
                     wrapMode: Text.Wrap
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Version %1").arg(softwareVersion)
+                    opacity: 0.65
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
                 }
             }
 

@@ -24,7 +24,7 @@ from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QMenu, QMessageBox
 
 if __package__:
     from .version import __version__
@@ -679,6 +679,18 @@ def main() -> int:
         ]
         return run_preview(preview_state, qt_arguments)
 
+    # KDE's Python binding for KStatusNotifierItem provides the Plasma-native
+    # StatusNotifierItem protocol. Import it only for the Linux app so the
+    # UI-only Windows preview remains usable without KDE libraries.
+    try:
+        from KStatusNotifierItem import KStatusNotifierItem
+    except ImportError:
+        print(
+            "cubelinux-updater: KDE's python3-kf6-kstatusnotifieritem binding is required.",
+            file=sys.stderr,
+        )
+        return 1
+
     configure_logging()
     LOGGER.info("Using updater activation socket %s", SERVER_NAME)
     qInstallMessageHandler(_qt_message_handler)
@@ -784,34 +796,46 @@ def main() -> int:
 
     icon = QIcon.fromTheme("system-software-update")
     app.setWindowIcon(icon)
-    tray = QSystemTrayIcon(icon, app)
-    tray.setToolTip("Updater")
+    tray = KStatusNotifierItem("cubelinux-updater", app)
+    tray.setCategory(KStatusNotifierItem.ItemCategory.ApplicationStatus)
+    tray.setStatus(KStatusNotifierItem.ItemStatus.Active)
+    tray.setTitle("Updater")
+    tray.setIconByName("system-software-update")
+    tray.setToolTipTitle("Updater")
+    tray.setToolTipIconByName("system-software-update")
 
     spinner_icons = create_spinner_icons()
-    tray_icons = {
-        "idle": icon,
-        "available": QIcon.fromTheme("software-update-available", icon),
-        "staged": QIcon.fromTheme("system-reboot", icon),
-        "rebooting": QIcon.fromTheme("system-reboot", icon),
-        "error": QIcon.fromTheme("dialog-error", icon),
-    }
     spinner_timer = QTimer(app)
     spinner_timer.setInterval(120)
     spinner_frame = 0
 
     def advance_spinner() -> None:
         nonlocal spinner_frame
-        tray.setIcon(spinner_icons[spinner_frame])
+        tray.setIconByPixmap(spinner_icons[spinner_frame])
         spinner_frame = (spinner_frame + 1) % len(spinner_icons)
 
     def set_tray_state(state: str) -> None:
         if state == "busy":
-            tray.setToolTip("Updater: working")
+            tray.setStatus(KStatusNotifierItem.ItemStatus.Active)
+            tray.setToolTipTitle("Updater")
+            tray.setToolTipSubTitle("Working on your update")
             spinner_timer.start()
             return
 
         spinner_timer.stop()
-        tray.setIcon(tray_icons.get(state, icon))
+        icon_name = {
+            "idle": "system-software-update",
+            "available": "software-update-available",
+            "staged": "system-reboot",
+            "rebooting": "system-reboot",
+            "error": "dialog-error",
+        }.get(state, "system-software-update")
+        tray.setIconByName(icon_name)
+        tray.setStatus(
+            KStatusNotifierItem.ItemStatus.NeedsAttention
+            if state == "error"
+            else KStatusNotifierItem.ItemStatus.Active
+        )
         tooltip = {
             "available": "Updater: update available",
             "staged": "Updater: restart to finish installing the update",
@@ -819,7 +843,9 @@ def main() -> int:
             "error": "Updater: operation failed",
             "idle": "Updater",
         }
-        tray.setToolTip(tooltip.get(state, "Updater"))
+        tray.setToolTipIconByName(icon_name)
+        tray.setToolTipTitle("Updater")
+        tray.setToolTipSubTitle(tooltip.get(state, "Updater"))
 
     spinner_timer.timeout.connect(advance_spinner)
     update_controller.trayStateChanged.connect(set_tray_state)
@@ -829,18 +855,8 @@ def main() -> int:
     open_action.triggered.connect(show_window)
     menu.addAction(open_action)
     tray.setContextMenu(menu)
-
-    def tray_activated(reason: QSystemTrayIcon.ActivationReason) -> None:
-        if reason in (
-            QSystemTrayIcon.ActivationReason.Trigger,
-            QSystemTrayIcon.ActivationReason.DoubleClick,
-        ):
-            show_window()
-
-    tray.activated.connect(tray_activated)
-    tray.show()
-    if not QSystemTrayIcon.isSystemTrayAvailable():
-        LOGGER.warning("No system tray is available in this desktop session")
+    tray.setStandardActionsEnabled(False)
+    tray.activateRequested.connect(lambda _active, _position: show_window())
 
     if not start_in_background:
         show_window()

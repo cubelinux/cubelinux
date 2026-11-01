@@ -3,6 +3,30 @@
 `cubelinux-vshell` is the command and application ID for Linux Subsystem and its
 persistent Fedora LXC environment on the cubelinux Fedora bootc desktop host.
 
+## Python and KDE stack
+
+Linux Subsystem is a cubelinux application integrated with KDE Plasma. The
+application is written in Python with **PySide6**, Qt 6 Quick/QML, and KDE
+Kirigami. PySide6 is Qt's official Python binding, and KDE documents it as a
+supported way to build Kirigami applications. KDE also maintains Python
+bindings for selected KDE Frameworks; bindings are not available for every
+Framework and must match the target system's Qt version.
+
+Use PySide6 for Qt APIs and Kirigami/QML for the interface. When application
+logic needs a KDE Framework API, prefer its KDE-supported Python binding if
+one exists and is packaged for the target system. Do not assume all Framework
+APIs have Python bindings.
+
+## Design direction
+
+The interface should follow KDE's [Human Interface Guidelines](https://develop.kde.org/hig/)
+strongly while keeping cubelinux's own identity. Prefer Kirigami and standard
+Qt/KDE controls, familiar action placement, clear status and error messages,
+keyboard access, accessible labels, and translatable user-facing text. Adapt
+layouts to the window instead of relying on fixed positioning. Use cubelinux
+names and visual assets; do not imply that Linux Subsystem is an official KDE
+product.
+
 The wizard downloads a Fedora 44 LXC image, creates an unprivileged container,
 and shares the signed-in user's home folder automatically. The system image
 starts the LXC bridge and configures its firewall access. When Plasma Setup
@@ -101,12 +125,19 @@ you are ready. LXC reuses the cached template when one is available.
 Open **About Linux Subsystem** from the hamburger menu to see the application
 version and project information.
 
-## Run
+## Development
 
-The intended target is the KDE image, which includes PySide6, Kirigami, and
-the KDE Qt Quick Controls style. From a development environment with those
-dependencies installed:
+The intended development environment is the cubelinux KDE image, which
+provides PySide6, Kirigami, and the KDE Qt Quick Controls style. Launch VShell
+from a development environment with those dependencies installed:
 
 ```sh
 PYTHONPATH=src python3 -m cubelinux_vshell
 ```
+
+## Official development references
+
+- [KDE Python application with Kirigami](https://develop.kde.org/docs/getting-started/python/python-app/)
+- [KDE Python bindings for selected Frameworks](https://develop.kde.org/docs/getting-started/python/python-bindings/)
+- [KDE Human Interface Guidelines](https://develop.kde.org/hig/)
+- [Qt for Python / PySide6](https://doc.qt.io/qtforpython-6.11/index.html)

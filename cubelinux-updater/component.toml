@@ -1,5 +1,5 @@
 id = "updater"
-packages = []
+packages = ["python3-kf6-kstatusnotifieritem"]
 services = []
 
 [[files]]

@@ -1,87 +1,84 @@
-# cubelinux-updater
+# cubelinux Updater
 
-The KDE Plasma **Updater** app checks for and installs cubelinux system updates.
+The cubelinux Updater checks for and installs operating system updates built
+from the cubelinux bootc image.
 
-## UI stack
+## Python and KDE stack
 
-- Qt 6 Quick and QML for the interface
-- KDE Kirigami for Plasma-native controls and adaptive layouts
-- Python with PySide6 for application logic and the interface to bootc
-- `pyproject.toml` and setuptools for Python packaging
+The application is written in Python with **PySide6**, Qt 6 Quick/QML, and KDE
+Kirigami. PySide6 is Qt's official Python binding. KDE documents PySide6 and
+Kirigami as a supported way to build Python applications. The tray uses KDE's
+official **KStatusNotifierItem** Python binding, packaged as
+`python3-kf6-kstatusnotifieritem` on Fedora. KDE also maintains Python
+bindings for selected other Frameworks; these are not available for every
+Framework and must match the Qt version provided by the distribution.
 
-KDE recommends Qt Quick and Kirigami for new KDE applications. Kirigami uses
-QML and Qt Quick Controls, while keeping application logic separate from the
-visual interface. KDE also provides a PySide6 setup path for Kirigami apps.
+Use PySide6 for Qt APIs and Kirigami/QML for the interface. When application
+logic needs a KDE Framework API, prefer its KDE-supported Python binding if
+that binding exists and is packaged for the target system. Do not assume all
+Framework APIs have Python bindings.
+
+## Design direction
+
+The interface should follow KDE's [Human Interface Guidelines](https://develop.kde.org/hig/)
+strongly while keeping cubelinux's own identity. Prefer Kirigami and standard
+Qt/KDE controls, familiar action placement, clear status and error messages,
+keyboard access, accessible labels, and translatable user-facing text. Adapt
+layouts to the window instead of relying on fixed positioning. Use cubelinux
+names and visual assets; do not imply that the app is an official KDE product.
 
 ## Update flow
 
 Select **Check for updates** to see whether an update is available. Select
-**Update now** to download it; you can keep using your PC while it downloads.
-When the download finishes, select **Restart now** and confirm to finish
-installing the update. The app shows plain-language progress and error
-messages, and shows a download percentage when bootc provides byte totals.
-When bootc reports a total byte count, the update details also show the
-download size. The release-notes link opens the Cubelinux image releases page.
-Preparing the update after download may take additional time, so that phase
-uses an activity indicator. The tray icon animates while an operation is
-running. Available or installed image version and build date are shown when
-the image includes that metadata. Images built by this repository use
-`YYYY-MM-DD+SHORTSHA` as the image version.
+**Download update** to stage it; the PC remains usable while the image
+downloads. When the download finishes, select **Restart now** and confirm to
+apply it. The app shows plain-language progress and errors, a download
+percentage when bootc reports byte totals, and image version and build-date
+details when available. The release-notes link opens the cubelinux image
+releases page.
 
-## Development notes
+## Security and session behavior
 
-Keep privileged bootc operations out of the UI process. The implementation
-should use a narrowly scoped authorization mechanism and report operation
-progress and errors to the interface.
+The desktop application requests only three fixed operations from the
+root-owned helper: check for an update, download the current update, and apply
+the staged update while restarting. Other bootc commands and extra arguments
+are rejected. Polkit authorizes these operations for an active local session
+whose user belongs to the `wheel` administrator group; other bootc operations
+are not authorized by this app.
 
-## Run the prototype
+The updater stays in the KDE system tray and can start hidden with
+`--background`. Closing its window hides it; the tray icon or app launcher can
+reopen it. It starts with the user's KDE session. Diagnostics are written to
+`~/.local/state/cubelinux-updater/cubelinux-updater.log`.
 
-Install PySide6, the Kirigami QML runtime module, and the KDE Qt Quick Controls
-desktop style from your distribution, then install the project with
-`python -m pip install --no-deps -e .` and launch it with `cubelinux-updater`.
+## Development
 
-The app uses a root-owned helper with three fixed operations: check for system
-updates, download the current update, and apply the downloaded update while
-restarting. Other bootc commands and extra arguments are rejected. KDE may ask
-you to authenticate unless the request comes from an active local session for
-a user in the `wheel` administrator group. Those three operations are
-authorized without a password for that session. Other bootc commands are not
-authorized.
-The app stays in the KDE system tray, can start hidden with `--background`, and
-opens its window from the tray icon or KDE app launcher. Closing the window
-hides it; the tray menu has no quit action, so the process stays active until
-ended externally or the user session stops.
-The updater window shows its software version at the bottom; it is currently
-`0.0.0`.
-Startup, QML, and update-operation diagnostics are written to
-`~/.local/state/cubelinux-updater/cubelinux-updater.log` so failures from the hidden
-autostart can be inspected after login.
-`data/cubelinux-updater-autostart.desktop` is intended for the system autostart
-directory so it starts when the user's KDE session begins. Update notifications
-are not implemented yet.
+The intended development environment is the cubelinux KDE image, which
+provides PySide6, Kirigami, and the KDE Qt Quick Controls style. Run the
+application from the repository with:
 
-### UI-only preview on Windows
+```sh
+PYTHONPATH=src python3 -m cubelinux_updater
+```
 
-The preview uses simulated update data. It does not start the tray, ask for
-authorization, or call the Linux update helper. Install Python and PySide6,
-then run this from the repository root in PowerShell:
+The updater also has a UI-only preview with simulated update states. On
+Windows, run it from the project directory with:
 
 ```powershell
 python .\src\cubelinux_updater\main.py --preview
 ```
 
-The existing source entry point adds `src` to Python's import path when run
-directly, so an editable project install is not needed. On Windows, the preview
-uses a Qt Quick Controls screen with the same layout because the production QML
-depends on KDE Kirigami. The preview uses Qt's Fusion style; the regular Linux
-updater keeps the KDE desktop style.
+The preview never invokes the privileged helper or runs bootc operations. On
+Windows it uses a Qt Quick Controls preview screen because the production
+interface imports KDE Kirigami. The Linux preview uses the production QML.
 
-Available states are `ready`, `up-to-date`, `available`, `staged`, `checking`,
-`downloading`, `preparing`, and `error`. The buttons simulate the flow: checking
-shows an available update, downloading stages it, and restarting returns to the
-up-to-date state. The preview uses a sample 1.2 GB size and the same
-release-notes link as the live interface.
+The image installs runtime dependencies from
+`cubelinux-image/config/image.toml`; component files and system integration
+are declared in `component.toml`.
 
-The Containerfile copies the Python/QML application, launcher, desktop entry,
-and KDE session autostart entry directly into the image. Runtime dependencies
-are listed in the root `packages.yml` manifest.
+## Official development references
+
+- [KDE Python application with Kirigami](https://develop.kde.org/docs/getting-started/python/python-app/)
+- [KDE Python bindings for selected Frameworks](https://develop.kde.org/docs/getting-started/python/python-bindings/)
+- [KDE Human Interface Guidelines](https://develop.kde.org/hig/)
+- [Qt for Python / PySide6](https://doc.qt.io/qtforpython-6.11/index.html)

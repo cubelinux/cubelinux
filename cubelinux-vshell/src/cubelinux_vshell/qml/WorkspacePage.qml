@@ -3,12 +3,14 @@ import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-ColumnLayout {
+Controls.ScrollView {
     id: page
 
     property var controller
     property bool darkTheme: false
     signal destroyRequested()
+    contentWidth: availableWidth
+    clip: true
 
     readonly property string containerStatusLabel: controller.destroying
         ? qsTr("Destroying Fedora")
@@ -23,7 +25,10 @@ ColumnLayout {
         : controller.containerStatus === "running"
           ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
 
-    spacing: Kirigami.Units.largeSpacing
+    ColumnLayout {
+        id: workspaceContent
+        width: page.availableWidth
+        spacing: Kirigami.Units.largeSpacing
 
     ColumnLayout {
         Layout.fillWidth: true
@@ -64,13 +69,6 @@ ColumnLayout {
         visible: controller.portForwardingMessage.length > 0
         text: controller.portForwardingMessage
         type: Kirigami.MessageType.Error
-    }
-
-    Controls.Label {
-        Layout.leftMargin: Kirigami.Units.smallSpacing
-        text: qsTr("Installed environments")
-        font.bold: true
-        opacity: 0.75
     }
 
     Controls.ProgressBar {
@@ -187,7 +185,6 @@ ColumnLayout {
 
     Kirigami.Card {
         Layout.fillWidth: true
-        Layout.fillHeight: true
         Layout.minimumHeight: 250
         padding: 0
         background: null
@@ -261,11 +258,6 @@ ColumnLayout {
                     Controls.Label {
                         text: qsTr("Folder sharing")
                         font.bold: true
-                    }
-
-                    Controls.Label {
-                        text: qsTr("Additional folders")
-                        topPadding: Kirigami.Units.smallSpacing
                     }
 
                     Controls.Label {
@@ -431,8 +423,6 @@ ColumnLayout {
                 }
             }
 
-            Item { Layout.fillHeight: true }
-
             Controls.Label {
                 Layout.fillWidth: true
                 text: qsTr("Fedora can read and modify shared folders. If Fedora is running, it will restart when folder access changes.")
@@ -442,11 +432,9 @@ ColumnLayout {
         }
     }
 
-    Item { Layout.fillHeight: true }
-
-    Controls.Label {
-        Layout.leftMargin: Kirigami.Units.smallSpacing
-        text: qsTr("Linux Subsystem")
-        opacity: 0.55
+    Item {
+        Layout.fillWidth: true
+        Layout.preferredHeight: Kirigami.Units.largeSpacing
+    }
     }
 }

@@ -44,7 +44,7 @@ Kirigami.ApplicationWindow {
                 "productName": qsTr("Linux Subsystem"),
                 "componentName": "cubelinux-vshell",
                 "shortDescription": qsTr("Manage your Fedora Linux environment."),
-                "homepage": "https://github.com/cubelinux/cubelinux-vshell",
+                "homepage": "https://github.com/cubelinux/cubelinux",
                 "bugAddress": "",
                 "version": softwareVersion,
                 "otherText": "",
@@ -55,7 +55,7 @@ Kirigami.ApplicationWindow {
                 "copyrightStatement": "",
                 "desktopFileName": "org.cubelinux.VShell"
             }
-            getInvolvedUrl: "https://github.com/cubelinux/cubelinux-vshell"
+            getInvolvedUrl: "https://github.com/cubelinux/cubelinux"
         }
     }
 
