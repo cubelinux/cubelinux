@@ -373,5 +373,12 @@ class SetupController(QObject):
     def openShell(self) -> None:
         if not self.busy and not self.folderSharingBusy and not self.destroying:
             QProcess.startDetached(
-                "xdg-terminal-exec", ["cubelinux-vshell", "enter"]
+                "xdg-terminal-exec",
+                [
+                    "sh",
+                    "-c",
+                    "if [ -f /.flatpak-info ]; then "
+                    "exec flatpak-spawn --host cubelinux-vshell enter; "
+                    "else exec cubelinux-vshell enter; fi",
+                ],
             )

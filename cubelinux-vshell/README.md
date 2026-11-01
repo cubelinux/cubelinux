@@ -94,9 +94,12 @@ system images.
 Open **Linux Subsystem** from the application menu and follow the short wizard.
 Once setup completes, choose **Open terminal** to open the system's configured
 terminal emulator directly into Fedora. A terminal emulator must be installed
-and configured on the host. Linux Subsystem does not change the default
-terminal or install terminal-emulator-specific profiles; launching a terminal
-from the desktop continues to open a host shell.
+and configured on the host. For a Flatpak terminal, VShell forwards the entry
+command to the host with `flatpak-spawn`, then attaches to Fedora there. The
+terminal Flatpak must allow host commands; Flathub Konsole already requests
+that permission. Linux Subsystem does not change the default terminal or
+install terminal-emulator-specific profiles; launching a terminal from the
+desktop continues to open a host shell.
 
 Closing Linux Subsystem while setup or destruction is running hides its window while
 the operation continues. Open **Linux Subsystem** to bring the progress window
