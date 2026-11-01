@@ -83,9 +83,6 @@ VShell is a tightly integrated workspace, not a desktop-app sandbox. Programs
 inside Fedora can access the shared home folder and the host user's display,
 audio, and session-bus sockets.
 
-The image also provides a separate Konsole Host Terminal profile for host
-administration.
-
 ## Image sources
 
 The Fedora 44 system image is downloaded from the Linux Containers image
@@ -95,15 +92,15 @@ system images.
 ## Use
 
 Open **Linux Subsystem** from the application menu and follow the short wizard.
-Once setup completes, choose **Open terminal** to start a Konsole session
-inside Fedora. Before setup is complete, the Konsole launcher opens Setup
-Terminal directly. After setup, Konsole uses the **Terminal** profile by
-default, which opens Fedora. The separate **Host Terminal** profile remains
-available for host administration.
+Once setup completes, choose **Open terminal** to open the system's configured
+terminal emulator directly into Fedora. A terminal emulator must be installed
+and configured on the host. Linux Subsystem does not change the default
+terminal or install terminal-emulator-specific profiles; launching a terminal
+from the desktop continues to open a host shell.
 
 Closing Linux Subsystem while setup or destruction is running hides its window while
-the operation continues. Open **Linux Subsystem** or **Konsole** to bring the
-progress window back. If the operation finishes successfully while hidden,
+the operation continues. Open **Linux Subsystem** to bring the progress window
+back. If the operation finishes successfully while hidden,
 the app exits; if it fails, the window reopens with the error.
 
 The installed `cubelinux-vshell` command also supports these operations:

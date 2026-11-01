@@ -12,11 +12,10 @@
 
 cubelinux brings a complete desktop experience together in one operating
 system. It starts with a first boot setup to create your user, then opens into
-the KDE Plasma desktop with familiar tools like Dolphin and Konsole.
+the KDE Plasma desktop with familiar tools like Dolphin.
 
 The system includes an updater for checking and downloading cubelinux image
-updates. When an update is ready, restart to complete the installation. A
-separate host terminal profile is available for system administration.
+updates. When an update is ready, restart to complete the installation.
 
 Flatpak is installed for desktop applications. KDE Discover is configured to
 use its Flatpak backend, with Flathub available as a system-wide remote. System

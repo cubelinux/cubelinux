@@ -372,4 +372,6 @@ class SetupController(QObject):
     @Slot()
     def openShell(self) -> None:
         if not self.busy and not self.folderSharingBusy and not self.destroying:
-            QProcess.startDetached("konsole", ["--profile", "VShell"])
+            QProcess.startDetached(
+                "xdg-terminal-exec", ["cubelinux-vshell", "enter"]
+            )
