@@ -42,8 +42,9 @@ the guest's `/tmp` and linked back after the Fedora guest mounts its temporary
 filesystem there. The container user is mapped to the desktop user's host ID,
 so those sockets accept connections as that user.
 
-The Fedora environment settings show the home folder share and let you add
-other host folders. Additional folders are mounted read-write under
+Open the Fedora environment card's menu and choose **Environment settings** to
+view the home folder share, add other host folders, and manage forwarded ports.
+Additional folders are mounted read-write under
 `/mnt/vshell-shares/` inside Fedora, subject to the host folder's permissions.
 Changing folder shares restarts Fedora when it is running so LXC can apply the
 updated mounts. Destroying Fedora also removes its additional folder-share

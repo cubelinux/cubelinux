@@ -14,6 +14,9 @@ Kirigami.ApplicationWindow {
     visible: true
     property bool closeAfterSetup: false
 
+    pageStack.globalToolBar.showNavigationButtons: setupController.busy ? 0
+        : Kirigami.ApplicationHeaderStyle.ShowBackButton
+
     onClosing: function(close) {
         if (setupController.busy) {
             close.accepted = false
@@ -59,15 +62,44 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    Component {
+        id: environmentSettingsPage
+
+        EnvironmentSettingsPage {
+            controller: setupController
+        }
+    }
+
+    Component {
+        id: setupProgressPage
+
+        SetupProgressPage {
+            controller: setupController
+            onRetryRequested: setupController.setup()
+        }
+    }
+
+    Component {
+        id: setupConfirmPage
+
+        SetupConfirmPage {
+            controller: setupController
+            darkTheme: root.palette.window.hslLightness < 0.5
+            onSetupRequested: {
+                root.pageStack.push(setupProgressPage)
+                setupController.setup()
+            }
+        }
+    }
+
     Connections {
         target: setupController
         function onStateChanged() {
-            if (!setupController.ready) {
-                if (setupController.progressTitle === qsTr("Environment destroyed")) {
-                    setupWizard.startOver()
-                } else if (setupController.progressTitle === qsTr("Destroy failed")) {
-                    setupWizard.showFailure()
-                }
+            if (setupController.ready
+                    && setupController.progressTitle === qsTr("Setup complete")
+                    && root.pageStack.depth >= 3) {
+                root.pageStack.pop()
+                root.pageStack.pop()
             }
             if (root.closeAfterSetup && !setupController.busy) {
                 root.closeAfterSetup = false
@@ -84,35 +116,37 @@ Kirigami.ApplicationWindow {
     }
 
     pageStack.initialPage: Kirigami.Page {
-        padding: Kirigami.Units.largeSpacing
+        id: homePage
+        title: setupController.ready ? qsTr("Linux environments") : qsTr("Set up Linux")
+        padding: 0
 
-        ColumnLayout {
+        actions: [
+            Kirigami.Action {
+                text: qsTr("Next")
+                icon.name: "go-next"
+                visible: !setupController.ready
+                onTriggered: root.pageStack.push(setupConfirmPage)
+            }
+        ]
+
+        StackLayout {
             anchors.fill: parent
-            spacing: Kirigami.Units.largeSpacing
+            anchors.margins: Kirigami.Units.largeSpacing
+            currentIndex: setupController.ready ? 1 : 0
 
-            StackLayout {
+            SetupWelcomePage {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: setupController.ready ? 1 : 0
+                darkTheme: root.palette.window.hslLightness < 0.5
+            }
 
-                // First-run setup flow
-                SetupWizard {
-                    id: setupWizard
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    controller: setupController
-                    darkTheme: root.palette.window.hslLightness < 0.5
-                }
-
-                // Manager home after setup, preserving the current left navigation
-                // and workspace card placement.
-                WorkspacePage {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    controller: setupController
-                    darkTheme: root.palette.window.hslLightness < 0.5
-                    onDestroyRequested: destroyDialog.open()
-                }
+            WorkspacePage {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                controller: setupController
+                darkTheme: root.palette.window.hslLightness < 0.5
+                onDestroyRequested: destroyDialog.open()
+                onSettingsRequested: root.pageStack.push(environmentSettingsPage)
             }
         }
 

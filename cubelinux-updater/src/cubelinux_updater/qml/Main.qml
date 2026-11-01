@@ -13,7 +13,7 @@ Kirigami.ApplicationWindow {
     minimumWidth: 480
     minimumHeight: 520
 
-    pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
+    pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.Auto
 
     function statusHeading() {
         if (updateController.errorDetails.length > 0) {
@@ -88,61 +88,43 @@ Kirigami.ApplicationWindow {
     pageStack.initialPage: Kirigami.ScrollablePage {
         title: qsTr("System updates")
         padding: Kirigami.Units.gridUnit * 2
-        footer: Controls.ToolBar {
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Kirigami.Units.largeSpacing
-                anchors.rightMargin: Kirigami.Units.largeSpacing
-                spacing: Kirigami.Units.smallSpacing
-
-                Controls.Button {
-                    visible: updateController.updateAvailable || updateController.updateStaged
-                    text: qsTr("Later")
-                    onClicked: {
-                        if (!previewMode) {
-                            root.hide()
-                        }
+        actions: [
+            Kirigami.Action {
+                text: root.primaryActionText()
+                icon.name: updateController.updateStaged
+                           ? "system-reboot"
+                           : updateController.updateAvailable
+                             ? "download" : "view-refresh"
+                enabled: !updateController.busy
+                onTriggered: {
+                    if (updateController.updateStaged) {
+                        rebootConfirmation.open()
+                    } else if (updateController.updateAvailable) {
+                        updateController.stageUpdate()
+                    } else {
+                        updateController.checkForUpdates()
                     }
                 }
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                Controls.Button {
-                    text: root.primaryActionText()
-                    enabled: !updateController.busy
-                    onClicked: {
-                        if (updateController.updateStaged) {
-                            rebootConfirmation.open()
-                        } else if (updateController.updateAvailable) {
-                            updateController.stageUpdate()
-                        } else {
-                            updateController.checkForUpdates()
-                        }
+            },
+            Kirigami.Action {
+                text: qsTr("Later")
+                icon.name: "window-minimize"
+                visible: updateController.updateAvailable || updateController.updateStaged
+                onTriggered: {
+                    if (!previewMode) {
+                        root.hide()
                     }
                 }
             }
-        }
+        ]
 
         ColumnLayout {
             width: parent.width
             spacing: Kirigami.Units.largeSpacing
 
-            Item {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Kirigami.Units.largeSpacing
-            }
-
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
-
-                Kirigami.Heading {
-                    Layout.fillWidth: true
-                    text: qsTr("System updates")
-                    level: 1
-                }
 
                 Controls.Label {
                     Layout.fillWidth: true
@@ -377,40 +359,26 @@ Kirigami.ApplicationWindow {
         }
     }
 
-    Controls.Dialog {
+    Kirigami.PromptDialog {
         id: rebootConfirmation
         title: qsTr("Restart to finish updating?")
+        subtitle: qsTr("Your PC will restart to finish installing the update. Save your work before continuing.")
         modal: true
-        width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, 460)
-
-        ColumnLayout {
-            width: parent.width
-            spacing: Kirigami.Units.mediumSpacing
-
-            Controls.Label {
-                Layout.fillWidth: true
-                text: qsTr("Your PC will restart to finish installing the update. Save your work before continuing.")
-                wrapMode: Text.Wrap
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-
-                Item { Layout.fillWidth: true }
-
-                Controls.Button {
-                    text: qsTr("Later")
-                    onClicked: rebootConfirmation.reject()
-                }
-
-                Controls.Button {
-                    text: qsTr("Restart now")
-                    onClicked: {
-                        rebootConfirmation.accept()
-                        updateController.applyAndReboot()
-                    }
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: qsTr("Later")
+                icon.name: "dialog-cancel"
+                onTriggered: rebootConfirmation.reject()
+            },
+            Kirigami.Action {
+                text: qsTr("Restart now")
+                icon.name: "system-reboot"
+                onTriggered: {
+                    rebootConfirmation.close()
+                    updateController.applyAndReboot()
                 }
             }
-        }
+        ]
     }
 }

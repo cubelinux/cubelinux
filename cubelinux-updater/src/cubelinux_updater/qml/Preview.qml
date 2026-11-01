@@ -9,7 +9,7 @@ Controls.ApplicationWindow {
     visible: false
     width: 640
     height: 648
-    minimumWidth: 540
+    minimumWidth: 480
     minimumHeight: 520
 
     function statusHeading() {
@@ -75,7 +75,7 @@ Controls.ApplicationWindow {
         return qsTr("Check for updates")
     }
 
-    footer: Controls.ToolBar {
+    header: Controls.ToolBar {
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 32
@@ -83,12 +83,10 @@ Controls.ApplicationWindow {
             spacing: 8
 
             Controls.Label {
-                text: qsTr("cubelinux · Updater %1").arg(softwareVersion)
-                opacity: 0.7
-            }
-
-            Item {
                 Layout.fillWidth: true
+                text: qsTr("System updates")
+                font.pixelSize: 20
+                font.weight: Font.DemiBold
             }
 
             Controls.Button {
@@ -121,20 +119,13 @@ Controls.ApplicationWindow {
         anchors.fill: parent
         anchors.leftMargin: 32
         anchors.rightMargin: 32
-        anchors.topMargin: 40
-        anchors.bottomMargin: 24
+        anchors.topMargin: 24
+        anchors.bottomMargin: 32
         spacing: 20
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 6
-
-            Controls.Label {
-                Layout.fillWidth: true
-                text: qsTr("System updates")
-                font.pixelSize: 24
-                font.weight: Font.DemiBold
-            }
 
             Controls.Label {
                 Layout.fillWidth: true
