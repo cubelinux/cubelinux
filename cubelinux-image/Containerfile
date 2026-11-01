@@ -40,9 +40,14 @@ RUN python3 /tmp/configure_plasma.py && \
 
 COPY config/sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
 COPY bootc/kargs.d/10-quiet-boot.toml /usr/lib/bootc/kargs.d/10-quiet-boot.toml
+COPY config/systemd/cubelinux-disable-fedora-flatpak-remotes.service /usr/lib/systemd/system/
+COPY scripts/disable_fedora_flatpak_remotes.sh /usr/libexec/
 
 COPY .image-build/services.txt /tmp/component-services.txt
-RUN systemctl --root=/ enable NetworkManager.service firewalld.service && \
+RUN chmod 0755 /usr/libexec/disable_fedora_flatpak_remotes.sh && \
+    systemctl --root=/ mask flatpak-add-fedora-repos.service && \
+    systemctl --root=/ enable cubelinux-disable-fedora-flatpak-remotes.service && \
+    systemctl --root=/ enable NetworkManager.service firewalld.service && \
     systemctl --root=/ enable --force sddm.service && \
     systemctl --root=/ enable plasma-setup.service && \
     while IFS= read -r service; do \

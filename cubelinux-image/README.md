@@ -18,8 +18,10 @@ The system includes an updater for checking and downloading cubelinux image
 updates. When an update is ready, restart to complete the installation.
 
 Flatpak is installed for desktop applications. KDE Discover is configured to
-use its Flatpak backend, with Flathub available as a system-wide remote. System
-RPM updates remain part of the cubelinux image update flow.
+use its Flatpak backend, with Flathub available as a system-wide remote. The
+image masks Fedora's first-boot Flatpak remote setup and disables any existing
+Fedora Flatpak remotes during the first boot after this change. System RPM
+updates remain part of the cubelinux image update flow.
 
 Virtual Shell provides a separate Fedora environment for running command-line
 tools. It is under active development while its unprivileged container setup
