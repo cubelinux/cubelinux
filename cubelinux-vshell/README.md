@@ -123,8 +123,10 @@ settings, and files stored in its filesystem. The shared host home folder and
 the cached Fedora template remain untouched. After destruction, Linux
 Subsystem returns to its setup wizard; use it to create a new environment when
 you are ready. LXC reuses the cached template when one is available.
-Open **About Linux Subsystem** from the hamburger menu to see the application
-version and project information.
+Open **About Linux Subsystem** from the right-side application menu to see the
+app version, project links, Qt build and runtime versions, PySide6, KDE
+Frameworks/Kirigami, Plasma, Python, distribution, kernel, and architecture
+versions.
 
 ## Development
 

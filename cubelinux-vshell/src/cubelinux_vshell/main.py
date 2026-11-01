@@ -1,11 +1,21 @@
 """Launch Virtual Shell or operate its Fedora LXC environment."""
 
 import argparse
+import json
 import os
+import platform
+import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QLockFile, QStandardPaths, QUrl
+import PySide6
+from PySide6.QtCore import (
+    QLockFile,
+    QStandardPaths,
+    QUrl,
+    __version__ as qt_build_version,
+    qVersion,
+)
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtQml import QQmlApplicationEngine
@@ -20,6 +30,73 @@ from .version import __version__
 
 _USER_ID = os.getuid() if hasattr(os, "getuid") else os.getpid()
 _SERVER_NAME = f"cubelinux-vshell-setup-{_USER_ID}"
+
+
+def _about_components_json() -> str:
+    """Return installed framework and host versions for the About page."""
+    try:
+        os_release = platform.freedesktop_os_release()
+    except (AttributeError, OSError):
+        os_release = {}
+
+    def package_version(package: str) -> str:
+        try:
+            result = subprocess.run(
+                ["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", package],
+                capture_output=True,
+                check=True,
+                text=True,
+                timeout=2,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        return result.stdout.strip()
+
+    components = [
+        {
+            "name": "PySide6",
+            "description": "Qt for Python binding",
+            "version": PySide6.__version__,
+        },
+        {
+            "name": "Qt (build)",
+            "description": "Qt version used to build PySide6",
+            "version": qt_build_version,
+        },
+        {
+            "name": "Qt (runtime)",
+            "description": "Qt library version in use",
+            "version": qVersion(),
+        },
+        {
+            "name": "KDE Frameworks (Kirigami)",
+            "description": "Installed Kirigami package",
+            "version": package_version("kf6-kirigami"),
+        },
+        {
+            "name": "KDE Plasma",
+            "description": "Installed Plasma workspace package",
+            "version": package_version("plasma-workspace"),
+        },
+        {
+            "name": "Python",
+            "description": "Python runtime",
+            "version": platform.python_version(),
+        },
+        {
+            "name": "Operating system",
+            "description": os_release.get("PRETTY_NAME", os_release.get("NAME", "Linux")),
+            "version": os_release.get("VERSION_ID", ""),
+        },
+        {"name": "Kernel", "description": "Linux kernel", "version": platform.release()},
+        {
+            "name": "Architecture",
+            "description": "System architecture",
+            "version": platform.machine(),
+        },
+    ]
+    available_components = [component for component in components if component["version"]]
+    return json.dumps(available_components, ensure_ascii=False)
 
 
 def _notify_existing_setup(timeout_ms: int = 100) -> bool:
@@ -138,6 +215,7 @@ def main() -> int:
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("setupController", controller)
     engine.rootContext().setContextProperty("softwareVersion", __version__)
+    engine.rootContext().setContextProperty("aboutComponentsJson", _about_components_json())
     qml_file = Path(__file__).parent / "qml" / "Main.qml"
     engine.load(QUrl.fromLocalFile(str(qml_file)))
     if not engine.rootObjects():

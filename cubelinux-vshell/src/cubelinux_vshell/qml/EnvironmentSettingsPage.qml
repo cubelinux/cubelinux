@@ -8,8 +8,22 @@ Kirigami.ScrollablePage {
 
     property var controller
     signal returnToWorkspaceRequested()
+    signal aboutRequested()
 
     title: qsTr("Environment settings")
+    actions: [
+        Kirigami.Action {
+            text: qsTr("Menu")
+            icon.name: "application-menu"
+            children: [
+                Kirigami.Action {
+                    text: qsTr("About Linux Subsystem")
+                    icon.name: "help-about"
+                    onTriggered: page.aboutRequested()
+                }
+            ]
+        }
+    ]
 
     ColumnLayout {
         width: parent.width

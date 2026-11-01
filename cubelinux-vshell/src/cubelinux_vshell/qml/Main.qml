@@ -28,28 +28,18 @@ Kirigami.ApplicationWindow {
         }
     }
 
-    globalDrawer: Kirigami.GlobalDrawer {
-        isMenu: true
-        actions: [
-            Kirigami.Action {
-                text: qsTr("About Linux Subsystem")
-                icon.name: "help-about"
-                onTriggered: root.pageStack.layers.push(aboutPage)
-            }
-        ]
-    }
-
     Component {
         id: aboutPage
 
         Kirigami.AboutPage {
+            title: qsTr("About Linux Subsystem")
             aboutData: {
                 "displayName": qsTr("Linux Subsystem"),
                 "productName": qsTr("Linux Subsystem"),
                 "componentName": "cubelinux-vshell",
                 "shortDescription": qsTr("Manage your Fedora Linux environment."),
-                "homepage": "https://github.com/cubelinux/cubelinux",
-                "bugAddress": "",
+                "homepage": "https://cubelinux.github.io",
+                "bugAddress": "https://github.com/cubelinux/cubelinux/issues",
                 "version": softwareVersion,
                 "otherText": "",
                 "authors": [],
@@ -57,7 +47,8 @@ Kirigami.ApplicationWindow {
                 "translators": [],
                 "licenses": [],
                 "copyrightStatement": "",
-                "desktopFileName": "org.cubelinux.VShell"
+                "desktopFileName": "org.cubelinux.VShell",
+                "components": JSON.parse(aboutComponentsJson)
             }
             getInvolvedUrl: "https://github.com/cubelinux/cubelinux"
         }
@@ -69,6 +60,7 @@ Kirigami.ApplicationWindow {
         EnvironmentSettingsPage {
             controller: setupController
             onReturnToWorkspaceRequested: root.pageStack.pop()
+            onAboutRequested: root.pageStack.layers.push(aboutPage)
         }
     }
 
@@ -79,6 +71,7 @@ Kirigami.ApplicationWindow {
             controller: setupController
             onRetryRequested: setupController.setup()
             onReturnToOverviewRequested: root.pageStack.layers.clear()
+            onAboutRequested: root.pageStack.layers.push(aboutPage)
         }
     }
 
@@ -97,6 +90,7 @@ Kirigami.ApplicationWindow {
                     setupController.setup()
                 }
             }
+            onAboutRequested: root.pageStack.layers.push(aboutPage)
         }
     }
 
@@ -144,6 +138,17 @@ Kirigami.ApplicationWindow {
                         root.pageStack.layers.push(setupConfirmPage)
                     }
                 }
+            },
+            Kirigami.Action {
+                text: qsTr("Menu")
+                icon.name: "application-menu"
+                children: [
+                    Kirigami.Action {
+                        text: qsTr("About Linux Subsystem")
+                        icon.name: "help-about"
+                        onTriggered: root.pageStack.layers.push(aboutPage)
+                    }
+                ]
             }
         ]
 

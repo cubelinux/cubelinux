@@ -9,6 +9,7 @@ Kirigami.ScrollablePage {
     property var controller
     signal retryRequested()
     signal returnToOverviewRequested()
+    signal aboutRequested()
     title: controller.setupFailed
            ? qsTr("Setup needs attention") : qsTr("Setting up Linux")
     onBackRequested: function(event) {
@@ -33,6 +34,17 @@ Kirigami.ScrollablePage {
             visible: !controller.busy && controller.ready
                      && controller.setupFailed
             onTriggered: page.returnToOverviewRequested()
+        },
+        Kirigami.Action {
+            text: qsTr("Menu")
+            icon.name: "application-menu"
+            children: [
+                Kirigami.Action {
+                    text: qsTr("About Linux Subsystem")
+                    icon.name: "help-about"
+                    onTriggered: page.aboutRequested()
+                }
+            ]
         }
     ]
 

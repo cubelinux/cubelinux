@@ -77,7 +77,7 @@ Kirigami.ApplicationWindow {
             return qsTr("Restart your PC to finish applying the update.")
         }
         if (updateController.updateAvailable) {
-            return qsTr("Download it now. You can keep using your PC while it downloads.")
+            return updateController.statusText
         }
         if (updateController.hasChecked) {
             return qsTr("No updates are available right now.")
@@ -115,6 +115,17 @@ Kirigami.ApplicationWindow {
                         root.hide()
                     }
                 }
+            },
+            Kirigami.Action {
+                text: qsTr("Menu")
+                icon.name: "application-menu"
+                children: [
+                    Kirigami.Action {
+                        text: qsTr("About Updater")
+                        icon.name: "help-about"
+                        onTriggered: root.pageStack.layers.push(aboutPage)
+                    }
+                ]
             }
         ]
 
@@ -356,6 +367,32 @@ Kirigami.ApplicationWindow {
                     wrapMode: Text.Wrap
                 }
             }
+        }
+    }
+
+    Component {
+        id: aboutPage
+
+        Kirigami.AboutPage {
+            title: qsTr("About Updater")
+            aboutData: {
+                "displayName": qsTr("Updater"),
+                "productName": qsTr("cubelinux Updater"),
+                "componentName": "cubelinux-updater",
+                "shortDescription": qsTr("Keep cubelinux up to date."),
+                "homepage": "https://cubelinux.github.io",
+                "bugAddress": "https://github.com/cubelinux/cubelinux/issues",
+                "version": softwareVersion,
+                "otherText": "",
+                "authors": [],
+                "credits": [],
+                "translators": [],
+                "licenses": [],
+                "copyrightStatement": "",
+                "desktopFileName": "org.cubelinux.Updater",
+                "components": JSON.parse(aboutComponentsJson)
+            }
+            getInvolvedUrl: "https://github.com/cubelinux/cubelinux"
         }
     }
 

@@ -10,6 +10,7 @@ Kirigami.ScrollablePage {
     property bool navigationBusy: false
     property bool darkTheme: false
     signal setupRequested()
+    signal aboutRequested()
     title: qsTr("Set up Fedora")
 
     actions: [
@@ -23,6 +24,17 @@ Kirigami.ScrollablePage {
                     page.setupRequested()
                 }
             }
+        },
+        Kirigami.Action {
+            text: qsTr("Menu")
+            icon.name: "application-menu"
+            children: [
+                Kirigami.Action {
+                    text: qsTr("About Linux Subsystem")
+                    icon.name: "help-about"
+                    onTriggered: page.aboutRequested()
+                }
+            ]
         }
     ]
 

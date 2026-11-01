@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Updater
-Comment=Keep bootc update status available in the system tray
+Comment=Check for cubelinux system updates in the background
 Exec=cubelinux-updater --background
 Icon=system-software-update
 Terminal=false
