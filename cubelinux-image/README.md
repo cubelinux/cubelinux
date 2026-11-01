@@ -18,6 +18,10 @@ The system includes an updater for checking and downloading cubelinux image
 updates. When an update is ready, restart to complete the installation. A
 separate host terminal profile is available for system administration.
 
+Flatpak is installed for desktop applications. KDE Discover is configured to
+use its Flatpak backend, with Flathub available as a system-wide remote. System
+RPM updates remain part of the cubelinux image update flow.
+
 Virtual Shell provides a separate Fedora environment for running command-line
 tools. It is under active development while its unprivileged container setup
 and networking are completed.
@@ -75,6 +79,9 @@ cubelinux/
 - **`cubelinux-image/scripts/configure_plasma.py`** merges checked-in KDE
   defaults into the image during the build, preserving Fedora's other profile
   settings.
+- **`cubelinux-image/scripts/configure_software_center.py`** downloads and
+  validates Flathub's signed remote descriptor, installs it as a system-wide
+  Flatpak remote, and routes Discover launchers through Flatpak-only mode.
 - **`cubelinux-image/bootc/` and `cubelinux-image/config/`** hold settings
   shared by the base system and desktop, not files owned by one app.
 

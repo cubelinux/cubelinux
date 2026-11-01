@@ -103,6 +103,18 @@ class SetupController(QObject):
     def progressTitle(self) -> str:
         return self._progress_title or "Setting up Fedora"
 
+    @Property(bool, notify=progressChanged)
+    def setupFailed(self) -> bool:
+        return self._progress_title == "Setup failed"
+
+    @Property(bool, notify=progressChanged)
+    def setupComplete(self) -> bool:
+        return self._progress_title == "Setup complete"
+
+    @Property(bool, notify=progressChanged)
+    def destroyFailed(self) -> bool:
+        return self._progress_title == "Destroy failed"
+
     @Property(int, notify=progressChanged)
     def progressPercent(self) -> int:
         return self._progress_percent

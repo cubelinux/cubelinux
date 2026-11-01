@@ -7,6 +7,7 @@ Kirigami.ScrollablePage {
     id: page
 
     property var controller
+    property bool navigationBusy: false
     property bool darkTheme: false
     signal setupRequested()
     title: qsTr("Set up Fedora")
@@ -15,7 +16,13 @@ Kirigami.ScrollablePage {
         Kirigami.Action {
             text: qsTr("Set up Linux")
             icon.name: "go-next"
-            onTriggered: page.setupRequested()
+            enabled: !page.controller.busy && !page.controller.ready
+                     && !page.navigationBusy
+            onTriggered: {
+                if (enabled) {
+                    page.setupRequested()
+                }
+            }
         }
     ]
 

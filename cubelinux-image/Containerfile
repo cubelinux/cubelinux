@@ -4,10 +4,19 @@ FROM ${BASE_IMAGE}
 ARG PACKAGES
 
 RUN dnf -y install \
-        --exclude='plasma-discover*' \
+        --exclude='plasma-discover-packagekit*' \
+        --exclude='plasma-discover-rpm-ostree*' \
+        --exclude='plasma-discover-snap*' \
+        --exclude='plasma-discover-kns*' \
+        --exclude='plasma-discover-notifier*' \
+        --exclude='plasma-discover-offline-updates*' \
         --exclude=PackageKit \
         ${PACKAGES} && \
     dnf clean all
+
+COPY scripts/configure_software_center.py /tmp/configure_software_center.py
+RUN python3 /tmp/configure_software_center.py && \
+    rm -f /tmp/configure_software_center.py
 
 COPY .image-build/distro.json /tmp/distro.json
 COPY scripts/configure_distro.py /tmp/configure_distro.py

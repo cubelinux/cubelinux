@@ -14,11 +14,12 @@ Kirigami.ApplicationWindow {
     visible: true
     property bool closeAfterSetup: false
 
-    pageStack.globalToolBar.showNavigationButtons: setupController.busy ? 0
+    pageStack.globalToolBar.showNavigationButtons: setupController.busy
+        || root.pageStack.layers.busy ? 0
         : Kirigami.ApplicationHeaderStyle.ShowBackButton
 
     onClosing: function(close) {
-        if (setupController.busy) {
+        if (setupController.busy || setupController.folderSharingBusy) {
             close.accepted = false
             closeAfterSetup = true
             root.hide()
@@ -76,6 +77,7 @@ Kirigami.ApplicationWindow {
         SetupProgressPage {
             controller: setupController
             onRetryRequested: setupController.setup()
+            onReturnToOverviewRequested: root.pageStack.layers.clear()
         }
     }
 
@@ -84,10 +86,16 @@ Kirigami.ApplicationWindow {
 
         SetupConfirmPage {
             controller: setupController
+            navigationBusy: root.pageStack.layers.busy
             darkTheme: root.palette.window.hslLightness < 0.5
             onSetupRequested: {
-                root.pageStack.push(setupProgressPage)
-                setupController.setup()
+                if (!root.pageStack.layers.busy
+                        && root.pageStack.layers.depth === 1
+                        && !setupController.busy
+                        && !setupController.ready) {
+                    root.pageStack.layers.push(setupProgressPage)
+                    setupController.setup()
+                }
             }
         }
     }
@@ -95,23 +103,27 @@ Kirigami.ApplicationWindow {
     Connections {
         target: setupController
         function onStateChanged() {
-            if (setupController.ready
-                    && setupController.progressTitle === qsTr("Setup complete")
-                    && root.pageStack.depth >= 3) {
-                root.pageStack.pop()
-                root.pageStack.pop()
+            if (setupController.ready && setupController.setupComplete) {
+                root.pageStack.layers.clear()
             }
-            if (root.closeAfterSetup && !setupController.busy) {
-                root.closeAfterSetup = false
-                if (setupController.progressTitle === qsTr("Setup failed")
-                        || setupController.progressTitle === qsTr("Destroy failed")) {
-                    root.showNormal()
-                    root.raise()
-                    root.requestActivate()
-                } else {
-                    Qt.callLater(Qt.quit)
-                }
-            }
+            root.finishDeferredClose()
+        }
+        function onFolderSharingChanged() {
+            root.finishDeferredClose()
+        }
+    }
+
+    function finishDeferredClose() {
+        if (!closeAfterSetup || setupController.busy || setupController.folderSharingBusy) {
+            return
+        }
+        closeAfterSetup = false
+        if (setupController.setupFailed || setupController.destroyFailed) {
+            root.showNormal()
+            root.raise()
+            root.requestActivate()
+        } else {
+            Qt.callLater(Qt.quit)
         }
     }
 
@@ -125,7 +137,14 @@ Kirigami.ApplicationWindow {
                 text: qsTr("Next")
                 icon.name: "go-next"
                 visible: !setupController.ready
-                onTriggered: root.pageStack.push(setupConfirmPage)
+                enabled: !setupController.busy && !root.pageStack.layers.busy
+                onTriggered: {
+                    if (!setupController.ready
+                            && root.pageStack.layers.depth === 0
+                            && !root.pageStack.layers.busy) {
+                        root.pageStack.layers.push(setupConfirmPage)
+                    }
+                }
             }
         ]
 
@@ -157,15 +176,18 @@ Kirigami.ApplicationWindow {
             onTriggered: setupController.refreshStatus()
         }
 
-        Controls.Dialog {
+        Kirigami.Dialog {
             id: destroyDialog
 
             modal: true
             title: qsTr("Destroy Fedora environment?")
             width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, 520)
             anchors.centerIn: parent
+            padding: Kirigami.Units.largeSpacing
+            showCloseButton: true
+            standardButtons: Kirigami.Dialog.NoButton
 
-            contentItem: ColumnLayout {
+            ColumnLayout {
                 spacing: Kirigami.Units.mediumSpacing
 
                 Controls.Label {
@@ -181,27 +203,24 @@ Kirigami.ApplicationWindow {
                 }
             }
 
-            footer: RowLayout {
-                spacing: Kirigami.Units.mediumSpacing
-
-                Item { Layout.fillWidth: true }
-
-                Controls.Button {
+            customFooterActions: [
+                Kirigami.Action {
                     text: qsTr("Cancel")
-                    onClicked: destroyDialog.close()
-                }
+                    icon.name: "dialog-cancel"
+                    onTriggered: destroyDialog.close()
+                },
 
-                Controls.Button {
+                Kirigami.Action {
                     text: qsTr("Destroy environment")
                     icon.name: "edit-delete"
                     enabled: destroyAcknowledged.checked && !setupController.busy
-                    onClicked: {
+                    onTriggered: {
                         destroyAcknowledged.checked = false
                         setupController.destroyContainer()
                         destroyDialog.close()
                     }
                 }
-            }
+            ]
 
             onClosed: destroyAcknowledged.checked = false
         }

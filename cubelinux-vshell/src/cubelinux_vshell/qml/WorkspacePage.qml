@@ -48,11 +48,10 @@ Controls.ScrollView {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             visible: controller.busy
-                     || controller.progressTitle === qsTr("Setup failed")
-                     || controller.progressTitle === qsTr("Destroy failed")
+                     || controller.setupFailed
+                     || controller.destroyFailed
             text: controller.progress
-            type: controller.progressTitle === qsTr("Setup failed")
-                  || controller.progressTitle === qsTr("Destroy failed")
+            type: controller.setupFailed || controller.destroyFailed
                   ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
         }
 
@@ -79,11 +78,13 @@ Controls.ScrollView {
 
         Kirigami.Card {
             Layout.fillWidth: true
-            Layout.preferredHeight: 96
-            Layout.minimumHeight: 96
+            Layout.preferredHeight: page.availableWidth < 560 ? 156 : 96
+            Layout.minimumHeight: page.availableWidth < 560 ? 156 : 96
 
-            contentItem: RowLayout {
-                spacing: Kirigami.Units.largeSpacing
+            contentItem: GridLayout {
+                columns: page.availableWidth < 560 ? 3 : 5
+                rowSpacing: Kirigami.Units.smallSpacing
+                columnSpacing: Kirigami.Units.mediumSpacing
 
                 Image {
                     source: page.darkTheme
@@ -96,12 +97,16 @@ Controls.ScrollView {
                     Layout.preferredWidth: 64
                     Layout.preferredHeight: Kirigami.Units.iconSizes.large
                     Layout.alignment: Qt.AlignVCenter
+                    Layout.row: 0
+                    Layout.column: 0
                 }
 
                 ColumnLayout {
-                    Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
                     Layout.alignment: Qt.AlignVCenter
+                    Layout.fillWidth: true
+                    Layout.row: 0
+                    Layout.column: 1
 
                     RowLayout {
                         spacing: Kirigami.Units.mediumSpacing
@@ -129,6 +134,8 @@ Controls.ScrollView {
                     Layout.preferredWidth: Kirigami.Units.iconSizes.medium
                     Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                     Layout.alignment: Qt.AlignVCenter
+                    Layout.row: 0
+                    Layout.column: 2
 
                     Kirigami.Icon {
                         id: statusIcon
@@ -152,17 +159,23 @@ Controls.ScrollView {
 
                 Controls.Button {
                     Layout.alignment: Qt.AlignVCenter
+                    Layout.row: page.availableWidth < 560 ? 1 : 0
+                    Layout.column: page.availableWidth < 560 ? 0 : 3
+                    Layout.columnSpan: page.availableWidth < 560 ? 2 : 1
+                    Layout.fillWidth: page.availableWidth < 560
                     text: qsTr("Open terminal")
                     icon.name: "utilities-terminal"
                     highlighted: true
                     enabled: !controller.busy && !controller.destroying
                              && !controller.folderSharingBusy
-                             && controller.progressTitle !== qsTr("Setup failed")
+                             && !controller.setupFailed
                     onClicked: controller.openShell()
                 }
 
                 Controls.ToolButton {
                     Layout.alignment: Qt.AlignVCenter
+                    Layout.row: page.availableWidth < 560 ? 1 : 0
+                    Layout.column: page.availableWidth < 560 ? 2 : 4
                     icon.name: "overflow-menu"
                     Accessible.name: qsTr("Environment actions")
                     Controls.ToolTip.text: qsTr("Environment actions")

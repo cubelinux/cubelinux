@@ -8,10 +8,13 @@ Kirigami.ScrollablePage {
 
     property var controller
     signal retryRequested()
-    title: controller.progressTitle === qsTr("Setup failed")
+    signal returnToOverviewRequested()
+    title: controller.setupFailed
            ? qsTr("Setup needs attention") : qsTr("Setting up Linux")
     onBackRequested: function(event) {
-        if (controller.busy) {
+        if (controller.busy
+                || (controller.ready
+                    && controller.setupFailed)) {
             event.accepted = true
         }
     }
@@ -20,8 +23,16 @@ Kirigami.ScrollablePage {
         Kirigami.Action {
             text: qsTr("Try again")
             icon.name: "view-refresh"
-            visible: !controller.busy && controller.progressTitle === qsTr("Setup failed")
+            visible: !controller.busy && !controller.ready
+                     && controller.setupFailed
             onTriggered: page.retryRequested()
+        },
+        Kirigami.Action {
+            text: qsTr("Return to overview")
+            icon.name: "go-home"
+            visible: !controller.busy && controller.ready
+                     && controller.setupFailed
+            onTriggered: page.returnToOverviewRequested()
         }
     ]
 
@@ -80,8 +91,10 @@ Kirigami.ScrollablePage {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             visible: !controller.busy && controller.progress.length > 0
-            text: controller.progress
-            type: controller.progressTitle === qsTr("Setup failed")
+            text: controller.ready && controller.setupFailed
+                  ? qsTr("The Fedora environment was created, but desktop setup did not finish. Return to the overview, then destroy and recreate Fedora to try again.\n\n%1").arg(controller.progress)
+                  : controller.progress
+            type: controller.setupFailed
                   ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
         }
 

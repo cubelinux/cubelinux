@@ -204,14 +204,22 @@ def _bind_home(account: pwd.struct_passwd) -> None:
     config = _config_path()
     contents = config.read_text(encoding="utf-8")
     marker = "# VShell home bind"
-    if marker in contents:
-        return
     mount_line = (
-        f"{marker}\n"
         f"lxc.mount.entry = {_escape_mount_path(str(_home()))} "
-        f"home/{account.pw_name} none bind,create=dir 0 0\n"
+        f"home/{account.pw_name} none bind,create=dir 0 0"
     )
-    config.write_text(contents.rstrip() + "\n" + mount_line, encoding="utf-8")
+    if marker in contents or mount_line in contents.splitlines():
+        return
+    config.write_text(contents.rstrip() + "\n" + mount_line + "\n", encoding="utf-8")
+
+
+def _mark_initialized() -> None:
+    """Record readiness only after all container and desktop setup succeeds."""
+    config = _config_path()
+    contents = config.read_text(encoding="utf-8")
+    marker = "# VShell home bind"
+    if marker not in contents:
+        config.write_text(contents.rstrip() + "\n" + marker + "\n", encoding="utf-8")
 
 
 def initialize(progress: Progress = print, *, refresh_template: bool = False) -> None:
@@ -344,6 +352,7 @@ def initialize(progress: Progress = print, *, refresh_template: bool = False) ->
     )
     _wait_until_running(progress)
     _ensure_guest_x11_socket_path(progress)
+    _mark_initialized()
     _report(progress, "Fedora Virtual Shell is ready.")
 
 
