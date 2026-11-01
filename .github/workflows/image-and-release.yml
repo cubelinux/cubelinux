@@ -66,12 +66,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push customized image
+      - name: Build, verify, and publish customized image
         uses: docker/build-push-action@v6
         with:
           context: ./cubelinux-image
           file: ./cubelinux-image/Containerfile
-          load: true
+          push: true
           tags: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
           build-args: |
             BASE_IMAGE=${{ steps.packages.outputs.base_image }}
@@ -81,9 +81,3 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.image.outputs.created }}
             org.opencontainers.image.version=${{ steps.image.outputs.version }}
-
-      - name: Inspect the built image filesystem
-        run: python cubelinux-image/scripts/verify_image.py --image "${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}"
-
-      - name: Publish verified image
-        run: docker push "${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}"

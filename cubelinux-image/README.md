@@ -112,13 +112,11 @@ component omission, safe destinations, distro `os-release` replacement, and
 logo rasterization at launcher and About page sizes. These are fast unit tests
 that use temporary files.
 
-The GitHub image workflow also performs an end-to-end filesystem check. It
-builds the image locally, creates a **stopped** Docker container from it, copies
-out `/usr/lib/os-release`, the configured logo, KDE's distro settings, and all
-staged component files, then compares their contents and modes with the build
-inputs. It also checks that Plasma Setup's installed account page matches the
-cubelinux source. It publishes the image only after those checks pass. The
-image is never started, so its desktop services do not run during verification.
+The GitHub image workflow verifies the completed filesystem during the
+BuildKit build, before publishing it directly to GHCR. It checks
+`/usr/lib/os-release`, the configured logo, KDE's distro settings, and all
+staged component files against the build inputs. The image is never started,
+so its desktop services do not run during verification.
 
 To inspect a locally built image, first run image preparation and build it with
 Docker, then run:

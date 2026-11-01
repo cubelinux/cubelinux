@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 ARG BASE_IMAGE=quay.io/fedora/fedora-bootc:44
 FROM ${BASE_IMAGE}
 
@@ -49,3 +50,11 @@ RUN systemctl --root=/ enable NetworkManager.service firewalld.service && \
     done < /tmp/component-services.txt && \
     systemctl --root=/ set-default graphical.target && \
     rm -f /tmp/component-services.txt
+
+# Verify the completed filesystem before BuildKit exports or publishes it.
+RUN --mount=type=bind,source=.image-build,target=/tmp/cubelinux-image-build,ro \
+    --mount=type=bind,source=scripts,target=/tmp/cubelinux-image-scripts,ro \
+    python3 /tmp/cubelinux-image-scripts/verify_image.py \
+        --rootfs / \
+        --distro /tmp/cubelinux-image-build/distro.json \
+        --expected-rootfs /tmp/cubelinux-image-build/rootfs
