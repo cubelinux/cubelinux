@@ -31,26 +31,15 @@ Kirigami.ApplicationWindow {
     Component {
         id: aboutPage
 
-        Kirigami.AboutPage {
-            title: qsTr("About Linux Subsystem")
-            aboutData: {
-                "displayName": qsTr("Linux Subsystem"),
-                "productName": qsTr("Linux Subsystem"),
-                "componentName": "cubelinux-vshell",
-                "shortDescription": qsTr("Manage your Fedora Linux environment."),
-                "homepage": "https://cubelinux.github.io",
-                "bugAddress": "https://github.com/cubelinux/cubelinux/issues",
-                "version": softwareVersion,
-                "otherText": "",
-                "authors": [],
-                "credits": [],
-                "translators": [],
-                "licenses": [],
-                "copyrightStatement": "",
-                "desktopFileName": "org.cubelinux.VShell",
-                "components": JSON.parse(aboutComponentsJson)
-            }
-            getInvolvedUrl: "https://github.com/cubelinux/cubelinux"
+        AboutApplicationPage {
+            applicationName: qsTr("Linux Subsystem")
+            productName: qsTr("Linux Subsystem")
+            description: qsTr("Manage your Fedora Linux environment.")
+            version: softwareVersion
+            homepage: "https://cubelinux.github.io"
+            bugAddress: "https://github.com/cubelinux/cubelinux/issues"
+            copyrightStatement: "Copyright © 2026 VIREAK KEOSOKVIBOL <vireakvibol@gmail.com>"
+            components: JSON.parse(aboutComponentsJson)
         }
     }
 

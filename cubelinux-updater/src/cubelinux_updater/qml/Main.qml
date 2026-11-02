@@ -373,26 +373,15 @@ Kirigami.ApplicationWindow {
     Component {
         id: aboutPage
 
-        Kirigami.AboutPage {
-            title: qsTr("About Updater")
-            aboutData: {
-                "displayName": qsTr("Updater"),
-                "productName": qsTr("cubelinux Updater"),
-                "componentName": "cubelinux-updater",
-                "shortDescription": qsTr("Keep cubelinux up to date."),
-                "homepage": "https://cubelinux.github.io",
-                "bugAddress": "https://github.com/cubelinux/cubelinux/issues",
-                "version": softwareVersion,
-                "otherText": "",
-                "authors": [],
-                "credits": [],
-                "translators": [],
-                "licenses": [],
-                "copyrightStatement": "",
-                "desktopFileName": "org.cubelinux.Updater",
-                "components": JSON.parse(aboutComponentsJson)
-            }
-            getInvolvedUrl: "https://github.com/cubelinux/cubelinux"
+        AboutApplicationPage {
+            applicationName: qsTr("Updater")
+            productName: qsTr("cubelinux Updater")
+            description: qsTr("Keep cubelinux up to date.")
+            version: softwareVersion
+            homepage: "https://cubelinux.github.io"
+            bugAddress: "https://github.com/cubelinux/cubelinux/issues"
+            copyrightStatement: "Copyright © 2026 VIREAK KEOSOKVIBOL <vireakvibol@gmail.com>"
+            components: JSON.parse(aboutComponentsJson)
         }
     }
 

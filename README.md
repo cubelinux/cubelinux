@@ -39,3 +39,10 @@ builds the image, verifies the result, and publishes it to GHCR.
 See [the image-builder README](cubelinux-image/README.md),
 [the updater README](cubelinux-updater/README.md), and
 [the VShell README](cubelinux-vshell/README.md) for project-specific details.
+
+## License
+
+Original cubelinux source code and image-builder materials are licensed under
+GPL-3.0-or-later; see [LICENSE](LICENSE) and [COPYRIGHT](COPYRIGHT). The built image includes Fedora
+and other third-party software that retains its own license. This repository's
+license does not relicense those components.

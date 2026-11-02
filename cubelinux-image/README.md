@@ -130,3 +130,11 @@ python3 scripts/verify_image.py --image cubelinux:test
 ## Learn more
 
 Visit [cubelinux.github.io](https://cubelinux.github.io) for more information.
+
+## License
+
+Original cubelinux image-builder source and configuration are licensed under
+GPL-3.0-or-later; see the repository's [LICENSE](../LICENSE) and
+[COPYRIGHT](../COPYRIGHT). Software included in a built image is distributed
+under the license applicable to each component; this project license does not
+change those terms.

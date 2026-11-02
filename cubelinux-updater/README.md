@@ -103,3 +103,9 @@ are declared in `component.toml`.
 - [KDE Python bindings for selected Frameworks](https://develop.kde.org/docs/getting-started/python/python-bindings/)
 - [KDE Human Interface Guidelines](https://develop.kde.org/hig/)
 - [Qt for Python / PySide6](https://doc.qt.io/qtforpython-6.11/index.html)
+
+## License
+
+Updater's original source code is licensed under GPL-3.0-or-later. See the
+repository's [LICENSE](../LICENSE) and [COPYRIGHT](../COPYRIGHT). Third-party
+dependencies and bundled software retain their own licenses.
