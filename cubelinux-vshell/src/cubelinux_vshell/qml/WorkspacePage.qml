@@ -7,7 +7,6 @@ Controls.ScrollView {
     id: page
 
     property var controller
-    property bool darkTheme: false
     signal destroyRequested()
     signal settingsRequested()
     contentWidth: availableWidth
@@ -87,11 +86,9 @@ Controls.ScrollView {
                 columnSpacing: Kirigami.Units.mediumSpacing
 
                 Image {
-                    source: page.darkTheme
-                            ? "file:///usr/share/fedora-logos/fedora_logo_darkbackground.svg"
-                            : "file:///usr/share/fedora-logos/fedora_logo.svg"
-                    sourceSize.width: 144
-                    sourceSize.height: 72
+                    source: "fedora-icon.svg"
+                    sourceSize.width: 128
+                    sourceSize.height: 128
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     Layout.preferredWidth: 64
@@ -112,7 +109,7 @@ Controls.ScrollView {
                         spacing: Kirigami.Units.mediumSpacing
 
                         Kirigami.Heading {
-                            text: qsTr("Fedora 44")
+                            text: qsTr("Fedora® 44")
                             level: 2
                         }
 

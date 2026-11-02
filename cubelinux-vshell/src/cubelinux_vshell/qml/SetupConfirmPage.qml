@@ -8,10 +8,9 @@ Kirigami.ScrollablePage {
 
     property var controller
     property bool navigationBusy: false
-    property bool darkTheme: false
     signal setupRequested()
     signal aboutRequested()
-    title: qsTr("Set up Fedora")
+    title: qsTr("Set up Fedora®")
 
     actions: [
         Kirigami.Action {
@@ -66,11 +65,9 @@ Kirigami.ScrollablePage {
                 spacing: Kirigami.Units.mediumSpacing
 
                 Image {
-                    source: page.darkTheme
-                            ? "file:///usr/share/fedora-logos/fedora_logo_darkbackground.svg"
-                            : "file:///usr/share/fedora-logos/fedora_logo.svg"
-                    sourceSize.width: 96
-                    sourceSize.height: 64
+                    source: "fedora-icon.svg"
+                    sourceSize.width: 128
+                    sourceSize.height: 128
                     fillMode: Image.PreserveAspectFit
                     Layout.preferredWidth: 56
                     Layout.preferredHeight: Kirigami.Units.iconSizes.large
@@ -81,7 +78,7 @@ Kirigami.ScrollablePage {
                     spacing: Kirigami.Units.smallSpacing
 
                     Controls.Label {
-                        text: qsTr("Fedora Linux 44")
+                        text: qsTr("Fedora® Linux 44")
                         font.bold: true
                     }
 

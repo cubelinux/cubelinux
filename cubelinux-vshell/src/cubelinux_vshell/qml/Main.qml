@@ -34,7 +34,7 @@ Kirigami.ApplicationWindow {
         AboutApplicationPage {
             applicationName: qsTr("Linux Subsystem")
             productName: qsTr("Linux Subsystem")
-            description: qsTr("Manage your Fedora Linux environment.")
+            description: qsTr("Manage your Fedora® Linux environment.")
             version: softwareVersion
             homepage: "https://cubelinux.github.io"
             bugAddress: "https://github.com/cubelinux/cubelinux/issues"
@@ -70,7 +70,6 @@ Kirigami.ApplicationWindow {
         SetupConfirmPage {
             controller: setupController
             navigationBusy: root.pageStack.layers.busy
-            darkTheme: root.palette.window.hslLightness < 0.5
             onSetupRequested: {
                 if (!root.pageStack.layers.busy
                         && !setupController.busy
@@ -149,14 +148,12 @@ Kirigami.ApplicationWindow {
             SetupWelcomePage {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                darkTheme: root.palette.window.hslLightness < 0.5
             }
 
             WorkspacePage {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 controller: setupController
-                darkTheme: root.palette.window.hslLightness < 0.5
                 onDestroyRequested: destroyDialog.open()
                 onSettingsRequested: root.pageStack.push(environmentSettingsPage)
             }

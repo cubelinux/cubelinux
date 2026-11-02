@@ -58,6 +58,19 @@ Kirigami.ScrollablePage {
                     wrapMode: Text.Wrap
                 }
                 Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Fedora® and the Fedora logo are trademarks or registered trademarks of Red Hat, Inc., or its subsidiaries in the United States and other countries. VShell and cubelinux are not affiliated with or endorsed by the Fedora Project or Red Hat.")
+                    wrapMode: Text.Wrap
+                }
+                Controls.Label {
+                    text: qsTr("<a href=\"https://fedoraproject.org/\">Fedora Project website</a>")
+                    onLinkActivated: function(link) { Qt.openUrlExternally(link) }
+                }
+                Controls.Label {
+                    text: qsTr("<a href=\"https://commons.wikimedia.org/wiki/File:Fedora_icon_(2021).svg\">Fedora icon source (Wikimedia Commons)</a>")
+                    onLinkActivated: function(link) { Qt.openUrlExternally(link) }
+                }
+                Controls.Label {
                     text: qsTr("<a href=\"%1\">Project website</a>").arg(page.homepage)
                     onLinkActivated: function(link) { Qt.openUrlExternally(link) }
                 }
