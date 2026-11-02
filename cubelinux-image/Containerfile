@@ -9,7 +9,6 @@ RUN dnf -y install \
         --exclude='plasma-discover-rpm-ostree*' \
         --exclude='plasma-discover-snap*' \
         --exclude='plasma-discover-kns*' \
-        --exclude='plasma-discover-notifier*' \
         --exclude='plasma-discover-offline-updates*' \
         --exclude=PackageKit \
         ${PACKAGES} && \
