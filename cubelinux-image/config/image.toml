@@ -18,7 +18,7 @@ url = "https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/primary-on-trans
 [packages]
 base = [
   "dolphin",
-  "fedora-logos",
+  "generic-logos",
   "flatpak",
   "flatpak-kcm",
   "kde-partitionmanager",

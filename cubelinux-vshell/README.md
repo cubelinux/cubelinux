@@ -1,7 +1,7 @@
 # cubelinux-vshell
 
 `cubelinux-vshell` is the command and application ID for Linux Subsystem and its
-persistent Fedora LXC environment on the cubelinux Fedora bootc desktop host.
+persistent Fedora® LXC environment on the cubelinux Fedora bootc desktop host.
 
 ## Python and KDE stack
 
@@ -68,9 +68,13 @@ still controls incoming connections, and VShell does not change firewall
 rules. Ports below 1024 are not forwarded automatically, and manual forwarding
 rules are not implemented yet.
 
-The setup card uses Fedora's SVG logo from the `fedora-logos` package already
-included in the bootc image; it is available locally at runtime and is not
-downloaded when VShell starts.
+VShell displays the icon-only Fedora symbol beside the Fedora Linux guest
+environment. The [icon file](https://commons.wikimedia.org/wiki/File:Fedora_icon_(2021).svg)
+is bundled with VShell. The About page includes Fedora trademark attribution
+and states that VShell and cubelinux are not affiliated with or endorsed by the
+Fedora Project or Red Hat.
+Fedora® and the Fedora logo are trademarks or registered trademarks of Red Hat,
+Inc., or its subsidiaries in the United States and other countries.
 
 The container runs as an unprivileged user namespace. Container root maps to
 subordinate host IDs; the Fedora login user maps to the desktop user's own ID

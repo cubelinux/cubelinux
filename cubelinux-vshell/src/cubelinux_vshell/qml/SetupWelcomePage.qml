@@ -6,7 +6,6 @@ import org.kde.kirigami as Kirigami
 Controls.ScrollView {
     id: page
 
-    property bool darkTheme: false
     contentWidth: availableWidth
     clip: true
 
@@ -19,13 +18,11 @@ Controls.ScrollView {
             spacing: Kirigami.Units.largeSpacing
 
             Image {
-                source: page.darkTheme
-                        ? "file:///usr/share/fedora-logos/fedora_logo_darkbackground.svg"
-                        : "file:///usr/share/fedora-logos/fedora_logo.svg"
-                sourceSize.width: 144
-                sourceSize.height: 96
+                source: "fedora-icon.svg"
+                sourceSize.width: 128
+                sourceSize.height: 128
                 fillMode: Image.PreserveAspectFit
-                Layout.preferredWidth: 88
+                Layout.preferredWidth: 64
                 Layout.preferredHeight: 64
             }
 
@@ -35,7 +32,7 @@ Controls.ScrollView {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: qsTr("Create a Fedora environment for Linux apps and development tools.")
+                    text: qsTr("Create a Fedora® environment for Linux apps and development tools.")
                     opacity: 0.75
                     wrapMode: Text.Wrap
                 }
