@@ -2,11 +2,25 @@
 
 import math
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QObject, QTimer, Qt, SLOT, Slot
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QMenu
 
 from .diagnostics import LOGGER
+
+
+class _NotificationActionReceiver(QObject):
+    """Receive notification actions over the session D-Bus connection."""
+
+    def __init__(self, parent, notification_ids, show_window):
+        super().__init__(parent)
+        self._notification_ids = notification_ids
+        self._show_window = show_window
+
+    @Slot("uint", "QString")
+    def action_invoked(self, notification_id: int, action: str) -> None:
+        if notification_id in self._notification_ids.values() and action == "default":
+            self._show_window()
 
 
 def create_spinner_icons(count: int = 8) -> list[QIcon]:
@@ -49,20 +63,24 @@ def configure_tray(app, update_controller, show_window, status_notifier_item):
             "org.freedesktop.Notifications",
             notification_bus,
         )
-
-        def notification_action_invoked(notification_id: int, action: str) -> None:
-            if notification_id in notification_ids.values() and action == "default":
-                show_window()
-
-        notification_bus.connect(
+        notification_action_receiver = _NotificationActionReceiver(
+            app, notification_ids, show_window
+        )
+        connected = notification_bus.connect(
             "org.freedesktop.Notifications",
             "/org/freedesktop/Notifications",
             "org.freedesktop.Notifications",
             "ActionInvoked",
-            notification_action_invoked,
+            notification_action_receiver,
+            SLOT("action_invoked(uint,QString)"),
         )
-    except ImportError:
-        LOGGER.warning("Qt D-Bus bindings are unavailable; update notifications are disabled")
+        if not connected:
+            LOGGER.warning("Could not connect to notification actions; opening from notifications is disabled")
+    except Exception:
+        LOGGER.warning(
+            "Qt D-Bus notification setup failed; update notifications are disabled",
+            exc_info=True,
+        )
 
     def send_notification(summary: str, body: str, kind: str, timeout: int) -> None:
         if notification_interface is None or not notification_interface.isValid():
