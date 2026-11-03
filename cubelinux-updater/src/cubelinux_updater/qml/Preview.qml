@@ -135,6 +135,10 @@ Controls.ApplicationWindow {
             }
         }
 
+        ChannelSelector {
+            Layout.fillWidth: true
+        }
+
         Controls.Frame {
             Layout.fillWidth: true
             Layout.minimumHeight: 96
