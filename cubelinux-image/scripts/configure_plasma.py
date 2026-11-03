@@ -75,6 +75,14 @@ def set_breeze_default() -> None:
         "LookAndFeelPackage",
         look_and_feel,
     )
+    # Keep KAccounts installed for Plasma dependencies, but hide and restrict
+    # its Online Accounts module in System Settings until cubelinux enables it.
+    set_ini_value(
+        KDE_GLOBALS,
+        "KDE Control Module Restrictions][$i",
+        "kcm_kaccounts",
+        "false",
+    )
 
 
 def main() -> None:
