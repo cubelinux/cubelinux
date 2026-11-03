@@ -152,6 +152,10 @@ Kirigami.ApplicationWindow {
                 }
             }
 
+            ChannelSelector {
+                Layout.fillWidth: true
+            }
+
             Kirigami.Card {
                 Layout.fillWidth: true
                 Layout.minimumHeight: Kirigami.Units.gridUnit * 6
