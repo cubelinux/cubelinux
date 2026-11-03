@@ -4,14 +4,13 @@ on:
   push:
     branches:
       - '**'
+    tags:
+      - '**'
     paths:
       - 'cubelinux-image/**'
       - 'cubelinux-updater/**'
       - 'cubelinux-vshell/**'
       - '.github/workflows/image-and-release.yml'
-  release:
-    types:
-      - published
   workflow_dispatch:
 
 permissions:
@@ -44,12 +43,31 @@ jobs:
           tag="${GITHUB_REF_NAME,,}"
           tag="${tag//\//-}"
           tag="${tag//[^a-z0-9_.-]/-}"
+          full_sha_tag="sha-${GITHUB_SHA}"
+          short_sha_tag="sha-${GITHUB_SHA:0:7}"
+          tags="${name}:${tag}"$'\n'"${name}:${full_sha_tag}"$'\n'"${name}:${short_sha_tag}"$'\n'"${name}:latest"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            if [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              major="${BASH_REMATCH[1]}"
+              minor="${BASH_REMATCH[2]}"
+              for version_tag in "$version" "${major}.${minor}" "$major"; do
+                if [[ "$version_tag" != "$tag" ]]; then
+                  tags+=$'\n'"${name}:${version_tag}"
+                fi
+              done
+            fi
+          fi
           created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           version="${created%%T*}+${GITHUB_SHA:0:7}"
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "created=$created" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "$tags"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Prepare image configuration and components
         id: packages
@@ -72,7 +90,7 @@ jobs:
           context: ./cubelinux-image
           file: ./cubelinux-image/Containerfile
           push: true
-          tags: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
+          tags: ${{ steps.image.outputs.tags }}
           build-args: |
             BASE_IMAGE=${{ steps.packages.outputs.base_image }}
             PACKAGES=${{ steps.packages.outputs.packages }}
