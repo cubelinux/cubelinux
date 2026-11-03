@@ -8,6 +8,9 @@
 
 [![Build and publish bootc image](https://github.com/cubelinux/cubelinux/actions/workflows/image-and-release.yml/badge.svg)](https://github.com/cubelinux/cubelinux/actions/workflows/image-and-release.yml)
 
+> [!WARNING]
+> **Experimental software disclaimer:** cubelinux is pre-release software and is provided for evaluation and development. Components may be incomplete, unstable, or insufficiently validated. System behavior, image formats, update mechanisms, and configuration interfaces may change without backward compatibility. Failures may result in system unavailability or data loss. Deploy only in environments where you can recover or reinstall the system, maintain independent backups, and accept these risks. Use is at your own risk; the software is not suitable for production or safety-critical workloads.
+
 ## About cubelinux
 
 cubelinux brings a complete desktop experience together in one operating
