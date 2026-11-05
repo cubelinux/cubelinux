@@ -175,7 +175,6 @@ jobs:
               "${rechunk_args[@]}"
 
           sudo podman image rm --force "$STAGING_TAG" "$BASE_IMAGE" || true
-          sudo podman system prune --all --force
           df -h /
 
           first_tag=true
