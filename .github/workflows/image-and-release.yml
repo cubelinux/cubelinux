@@ -209,4 +209,4 @@ jobs:
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.publish.outputs.digest }}
-          push-to-registry: true
+          push-to-registry: false
