@@ -37,7 +37,8 @@ cubelinux/
 
 The GitHub Actions image workflow runs when any of these project folders
 changes. It stages updater and VShell files from the local component folders,
-builds the image, verifies the result, and publishes it to GHCR.
+builds and verifies the image, rechunks it by RPM content, and publishes the
+final OCI image to GHCR.
 
 See [the image-builder README](cubelinux-image/README.md),
 [the updater README](cubelinux-updater/README.md), and

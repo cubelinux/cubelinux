@@ -116,7 +116,12 @@ logo rasterization at launcher and About page sizes. These are fast unit tests
 that use temporary files.
 
 The GitHub image workflow verifies the completed filesystem during the
-BuildKit build, before publishing it directly to GHCR. It checks
+BuildKit build, then rechunks the image by RPM content before publishing the
+final OCI image to GHCR. Stable package layers can be reused by bootc clients
+when another package changes. The published layers use standard OCI zstd
+compression; the workflow does not enable the separate `zstd:chunked` format,
+which is not currently supported by every bootc storage backend. The workflow
+checks
 `/usr/lib/os-release`, the configured logo, KDE's distro settings, and all
 staged component files against the build inputs. The image is never started,
 so its desktop services do not run during verification.
