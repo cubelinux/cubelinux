@@ -216,7 +216,7 @@ def main() -> None:
     add_patch_to_spec(
         spec_files[0],
         patch_name,
-        f"{installed_release}.cubelinux1",
+        installed_release,
     )
 
     run(
