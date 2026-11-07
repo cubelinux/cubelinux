@@ -80,15 +80,16 @@ diff --git a/src/gui/kprocessrunner.cpp b/src/gui/kprocessrunner.cpp
 index 0000000..1111111 100644
 --- a/src/gui/kprocessrunner.cpp
 +++ b/src/gui/kprocessrunner.cpp
-@@ -8,1 +8,2 @@
- #include "kprocessrunner_p.h"
+@@ -15,2 +15,3 @@
+ #include "config-kiogui.h"
 +#include "kioskdesktopfile_p.h"
+ #include "kiogui_debug.h"
 @@ -235,2 +236,4 @@ void KProcessRunner::init(const KService::Ptr &service, const QString &serviceEntryPath, const QString &userVisibleName, const QByteArray &asn)
 -    if (service && !serviceEntryPath.isEmpty() && !KDesktopFile::isAuthorizedDesktopFile(serviceEntryPath)) {
 +    if (service && !serviceEntryPath.isEmpty()
 +        && !KIO::detail::isTrustedSystemApplicationEntry(serviceEntryPath)
 +        && !KDesktopFile::isAuthorizedDesktopFile(serviceEntryPath)) {
-        qCWarning(KIO_GUI) << "No authorization to execute" << serviceEntryPath;
+         qCWarning(KIO_GUI) << "No authorization to execute" << serviceEntryPath;
 diff --git a/src/gui/openurljob.cpp b/src/gui/openurljob.cpp
 index 0000000..1111111 100644
 --- a/src/gui/openurljob.cpp
