@@ -1,0 +1,229 @@
+#!/usr/bin/python3
+"""Publish only fixed VShell wrappers for Fedora desktop entries."""
+
+import hashlib
+import json
+import os
+import pwd
+import stat
+import sys
+import tempfile
+import unicodedata
+from pathlib import Path
+
+
+APPLICATIONS_DIR = Path("/usr/local/share/applications")
+MARKER = "X-CubeLinux-VShell-HostLauncher=true"
+PREFIX = "org.cubelinux.VShell.Fedora"
+MAX_INPUT_BYTES = 1_048_576
+MAX_LAUNCHERS = 2048
+MAX_DESKTOP_BYTES = 1_048_576
+
+
+class SyncError(Exception):
+    pass
+
+
+def _secure_applications_dir() -> None:
+    for directory in (Path("/usr/local"), Path("/usr/local/share"), APPLICATIONS_DIR):
+        if directory.is_symlink():
+            raise SyncError(f"Refusing to use a symlink at {directory}.")
+        directory.mkdir(mode=0o755, exist_ok=True)
+        info = directory.stat(follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise SyncError(f"The application directory is not safely owned: {directory}.")
+
+
+def _rootfs_path(value, user) -> Path:
+    if not isinstance(value, str) or not value or len(value) > 4096:
+        raise SyncError("The Fedora root filesystem path is invalid.")
+    given = Path(value)
+    if not given.is_absolute():
+        raise SyncError("The Fedora root filesystem path must be absolute.")
+    try:
+        rootfs = given.resolve(strict=True)
+        rootfs.relative_to(Path(user.pw_dir).resolve(strict=True))
+    except (OSError, ValueError) as error:
+        raise SyncError("The Fedora root filesystem must be inside your home folder.") from error
+    if not rootfs.is_dir() or tuple(rootfs.parts[-4:]) != ("vshell", "containers", "vshell", "rootfs"):
+        raise SyncError("The Fedora root filesystem is not in the VShell container location.")
+    return rootfs
+
+
+def _relative_desktop_path(value) -> str:
+    if not isinstance(value, str) or not value or len(value) > 4096:
+        raise SyncError("A Fedora application path is invalid.")
+    if value.startswith("/") or "\\" in value or any(part in ("", ".", "..") for part in value.split("/")):
+        raise SyncError("A Fedora application path must stay inside its application directory.")
+    if not value.endswith(".desktop") or not value.startswith((
+        "usr/share/applications/", "usr/local/share/applications/"
+    )):
+        raise SyncError("Only Fedora application desktop entries can be published.")
+    return value
+
+
+def _desktop_values(source: Path) -> dict[str, str]:
+    try:
+        if source.stat().st_size > MAX_DESKTOP_BYTES:
+            return {}
+        lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return {}
+    values = {}
+    in_entry = False
+    for line in lines:
+        line = line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            in_entry = line == "[Desktop Entry]"
+        elif in_entry and "=" in line and not line.startswith("#"):
+            key, value = line.split("=", 1)
+            values[key] = value
+    return values
+
+
+def _safe_name(value: str) -> str:
+    if not isinstance(value, str):
+        raise SyncError("A Fedora application has an invalid display name.")
+    value = value.strip()
+    if not value or len(value) > 256 or any(unicodedata.category(char) == "Cc" for char in value):
+        raise SyncError("A Fedora application has an invalid display name.")
+    return value
+
+
+def _desktop_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n")
+
+
+def _exec_path(value: str) -> str:
+    # A quoted Desktop Entry argument needs these characters escaped. Percent
+    # escapes are doubled so filenames cannot introduce field codes.
+    escaped = (value.replace("\\", "\\\\").replace('"', '\\"')
+               .replace("$", "\\$").replace("`", "\\`").replace("%", "%%"))
+    return escaped
+
+
+def _launcher_contents(uid: int, rootfs: Path, entry: dict) -> tuple[str, str] | None:
+    if not isinstance(entry, dict) or set(entry) != {"path", "has_icon", "name"}:
+        raise SyncError("The launcher request has an invalid entry.")
+    if not isinstance(entry["has_icon"], bool):
+        raise SyncError("The launcher icon flag is invalid.")
+    relative = _relative_desktop_path(entry["path"])
+    candidate = rootfs.joinpath(*relative.split("/"))
+    try:
+        source = candidate.resolve(strict=True)
+        source.relative_to(rootfs)
+        if not source.is_file():
+            return None
+    except (OSError, ValueError):
+        return None
+
+    values = _desktop_values(source)
+    if (values.get("Type") != "Application" or not values.get("Exec")
+            or values.get("Hidden", "false").lower() == "true"
+            or values.get("NoDisplay", "false").lower() == "true"):
+        return None
+    try:
+        name = _safe_name(entry["name"])
+    except SyncError:
+        return None
+
+    app_id = hashlib.sha256(relative.encode()).hexdigest()[:20]
+    filename = f"{PREFIX}.{uid}.{app_id}.desktop"
+    icon = f"cubelinux-vshell-fedora-{app_id}" if entry["has_icon"] else "applications-other"
+    contents = "\n".join((
+        "[Desktop Entry]",
+        "Type=Application",
+        f"Name={_desktop_escape(name)} (Fedora)",
+        f'Exec=/usr/bin/cubelinux-vshell launch-app "{_exec_path(relative)}" %U',
+        f"Icon={icon}",
+        "Terminal=false",
+        "DBusActivatable=false",
+        MARKER,
+        f"X-CubeLinux-VShell-OwnerUID={uid}",
+        "",
+    ))
+    return filename, contents
+
+
+def _write_launcher(filename: str, contents: str) -> None:
+    destination = APPLICATIONS_DIR / filename
+    descriptor, temporary = tempfile.mkstemp(prefix=".cubelinux-vshell-", dir=APPLICATIONS_DIR)
+    try:
+        os.fchown(descriptor, 0, 0)
+        os.fchmod(descriptor, 0o644)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(contents)
+        os.replace(temporary, destination)
+    except Exception:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def _remove_stale_launchers(uid: int, live: set[str]) -> None:
+    pattern = f"{PREFIX}.{uid}.*.desktop"
+    for path in APPLICATIONS_DIR.glob(pattern):
+        if path.name in live:
+            continue
+        try:
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != 0:
+                continue
+            if MARKER in path.read_text(encoding="utf-8", errors="replace"):
+                path.unlink()
+        except OSError:
+            continue
+
+
+def main() -> int:
+    if os.geteuid() != 0:
+        raise SyncError("This helper must be started through Polkit.")
+    if sys.argv[1:]:
+        raise SyncError("This helper does not accept command-line arguments.")
+    try:
+        uid = int(os.environ["PKEXEC_UID"])
+        user = pwd.getpwuid(uid)
+    except (KeyError, ValueError) as error:
+        raise SyncError("Polkit did not provide a valid requesting user.") from error
+    if uid == 0:
+        raise SyncError("Run VShell from a normal desktop account.")
+
+    raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
+    if len(raw) > MAX_INPUT_BYTES:
+        raise SyncError("The launcher request is too large.")
+    try:
+        request = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise SyncError("The launcher request is not valid JSON.") from error
+    if not isinstance(request, dict) or set(request) != {"rootfs", "launchers"}:
+        raise SyncError("The launcher request has an invalid format.")
+    launchers = request["launchers"]
+    if not isinstance(launchers, list) or len(launchers) > MAX_LAUNCHERS:
+        raise SyncError("The launcher request contains too many entries.")
+    rootfs = _rootfs_path(request["rootfs"], user) if launchers else None
+
+    _secure_applications_dir()
+    live = set()
+    for entry in launchers:
+        rendered = _launcher_contents(uid, rootfs, entry)
+        if rendered is None:
+            continue
+        filename, contents = rendered
+        _write_launcher(filename, contents)
+        live.add(filename)
+    _remove_stale_launchers(uid, live)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except SyncError as error:
+        print(f"VShell launcher sync failed: {error}", file=sys.stderr)
+        raise SystemExit(1)

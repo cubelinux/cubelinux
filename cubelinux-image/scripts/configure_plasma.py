@@ -86,11 +86,14 @@ def set_breeze_default() -> None:
 
 
 def set_kiosk_restrictions() -> None:
+    # The cubelinux KIO build allows only trusted system application entries
+    # through this restriction; user-created desktop files remain blocked.
     restrictions = (
         "shell_access",
         "run_command",
         "action/run_command",
         "run_desktop_files",
+        "run_executables",
         "plasma-desktop/scripting_console",
         "plasma/plasmashell/unlockedDesktop",
         "plasma/containment_actions",

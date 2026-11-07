@@ -46,7 +46,8 @@ cubelinux/
 |-- cubelinux-image/
 |   |-- bootc/kargs.d/                 # Shared bootc kernel arguments
 |   |-- config/                        # Base image, packages, Plasma defaults
-|   |-- scripts/                       # Prepare and verify image contents
+|   |-- patches/                       # Downstream patches for image packages
+|   |-- scripts/                       # Prepare, build, and verify image contents
 |   |-- tests/                         # Image-builder unit tests
 |   |-- Containerfile
 |   `-- README.md
@@ -73,7 +74,10 @@ cubelinux/
   Keep each app's code and local assets in its own top-level folder.
 - **`cubelinux-image/Containerfile`** contains shared image build operations.
   Do not add component-specific `COPY` statements or package lists here;
-  declare those in the component manifest.
+  declare those in the component manifest. It builds the installed KF6 KIO
+  subpackages from the matching Fedora source RPM with the cubelinux kiosk
+  launch policy patch in an intermediate stage, then installs those patched
+  RPMs into the image.
 - **`cubelinux-image/scripts/prepare_image.py`** validates configuration and
   manifests and creates `.image-build/`. That directory is generated and ignored
   by Git; do not edit or commit it.
@@ -82,7 +86,11 @@ cubelinux/
   `cubelinux-image/config/image.toml`.
 - **`cubelinux-image/scripts/configure_plasma.py`** merges checked-in KDE
   defaults into the image during the build and applies the experimental Kiosk
-  restrictions while preserving Fedora's other profile settings.
+  restrictions while preserving Fedora's other profile settings. The image's
+  KF6 KIO patch permits root-owned desktop entries from system application
+  directories while `run_desktop_files` is disabled, so user-created launchers
+  remain blocked. It also blocks launching executable binaries such as AppImages
+  and executable scripts through KIO's file-opening path.
 - **`cubelinux-image/bootc/` and `cubelinux-image/config/`** hold settings
   shared by the base system and desktop, not files owned by one app.
 

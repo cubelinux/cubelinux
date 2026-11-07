@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 ARG BASE_IMAGE=quay.io/fedora/fedora-bootc:44
-FROM ${BASE_IMAGE}
+FROM ${BASE_IMAGE} AS packages
 
 ARG PACKAGES
 
@@ -14,6 +14,21 @@ RUN dnf -y install \
         --exclude=PackageKit \
         ${PACKAGES} && \
     dnf clean all
+
+FROM packages AS kio-build
+
+COPY patches/kf6-kio-kiosk-launch-policy.patch /tmp/kf6-kio-kiosk-launch-policy.patch
+COPY scripts/build_patched_kio.py /tmp/build_patched_kio.py
+RUN python3 /tmp/build_patched_kio.py \
+        /tmp/kf6-kio-kiosk-launch-policy.patch \
+        /tmp/patched-kio-rpms && \
+    rm -f /tmp/build_patched_kio.py /tmp/kf6-kio-kiosk-launch-policy.patch
+
+FROM packages AS final
+
+COPY --from=kio-build /tmp/patched-kio-rpms/ /tmp/patched-kio-rpms/
+RUN rpm -Uvh /tmp/patched-kio-rpms/*.rpm && \
+    rm -rf /tmp/patched-kio-rpms
 
 COPY .image-build/distro.json /tmp/distro.json
 COPY scripts/configure_distro.py /tmp/configure_distro.py

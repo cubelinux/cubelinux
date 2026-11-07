@@ -52,11 +52,16 @@ settings.
 
 Install graphical applications inside Fedora with DNF. VShell discovers their
 system desktop entries and adds matching launchers to the host application menu
-with “(Fedora)” in the name. The KDE session watcher refreshes those entries
-after packages are installed or removed, and each launcher starts the app inside
-the Fedora container with the host display/audio sockets and session environment.
-For example, install `vlc`; the Fedora launcher will appear in the host menu.
-Terminal-launched programs continue to work as before.
+with “(Fedora)” in the name. A narrowly scoped Polkit helper publishes
+root-owned wrapper entries in `/usr/local/share/applications`, so KDE Kiosk can
+keep user-created application entries out of Kickoff while these VShell entries
+remain available. The helper creates a fixed `cubelinux-vshell launch-app`
+command for each validated Fedora desktop-entry path; it never copies the guest
+entry's `Exec` command onto the host. The KDE session watcher refreshes those
+entries after packages are installed or removed, and each launcher starts the
+app inside the Fedora container with the host display/audio sockets and session
+environment. For example, install `vlc`; the Fedora launcher will appear in the
+host menu. Terminal-launched programs continue to work as before.
 
 While the KDE desktop session is running, its VShell watcher discovers Fedora
 TCP services listening on the container network interface at ports 1024 and

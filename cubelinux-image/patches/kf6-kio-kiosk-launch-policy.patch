@@ -1,0 +1,112 @@
+diff --git a/src/gui/kioskdesktopfile_p.h b/src/gui/kioskdesktopfile_p.h
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/src/gui/kioskdesktopfile_p.h
+@@ -0,0 +1,55 @@
++#pragma once
++
++#include <QDir>
++#include <QFile>
++#include <QFileInfo>
++#include <QStandardPaths>
++#include <QString>
++
++namespace KIO
++{
++namespace detail
++{
++inline bool isTrustedSystemApplicationEntry(const QString &path)
++{
++    const QString realPath = QFileInfo(path).canonicalFilePath();
++    if (realPath.isEmpty() || QFileInfo(realPath).suffix() != QStringLiteral("desktop")) {
++        return false;
++    }
++
++    bool inSystemApplicationsDirectory = false;
++    for (const QString &location : QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation)) {
++        const QString realLocation = QFileInfo(location).canonicalFilePath();
++        if (!realLocation.isEmpty() && realPath.startsWith(realLocation + QDir::separator())) {
++            inSystemApplicationsDirectory = true;
++            break;
++        }
++    }
++    if (!inSystemApplicationsDirectory) {
++        return false;
++    }
++
++    const QFile::Permissions writableByOthers = QFile::WriteGroup | QFile::WriteOther;
++    const QFileInfo entryInfo(realPath);
++    if (!entryInfo.isFile() || entryInfo.ownerId() != 0
++        || (entryInfo.permissions() & writableByOthers) != QFile::Permissions{}) {
++        return false;
++    }
++
++    QString directory = entryInfo.absolutePath();
++    while (true) {
++        const QFileInfo directoryInfo(directory);
++        if (!directoryInfo.isDir() || directoryInfo.ownerId() != 0
++            || (directoryInfo.permissions() & writableByOthers) != QFile::Permissions{}) {
++            return false;
++        }
++        const QString parent = QDir::cleanPath(QDir(directory).absoluteFilePath(QStringLiteral("..")));
++        if (parent == directory) {
++            break;
++        }
++        directory = parent;
++    }
++    return true;
++}
++}
++}
+diff --git a/src/gui/applicationlauncherjob.cpp b/src/gui/applicationlauncherjob.cpp
+index 0000000..1111111 100644
+--- a/src/gui/applicationlauncherjob.cpp
++++ b/src/gui/applicationlauncherjob.cpp
+@@ -357,3 +357,4 @@
+ #include "applicationlauncherjob.h"
++#include "kioskdesktopfile_p.h"
+ #include "../core/global.h"
+ #include "jobuidelegatefactory.h"
+@@ -485,7 +486,9 @@ void KIO::ApplicationLauncherJob::start()
+         // First, the security checks
+-        if (!KAuthorized::authorize(QStringLiteral("run_desktop_files"))) {
++        const bool trustedSystemEntry = KIO::detail::isTrustedSystemApplicationEntry(d->m_serviceEntryPath);
++        if (!KAuthorized::authorize(QStringLiteral("run_desktop_files")) && !trustedSystemEntry) {
+             // KIOSK restriction, cannot be circumvented
+             emitUnauthorizedError();
+             return;
+         }
+-        if (!d->m_serviceEntryPath.isEmpty() && !KDesktopFile::isAuthorizedDesktopFile(d->m_serviceEntryPath)) {
++        if (!d->m_serviceEntryPath.isEmpty() && !trustedSystemEntry
++            && !KDesktopFile::isAuthorizedDesktopFile(d->m_serviceEntryPath)) {
+diff --git a/src/gui/kprocessrunner.cpp b/src/gui/kprocessrunner.cpp
+index 0000000..1111111 100644
+--- a/src/gui/kprocessrunner.cpp
++++ b/src/gui/kprocessrunner.cpp
+@@ -1245,2 +1245,3 @@
+ #include "kprocessrunner_p.h"
++#include "kioskdesktopfile_p.h"
+ #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+@@ -1654,3 +1655,5 @@ void KProcessRunner::init(const KService::Ptr &service, const QString &serviceEntryPath, const QString &userVisibleName, const QByteArray &asn)
+     m_serviceEntryPath = serviceEntryPath;
+-    if (service && !serviceEntryPath.isEmpty() && !KDesktopFile::isAuthorizedDesktopFile(serviceEntryPath)) {
++    if (service && !serviceEntryPath.isEmpty()
++        && !KIO::detail::isTrustedSystemApplicationEntry(serviceEntryPath)
++        && !KDesktopFile::isAuthorizedDesktopFile(serviceEntryPath)) {
+        qCWarning(KIO_GUI) << "No authorization to execute" << serviceEntryPath;
+diff --git a/src/gui/openurljob.cpp b/src/gui/openurljob.cpp
+index 0000000..1111111 100644
+--- a/src/gui/openurljob.cpp
++++ b/src/gui/openurljob.cpp
+@@ -2560,4 +2560,10 @@ void KIO::OpenUrlJobPrivate::runUrlWithMimeType()
+     if (q->error() == KJob::KilledJobError) {
+         q->emitResult();
+         return;
+     }
++    if (KIO::OpenUrlJob::isExecutableFile(m_url, m_mimeTypeName)
++        && !KAuthorized::authorize(QStringLiteral("run_executables"))) {
++        emitAccessDenied();
++        return;
++    }
++

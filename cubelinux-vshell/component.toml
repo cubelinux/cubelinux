@@ -23,6 +23,11 @@ destination = "/usr/libexec/cubelinux-vshell-host-setup"
 mode = "0755"
 
 [[files]]
+source = "bin/cubelinux-vshell-launcher-sync"
+destination = "/usr/libexec/cubelinux-vshell-launcher-sync"
+mode = "0755"
+
+[[files]]
 source = "bin/cubelinux-vshell-useradd-hook"
 destination = "/etc/shadow-maint/useradd-post.d/80-cubelinux-vshell"
 mode = "0755"
@@ -62,3 +67,7 @@ destination = "/usr/lib/firewalld/policies/vshell-egress.xml"
 [[files]]
 source = "data/org.cubelinux.VShell.LxcSetup.policy"
 destination = "/usr/share/polkit-1/actions/org.cubelinux.VShell.LxcSetup.policy"
+
+[[files]]
+source = "data/org.cubelinux.VShell.LauncherSync.policy"
+destination = "/usr/share/polkit-1/actions/org.cubelinux.VShell.LauncherSync.policy"
