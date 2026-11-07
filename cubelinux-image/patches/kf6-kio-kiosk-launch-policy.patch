@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000..1111111
 --- /dev/null
 +++ b/src/gui/kioskdesktopfile_p.h
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,58 @@
 +#pragma once
 +
 +#include <QDir>
@@ -48,6 +48,9 @@ index 0000000..1111111
 +        if (!directoryInfo.isDir() || directoryInfo.ownerId() != 0
 +            || (directoryInfo.permissions() & writableByOthers) != QFile::Permissions{}) {
 +            return false;
++        }
++        if (directory == QDir::rootPath()) {
++            break;
 +        }
 +        const QString parent = QDir::cleanPath(QDir(directory).absoluteFilePath(QStringLiteral("..")));
 +        if (parent == directory) {
