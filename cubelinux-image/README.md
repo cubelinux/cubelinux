@@ -67,8 +67,9 @@ cubelinux/
 - **`cubelinux-updater/component.toml`** and
   **`cubelinux-vshell/component.toml`** describe each app's image contribution:
   packages it needs, systemd services to enable, and files to install with
-  their source path, destination, and mode. Keep each app's code and assets in
-  its own top-level folder.
+  their source path, destination, and mode. Components can also declare
+  HTTPS downloads for assets that should only enter the image during builds.
+  Keep each app's code and local assets in its own top-level folder.
 - **`cubelinux-image/Containerfile`** contains shared image build operations.
   Do not add component-specific `COPY` statements or package lists here;
   declare those in the component manifest.

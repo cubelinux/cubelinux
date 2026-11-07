@@ -9,7 +9,9 @@ import re
 import shutil
 import sys
 import tomllib
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path, PurePosixPath
+from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,6 +20,7 @@ OUTPUT = ROOT / ".image-build"
 PACKAGE_RE = re.compile(r"[A-Za-z0-9_.+-]+\Z")
 COMPONENT_RE = re.compile(r"[a-z][a-z0-9-]*\Z")
 SERVICE_RE = re.compile(r"[A-Za-z0-9_.@:-]+\Z")
+MAX_COMPONENT_DOWNLOAD_SIZE = 5_000_000
 
 
 def fail(message: str) -> None:
@@ -86,6 +89,19 @@ def copy_entry(
         fail(f"{component_id}: source must be a file or directory")
 
 
+def reserve_destination(
+    destination: PurePosixPath, component_id: str, targets: set[str]
+) -> str:
+    target_text = destination.as_posix()
+    if target_text in targets or any(
+        target_text.startswith(f"{previous}/") or previous.startswith(f"{target_text}/")
+        for previous in targets
+    ):
+        fail(f"component files overlap at {target_text}")
+    targets.add(target_text)
+    return target_text
+
+
 def copy_file(
     source: Path,
     destination: PurePosixPath,
@@ -94,17 +110,49 @@ def copy_file(
     targets: set[str],
     output_dir: Path = OUTPUT,
 ) -> None:
-    target_text = destination.as_posix()
-    if target_text in targets or any(
-        target_text.startswith(f"{previous}/") or previous.startswith(f"{target_text}/")
-        for previous in targets
-    ):
-        fail(f"component files overlap at {target_text}")
-    targets.add(target_text)
+    target_text = reserve_destination(destination, component_id, targets)
     target = output_dir / "rootfs" / target_text.lstrip("/")
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, target)
     target.chmod(mode)
+
+
+def download_entry(
+    entry: object,
+    component_id: str,
+    targets: set[str],
+    output_dir: Path = OUTPUT,
+) -> None:
+    if not isinstance(entry, dict):
+        fail(f"{component_id}: each downloads entry must be a table")
+    url = entry.get("url")
+    if not isinstance(url, str) or not url.startswith("https://"):
+        fail(f"{component_id}: download URL must use HTTPS")
+
+    destination = safe_destination(entry.get("destination"), component_id)
+    target_text = reserve_destination(destination, component_id, targets)
+    mode_value = entry.get("mode", "0644")
+    if not isinstance(mode_value, str) or not re.fullmatch(r"0[0-7]{3}", mode_value):
+        fail(f"{component_id}: download mode must be a four-digit octal string")
+
+    request = Request(url, headers={"User-Agent": "cubelinux-image-builder"})
+    with urlopen(request, timeout=30) as response:
+        data = response.read(MAX_COMPONENT_DOWNLOAD_SIZE + 1)
+    if len(data) > MAX_COMPONENT_DOWNLOAD_SIZE:
+        fail(f"{component_id}: downloaded component asset is too large")
+
+    if destination.suffix.lower() == ".svg":
+        try:
+            root = ElementTree.fromstring(data)
+        except ElementTree.ParseError as error:
+            fail(f"{component_id}: downloaded SVG is invalid: {error}")
+        if root.tag.rsplit("}", 1)[-1] != "svg":
+            fail(f"{component_id}: downloaded asset is not an SVG")
+
+    target = output_dir / "rootfs" / target_text.lstrip("/")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    target.chmod(int(mode_value, 8))
 
 
 def local_component_path(component_id: str, value: object, component_base: Path) -> Path:
@@ -167,6 +215,12 @@ def stage_components(
             fail(f"{component_id}.files must be an array of tables")
         for entry in files:
             copy_entry(checkout, entry, component_id, targets, output_dir)
+
+        downloads = manifest.get("downloads", [])
+        if not isinstance(downloads, list):
+            fail(f"{component_id}.downloads must be an array of tables")
+        for entry in downloads:
+            download_entry(entry, component_id, targets, output_dir)
 
     return packages, services
 
