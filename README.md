@@ -9,7 +9,23 @@
 [![Build and publish bootc image](https://github.com/cubelinux/cubelinux/actions/workflows/image-and-release.yml/badge.svg)](https://github.com/cubelinux/cubelinux/actions/workflows/image-and-release.yml)
 
 > [!WARNING]
-> **Experimental software disclaimer:** cubelinux is pre-release software and is provided for evaluation and development. Components may be incomplete, unstable, or insufficiently validated. System behavior, image formats, update mechanisms, and configuration interfaces may change without backward compatibility. Failures may result in system unavailability or data loss. Deploy only in environments where you can recover or reinstall the system, maintain independent backups, and accept these risks. Use is at your own risk; the software is not suitable for production or safety-critical workloads.
+>
+> **Experimental project.** cubelinux is a study project and case study in
+> AI-assisted (“vibe-coded”) operating-system development. It is intended for
+> learning and evaluation, not production. AI-assisted changes may be
+> incomplete or incorrect.
+>
+> **No warranty.** The project is made available in the hope that it will be
+> useful, but is provided “as is,” without warranties of any kind, express or
+> implied, including merchantability or fitness for a particular purpose. See
+> [LICENSE](LICENSE) for the full terms.
+>
+> **Operational risks.** Components may be incomplete, unstable, or
+> insufficiently validated. System behavior, image formats, update mechanisms,
+> and configuration interfaces may change without backward compatibility.
+> Failures may make the system unavailable or cause data loss. Use only where
+> you can recover or reinstall the system and keep independent backups.
+> cubelinux is not suitable for production or safety-critical workloads.
 
 ## About cubelinux
 
@@ -22,6 +38,26 @@ updates. When an update is ready, restart to complete the installation.
 
 Virtual Shell provides a separate Fedora environment for running command-line
 tools and graphical applications.
+
+## Published system image
+
+The bootc system image is published to GitHub Container Registry as
+[`ghcr.io/cubelinux/cubelinux`](https://github.com/cubelinux/cubelinux/pkgs/container/cubelinux).
+Pull the moving `latest` tag with:
+
+```sh
+podman pull ghcr.io/cubelinux/cubelinux:latest
+```
+
+The image workflow publishes these tags:
+
+- `:latest` is updated on every successful image workflow run, including builds
+  from any branch or tag, so it may contain experimental changes.
+- Branch or Git ref tags, such as `:main`.
+- Full and short commit tags, such as `:sha-<full-commit>` and
+  `:sha-<short-commit>`.
+- A semantic version tag such as `v1.2.3` publishes `:v1.2.3` plus `:1.2.3`,
+  `:1.2`, and `:1`.
 
 ## Monorepo layout
 
