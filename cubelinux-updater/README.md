@@ -32,16 +32,16 @@ names and visual assets; do not imply that the app is an official KDE product.
 The updater starts in the background with the KDE session. After the desktop
 has settled, it checks for updates and repeats the check daily. It also checks
 after each login. The check only fetches image metadata. When an update is
-available, the updater downloads and stages it automatically on a connection
-that NetworkManager identifies as unmetered. On a metered or unknown
-connection, it waits and shows the update in the Updater app; selecting
-**Download update** starts the download immediately. A failed download leaves
-the current system running and can be retried from the app.
+available, the tray icon stays visible and a desktop notification lets you
+know. The updater downloads and stages it automatically on a connection that
+NetworkManager identifies as unmetered. On a metered or unknown connection, it
+waits and shows the update in the Updater app; selecting **Download update**
+starts the download immediately. A failed download leaves the current system
+running and can be retried from the app.
 
-When staging finishes, a desktop notification and a system-tray update
-indicator offer a way to open Updater. The tray indicator is hidden
-when no update needs attention. Select **Restart now** in Updater and confirm
-to boot into the staged image; the updater never restarts the PC by itself.
+When background staging finishes, a desktop notification appears and the tray
+indicator stays visible until you restart. Select **Restart now** in Updater
+and confirm to boot into the staged image; the updater never restarts the PC by itself.
 It verifies the current image on the next login. The app shows plain-language
 progress and errors, a download percentage when bootc reports byte totals, and
 image version and build-date details when available. The release-notes link

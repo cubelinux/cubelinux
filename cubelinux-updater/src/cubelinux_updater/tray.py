@@ -145,11 +145,9 @@ def configure_tray(app, update_controller, show_window, status_notifier_item):
             "error": "dialog-error",
         }.get(state, "system-software-update")
         tray.setIconByName(icon_name)
-        tray.setStatus(
-            KStatusNotifierItem.ItemStatus.NeedsAttention
-            if state in ("available", "staged", "error")
-            else KStatusNotifierItem.ItemStatus.Active
-        )
+        # Keep actionable update states continuously reachable. Idle and
+        # background checks remain Passive so the shell can hide the item.
+        tray.setStatus(KStatusNotifierItem.ItemStatus.Active)
         tooltip = {
             "available": "Updater: update available",
             "staged": "Updater: restart to finish installing the update",

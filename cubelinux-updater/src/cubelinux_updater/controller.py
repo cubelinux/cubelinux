@@ -53,7 +53,6 @@ class UpdateController(QObject):
         self._tray_state = "idle"
         self._settings = QSettings()
         self._automatic_operation = False
-        self._auto_download_announce = False
         self._process = QProcess(self)
         self._process.readyReadStandardOutput.connect(self._read_process_output)
         self._process.readyReadStandardError.connect(self._read_process_error)
@@ -438,19 +437,10 @@ class UpdateController(QObject):
                 "An update is available. Automatic download is paused until an unmetered connection is available."
             )
             self._set_tray_state("available")
-            if self._auto_download_announce:
-                self._notify_update_once_per_day(
-                    "System update available",
-                    "Automatic download is paused on this connection. Open Updater to download it now or wait for an unmetered connection.",
-                    "available",
-                    10000,
-                )
-                self._auto_download_announce = False
             self._auto_download_timer.start()
             return
 
         self._auto_download_timer.stop()
-        self._auto_download_announce = False
         if not self._start_command(
             "stage",
             ["download"],
@@ -620,7 +610,12 @@ class UpdateController(QObject):
                 self._set_tray_state("available")
                 self._set_status_text("A system update is available. Preparing its download...")
                 self._complete_check(True, automatic)
-                self._auto_download_announce = automatic
+                self._notify_update_once_per_day(
+                    "System update available",
+                    "An update is ready. Open Updater to review its status or download it.",
+                    "available",
+                    10000,
+                )
                 QTimer.singleShot(0, self._try_automatic_download)
             elif "Staged update present, not changed" in check_output:
                 installed_version, _ = self._status_image_details(status_output)
