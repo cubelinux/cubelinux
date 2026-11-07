@@ -63,33 +63,27 @@ diff --git a/src/gui/applicationlauncherjob.cpp b/src/gui/applicationlauncherjob
 index 0000000..1111111 100644
 --- a/src/gui/applicationlauncherjob.cpp
 +++ b/src/gui/applicationlauncherjob.cpp
-@@ -357,3 +357,4 @@
+@@ -8,3 +8,4 @@
  #include "applicationlauncherjob.h"
 +#include "kioskdesktopfile_p.h"
  #include "../core/global.h"
  #include "jobuidelegatefactory.h"
-@@ -485,7 +486,9 @@ void KIO::ApplicationLauncherJob::start()
-         // First, the security checks
--        if (!KAuthorized::authorize(QStringLiteral("run_desktop_files"))) {
-+        const bool trustedSystemEntry = KIO::detail::isTrustedSystemApplicationEntry(d->m_serviceEntryPath);
-+        if (!KAuthorized::authorize(QStringLiteral("run_desktop_files")) && !trustedSystemEntry) {
-             // KIOSK restriction, cannot be circumvented
-             emitUnauthorizedError();
-             return;
-         }
--        if (!d->m_serviceEntryPath.isEmpty() && !KDesktopFile::isAuthorizedDesktopFile(d->m_serviceEntryPath)) {
-+        if (!d->m_serviceEntryPath.isEmpty() && !trustedSystemEntry
-+            && !KDesktopFile::isAuthorizedDesktopFile(d->m_serviceEntryPath)) {
+@@ -135,1 +135,2 @@ void KIO::ApplicationLauncherJob::start()
+-    if (!KAuthorized::authorize(QStringLiteral("run_desktop_files"))) {
++    const bool trustedSystemEntry = KIO::detail::isTrustedSystemApplicationEntry(d->m_serviceEntryPath);
++    if (!KAuthorized::authorize(QStringLiteral("run_desktop_files")) && !trustedSystemEntry) {
+@@ -140,1 +141,2 @@ void KIO::ApplicationLauncherJob::start()
+-    if (!d->m_serviceEntryPath.isEmpty() && !KDesktopFile::isAuthorizedDesktopFile(d->m_serviceEntryPath)) {
++    if (!d->m_serviceEntryPath.isEmpty() && !trustedSystemEntry
++        && !KDesktopFile::isAuthorizedDesktopFile(d->m_serviceEntryPath)) {
 diff --git a/src/gui/kprocessrunner.cpp b/src/gui/kprocessrunner.cpp
 index 0000000..1111111 100644
 --- a/src/gui/kprocessrunner.cpp
 +++ b/src/gui/kprocessrunner.cpp
-@@ -1245,2 +1245,3 @@
+@@ -8,1 +8,2 @@
  #include "kprocessrunner_p.h"
 +#include "kioskdesktopfile_p.h"
- #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
-@@ -1654,3 +1655,5 @@ void KProcessRunner::init(const KService::Ptr &service, const QString &serviceEntryPath, const QString &userVisibleName, const QByteArray &asn)
-     m_serviceEntryPath = serviceEntryPath;
+@@ -235,1 +236,3 @@ void KProcessRunner::init(const KService::Ptr &service, const QString &serviceEntryPath, const QString &userVisibleName, const QByteArray &asn)
 -    if (service && !serviceEntryPath.isEmpty() && !KDesktopFile::isAuthorizedDesktopFile(serviceEntryPath)) {
 +    if (service && !serviceEntryPath.isEmpty()
 +        && !KIO::detail::isTrustedSystemApplicationEntry(serviceEntryPath)
@@ -99,14 +93,12 @@ diff --git a/src/gui/openurljob.cpp b/src/gui/openurljob.cpp
 index 0000000..1111111 100644
 --- a/src/gui/openurljob.cpp
 +++ b/src/gui/openurljob.cpp
-@@ -2560,4 +2560,10 @@ void KIO::OpenUrlJobPrivate::runUrlWithMimeType()
-     if (q->error() == KJob::KilledJobError) {
-         q->emitResult();
-         return;
-     }
+@@ -480,1 +480,7 @@ void KIO::OpenUrlJobPrivate::runUrlWithMimeType()
+-    // Support for preferred service setting, see setPreferredService
 +    if (KIO::OpenUrlJob::isExecutableFile(m_url, m_mimeTypeName)
 +        && !KAuthorized::authorize(QStringLiteral("run_executables"))) {
 +        emitAccessDenied();
 +        return;
 +    }
 +
++    // Support for preferred service setting, see setPreferredService
