@@ -31,7 +31,14 @@
 
 cubelinux brings a complete desktop experience together in one operating
 system. It starts with a first boot setup to create your user, then opens into
-the KDE Plasma desktop with familiar tools like Dolphin.
+the restricted KDE Plasma desktop.
+
+This kiosk study removes Flatpak, KDE Discover, and Dolphin from the host
+image. KDE Kiosk blocks shell and Run Command entry points, locks desktop
+customization, and restricts user-defined application launchers and autostart
+entries while keeping system-provided application entries available. These
+restrictions control the desktop interface; they do not confine commands run
+by an allowed application.
 
 The system includes an updater for checking and downloading cubelinux image
 updates. When an update is ready, restart to complete the installation.

@@ -12,17 +12,17 @@
 
 cubelinux brings a complete desktop experience together in one operating
 system. It starts with a first boot setup to create your user, then opens into
-the KDE Plasma desktop with familiar tools like Dolphin.
+the restricted KDE Plasma desktop.
 
 The system includes an updater for checking and downloading cubelinux image
 updates. When an update is ready, restart to complete the installation.
 
-Flatpak is installed for desktop applications. KDE Discover is configured to
-use its Flatpak backend, with Flathub available as a system-wide remote. The
-image masks Fedora's first-boot Flatpak remote setup and disables any existing
-Fedora Flatpak remotes during the first boot after this change. System RPM
-updates remain part of the cubelinux image update flow. Discover's notifier is
-included to notify about Flatpak updates.
+This kiosk experiment removes Flatpak, KDE Discover, and Dolphin from the host
+image. KDE Kiosk restricts shell and Run Command entry points, locks desktop
+customization, and blocks user-defined application launchers and autostart
+entries while keeping system-provided application entries available. These
+are exploratory desktop restrictions, not an operating-system security
+boundary. VShell remains unchanged in this build.
 
 Virtual Shell provides a separate Fedora environment for running command-line
 tools. It is under active development while its unprivileged container setup
@@ -80,11 +80,8 @@ cubelinux/
   operating-system identity and logo. Keep distro branding values in
   `cubelinux-image/config/image.toml`.
 - **`cubelinux-image/scripts/configure_plasma.py`** merges checked-in KDE
-  defaults into the image during the build, preserving Fedora's other profile
-  settings.
-- **`cubelinux-image/scripts/configure_software_center.py`** downloads and
-  validates Flathub's signed remote descriptor, installs it as a system-wide
-  Flatpak remote, and routes Discover launchers through Flatpak-only mode.
+  defaults into the image during the build and applies the experimental Kiosk
+  restrictions while preserving Fedora's other profile settings.
 - **`cubelinux-image/bootc/` and `cubelinux-image/config/`** hold settings
   shared by the base system and desktop, not files owned by one app.
 
