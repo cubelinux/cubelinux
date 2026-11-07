@@ -83,7 +83,7 @@ index 0000000..1111111 100644
 @@ -8,1 +8,2 @@
  #include "kprocessrunner_p.h"
 +#include "kioskdesktopfile_p.h"
-@@ -235,1 +236,3 @@ void KProcessRunner::init(const KService::Ptr &service, const QString &serviceEntryPath, const QString &userVisibleName, const QByteArray &asn)
+@@ -235,2 +236,4 @@ void KProcessRunner::init(const KService::Ptr &service, const QString &serviceEntryPath, const QString &userVisibleName, const QByteArray &asn)
 -    if (service && !serviceEntryPath.isEmpty() && !KDesktopFile::isAuthorizedDesktopFile(serviceEntryPath)) {
 +    if (service && !serviceEntryPath.isEmpty()
 +        && !KIO::detail::isTrustedSystemApplicationEntry(serviceEntryPath)
