@@ -1,5 +1,5 @@
 id = "vshell"
-packages = ["dnsmasq", "lxc", "lxc-templates", "qt6-qtsvg", "shadow-utils", "xdg-terminal-exec"]
+packages = ["dnsmasq", "konsole", "lxc", "lxc-templates", "qt6-qtsvg", "shadow-utils"]
 services = ["lxc-net.service"]
 
 [[files]]
@@ -32,8 +32,20 @@ source = "data/org.cubelinux.VShell.desktop"
 destination = "/usr/share/applications/org.cubelinux.VShell.desktop"
 
 [[files]]
+source = "data/org.cubelinux.VShellTerminal.desktop"
+destination = "/usr/share/applications/org.cubelinux.VShellTerminal.desktop"
+
+[[files]]
 source = "data/org.cubelinux.VShellAppDiscovery.desktop"
 destination = "/etc/xdg/autostart/org.cubelinux.VShellAppDiscovery.desktop"
+
+[[files]]
+source = "data/VShell.profile"
+destination = "/usr/share/konsole/VShell.profile"
+
+[[files]]
+source = "data/konsolerc"
+destination = "/etc/xdg/konsolerc"
 
 [[files]]
 source = "data/lxc-sysconfig"

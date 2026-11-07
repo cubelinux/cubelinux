@@ -18,11 +18,12 @@ The system includes an updater for checking and downloading cubelinux image
 updates. When an update is ready, restart to complete the installation.
 
 This kiosk experiment removes Flatpak, KDE Discover, and Dolphin from the host
-image. KDE Kiosk restricts shell and Run Command entry points, locks desktop
-customization, and blocks user-defined application launchers and autostart
-entries while keeping system-provided application entries available. These
-are exploratory desktop restrictions, not an operating-system security
-boundary. VShell remains unchanged in this build.
+image. KDE Kiosk disables shell access and Run Command, locks desktop
+customization, and restricts user-defined application launchers and autostart
+entries. A dedicated Konsole launcher opens the locked Fedora Virtual Shell
+profile; KDE hides Konsole's stock launcher, and the image adds no separate
+host-shell profile. These are exploratory desktop restrictions, not an
+operating-system security boundary.
 
 Virtual Shell provides a separate Fedora environment for running command-line
 tools. It is under active development while its unprivileged container setup

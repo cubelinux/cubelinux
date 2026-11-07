@@ -96,14 +96,12 @@ system images.
 ## Use
 
 Open **Linux Subsystem** from the application menu and follow the short wizard.
-Once setup completes, choose **Open terminal** to open the system's configured
-terminal emulator directly into Fedora. A terminal emulator must be installed
-and configured on the host. For a Flatpak terminal, VShell forwards the entry
-command to the host with `flatpak-spawn`, then attaches to Fedora there. The
-terminal Flatpak must allow host commands; Flathub Konsole already requests
-that permission. Linux Subsystem does not change the default terminal or
-install terminal-emulator-specific profiles; launching a terminal from the
-desktop continues to open a host shell.
+Once setup completes, choose **Open terminal** to open the bundled Konsole in
+the Fedora Virtual Shell. Konsole's system default is locked to VShell, its
+settings menu is disabled, and no separate host-shell profile is added. The
+application menu provides a dedicated **Konsole (Fedora Virtual Shell)** entry
+that opens the same profile. KDE Kiosk hides Konsole's stock launcher, which
+requests general shell access.
 
 Closing Linux Subsystem while setup or destruction is running hides its window while
 the operation continues. Open **Linux Subsystem** to bring the progress window

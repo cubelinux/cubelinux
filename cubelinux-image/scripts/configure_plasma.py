@@ -109,6 +109,7 @@ def set_kiosk_resource_restrictions() -> None:
         "appdata_kdesktop",
         "apps",
         "autostart",
+        "data_konsole",
         "services",
         "xdgdata-apps",
     )

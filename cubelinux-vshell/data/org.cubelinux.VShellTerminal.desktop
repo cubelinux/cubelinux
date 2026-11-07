@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Konsole (Fedora Virtual Shell)
+GenericName=Terminal Emulator
+Comment=Open the Fedora Virtual Shell in Konsole
+Exec=konsole --profile VShell
+TryExec=konsole
+Icon=utilities-terminal
+Terminal=false
+Categories=System;TerminalEmulator;
+StartupNotify=true
