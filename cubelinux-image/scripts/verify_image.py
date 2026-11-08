@@ -21,6 +21,11 @@ from configure_distro import render_os_release
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / ".image-build"
+PLASMA_SETUP_SCRIPTS = ROOT / "config" / "plasma" / "plasmoidsetupscripts"
+REQUIRED_PLASMA_SETUP_SCRIPTS = (
+    "org.kde.plasma.kickoff.js",
+    "org.kde.plasma.icontasks.js",
+)
 
 
 def copy_from_image(container: str, image_path: str, destination: Path) -> bytes:
@@ -44,6 +49,16 @@ def verify_rootfs(rootfs: Path, distro_path: Path, component_root: Path) -> int:
         for size in (64, 256)
     }
     about_image_path = "/etc/xdg/kcm-about-distrorc"
+    setup_scripts = {}
+    for script_name in REQUIRED_PLASMA_SETUP_SCRIPTS:
+        source = PLASMA_SETUP_SCRIPTS / script_name
+        if not source.is_file():
+            raise ValueError(f"missing Plasma widget default source file: {source}")
+        image_path = (
+            "/usr/share/plasma/look-and-feel/org.kde.breeze.desktop/contents/"
+            f"plasmoidsetupscripts/{script_name}"
+        )
+        setup_scripts[image_path] = source.read_bytes()
     actual_os_release = (rootfs / "usr/lib/os-release").read_text(encoding="utf-8")
     expected_os_release = render_os_release(fields)
     if actual_os_release != expected_os_release:
@@ -68,6 +83,12 @@ def verify_rootfs(rootfs: Path, distro_path: Path, component_root: Path) -> int:
     )
     if actual_about != expected_about:
         raise ValueError("image KDE distro settings do not match configured logo and website")
+    for image_path, expected_contents in setup_scripts.items():
+        actual_contents = (rootfs / image_path.lstrip("/")).read_bytes()
+        if actual_contents != expected_contents:
+            raise ValueError(
+                f"image Plasma widget defaults differ from the source file at {image_path}"
+            )
 
     staged_files = sorted(path for path in component_root.rglob("*") if path.is_file())
     for expected_path in staged_files:
@@ -101,6 +122,11 @@ def verify_image(image: str) -> None:
     image_paths = {
         "/usr/lib/os-release",
         "/etc/xdg/kcm-about-distrorc",
+        *(
+            "/usr/share/plasma/look-and-feel/org.kde.breeze.desktop/contents/"
+            f"plasmoidsetupscripts/{script_name}"
+            for script_name in REQUIRED_PLASMA_SETUP_SCRIPTS
+        ),
         *logo_paths,
         *(f"/{path.relative_to(component_root).as_posix()}" for path in staged_files),
     }

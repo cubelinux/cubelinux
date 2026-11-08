@@ -1,23 +1,15 @@
 #!/usr/bin/env python3
-"""Set image-wide KDE defaults and cubelinux launcher branding."""
+"""Set image-wide KDE defaults and kiosk policy."""
 
-import shutil
 from configparser import ConfigParser
 from pathlib import Path
 
 
-PLASMA_CONFIG = Path("/tmp/cubelinux-plasma")
-BREEZE_GLOBALS_SOURCE = PLASMA_CONFIG / "kdeglobals"
-BRANDING_SOURCE = PLASMA_CONFIG / "cubelinux-kickoff-branding.py"
-AUTOSTART_SOURCE = PLASMA_CONFIG / "cubelinux-kickoff-branding.desktop"
+BREEZE_GLOBALS_SOURCE = Path("/tmp/cubelinux-kdeglobals")
 KDE_GLOBALS = Path("/etc/xdg/kdeglobals")
 FEDORA_KDE_PROFILE_GLOBALS = Path(
     "/usr/share/kde-settings/kde-profile/default/xdg/kdeglobals"
 )
-BRANDING_TARGET = Path("/usr/libexec/cubelinux-kickoff-branding.py")
-# Keep this image-owned service in KDE's system autostart resource path so the
-# kiosk can block user autostart entries without blocking launcher branding.
-AUTOSTART_TARGET = Path("/usr/share/autostart/cubelinux-kickoff-branding.desktop")
 
 
 def set_ini_value(path: Path, section: str, key: str, value: str) -> None:
@@ -127,15 +119,8 @@ def set_kiosk_resource_restrictions() -> None:
 
 
 def main() -> None:
-    for path in (BREEZE_GLOBALS_SOURCE, BRANDING_SOURCE, AUTOSTART_SOURCE):
-        if not path.is_file():
-            raise RuntimeError(f"Required Plasma branding file is missing: {path}")
-
-    BRANDING_TARGET.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(BRANDING_SOURCE, BRANDING_TARGET)
-    BRANDING_TARGET.chmod(0o755)
-    AUTOSTART_TARGET.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(AUTOSTART_SOURCE, AUTOSTART_TARGET)
+    if not BREEZE_GLOBALS_SOURCE.is_file():
+        raise RuntimeError(f"Required Plasma defaults file is missing: {BREEZE_GLOBALS_SOURCE}")
 
     set_breeze_default()
     set_kiosk_restrictions()

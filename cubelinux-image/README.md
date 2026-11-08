@@ -18,10 +18,9 @@ The system includes an updater for checking and downloading cubelinux image
 updates. When an update is ready, restart to complete the installation.
 
 This kiosk experiment removes Flatpak and KDE Discover from the host image and
-includes Dolphin for file management, pinned to the taskbar on first Plasma
-login. The first-login setup removes the stale Discover taskbar pin. KDE Kiosk
-disables shell access and Run
-Command, locks desktop customization, and restricts user-defined application
+includes Dolphin for file management, pinned to the taskbar for new Plasma
+profiles. KDE Kiosk disables shell access and Run Command, locks desktop
+customization, and restricts user-defined application
 launchers and autostart entries. Patched KIO blocks launching executable files
 and user-created desktop launchers. Dolphin's terminal actions stay unavailable
 while shell access is disabled. A dedicated Konsole launcher opens the locked
@@ -66,10 +65,11 @@ cubelinux/
   The image build renders `distro.logo.url` as a 64px launcher icon and a 256px
   About page icon. It downloads `distro.plymouth_logo.url` and converts that
   SVG into the PNG watermark included in the initramfs.
-- **`cubelinux-image/config/plasma/`** holds shared Plasma defaults and
-  first-login appearance assets. Keep the selected global theme in `kdeglobals`;
-  the launcher helper brands the panel button and pins Dolphin after Plasma
-  creates the user's panel.
+- **`cubelinux-image/config/plasma/`** holds shared Plasma defaults. The Breeze
+  applet setup defaults brand Kickoff and remove the Discover taskbar pin while
+  pinning Dolphin as Plasma creates the initial panel for a new profile. They
+  do not rewrite existing user profiles. Keep the selected global theme in
+  `kdeglobals`.
 - **`cubelinux-updater/component.toml`** and
   **`cubelinux-vshell/component.toml`** describe each app's image contribution:
   packages it needs, systemd services to enable, and files to install with

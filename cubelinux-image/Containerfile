@@ -42,11 +42,13 @@ RUN set -eux; \
 
 COPY .image-build/rootfs/ /
 
-# Configure KDE defaults and cubelinux launcher branding in the image.
-COPY config/plasma/ /tmp/cubelinux-plasma/
+# Add the cubelinux widget defaults to the Breeze theme package in the image.
+COPY config/plasma/plasmoidsetupscripts/ \
+    /usr/share/plasma/look-and-feel/org.kde.breeze.desktop/contents/plasmoidsetupscripts/
+COPY config/plasma/kdeglobals /tmp/cubelinux-kdeglobals
 COPY scripts/configure_plasma.py /tmp/configure_plasma.py
 RUN python3 /tmp/configure_plasma.py && \
-    rm -rf /tmp/cubelinux-plasma /tmp/configure_plasma.py
+    rm -f /tmp/cubelinux-kdeglobals /tmp/configure_plasma.py
 
 COPY config/sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
 COPY bootc/kargs.d/10-quiet-boot.toml /usr/lib/bootc/kargs.d/10-quiet-boot.toml
