@@ -119,6 +119,10 @@ def _ready() -> bool:
     except (OSError, RuntimeError, subprocess.TimeoutExpired):
         return False
     response = result.get("return")
+    # slirp4netns 1.3.x returns list_hostfwd entries at the top level, while
+    # some documented/API-compatible builds wrap them in "return".
+    if not isinstance(response, dict):
+        response = result
     return isinstance(response, dict) and isinstance(response.get("entries"), list)
 
 

@@ -176,7 +176,9 @@ def _listening_tcp_ports(guest_ip: str) -> set[int]:
 def _host_forwardings() -> list[dict[str, object]]:
     result = slirp_network.api_request({"execute": "list_hostfwd"})
     response = result.get("return")
-    entries = response.get("entries") if isinstance(response, dict) else None
+    if not isinstance(response, dict):
+        response = result
+    entries = response.get("entries")
     if not isinstance(entries, list):
         raise RuntimeError("slirp4netns returned an invalid forwarded-port list.")
     return [entry for entry in entries if isinstance(entry, dict) and entry.get("proto") == "tcp"]
