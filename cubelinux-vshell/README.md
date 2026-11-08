@@ -28,12 +28,15 @@ names and visual assets; do not imply that Linux Subsystem is an official KDE
 product.
 
 The wizard downloads a Fedora 44 LXC image, creates an unprivileged container,
-and shares the signed-in user's home folder automatically. The system image
-starts the LXC bridge and configures its firewall access. When Plasma Setup
-creates the desktop account, a system hook allocates that account's subordinate
-IDs and one LXC network interface permission, so a fresh installation does not
+and shares the signed-in user's home folder automatically. slirp4netns gives the
+container outbound connectivity without a host bridge, DHCP server, or veth
+permission. When Plasma Setup creates the desktop account, a system hook
+allocates that account's subordinate IDs, so a fresh installation does not
 need another administrator password prompt in Linux Subsystem. Existing accounts
-without this provisioning can still use the one-time administrator setup.
+without this provisioning can use the one-time administrator setup for those IDs.
+The old `lxc-net` bridge service is not used and is gated off, including when an
+older image left it enabled. Existing Fedora environments switch from their old
+veth configuration the next time VShell starts them.
 Programs in the container can read and modify files in the shared home folder.
 The host user's runtime directory and X11 socket directory are also mounted so
 terminal-launched applications can connect to the host's Wayland/XWayland,
@@ -52,17 +55,24 @@ settings.
 
 Install graphical applications inside Fedora with DNF. VShell discovers their
 system desktop entries and adds matching launchers to the host application menu
-with “(Fedora)” in the name. The KDE session watcher refreshes those entries
-after packages are installed or removed, and each launcher starts the app inside
-the Fedora container with the host display/audio sockets and session environment.
-For example, install `vlc`; the Fedora launcher will appear in the host menu.
-Terminal-launched programs continue to work as before.
+with “(Fedora)” in the name. A narrowly scoped Polkit helper publishes
+root-owned wrapper entries in `/usr/local/share/applications`, so KDE Kiosk can
+keep user-created application entries out of Kickoff while these VShell entries
+remain available. The helper creates a fixed `cubelinux-vshell launch-app`
+command for each validated Fedora desktop-entry path; it never copies the guest
+entry's `Exec` command onto the host. The KDE session watcher refreshes those
+entries after packages are installed or removed, and each launcher starts the
+app inside the Fedora container with the host display/audio sockets and session
+environment. For example, install `vlc`; the Fedora launcher will appear in the
+host menu. Terminal-launched programs continue to work as before.
 
 While the KDE desktop session is running, its VShell watcher discovers Fedora
 TCP services listening on the container network interface at ports 1024 and
-above and forwards them to the host at `localhost:<port>`. Services bound only
-to Fedora's loopback address are not reachable by the host proxy. Each
-forwarded port has its own **Expose to public** option, off by default.
+above and forwards them to the host at `localhost:<port>` through slirp4netns.
+Services bound only to Fedora's loopback address are not forwarded. Each
+forwarded port has its own **Expose to public** option, off by default. slirp4netns
+keeps these host-forwarding rules itself; VShell does not run a separate host TCP
+proxy. The guest cannot connect to services bound only to the host's loopback.
 Enabling it binds that port on all host IPv4 interfaces; the host firewall
 still controls incoming connections, and VShell does not change firewall
 rules. Ports below 1024 are not forwarded automatically, and manual forwarding
@@ -96,14 +106,15 @@ system images.
 ## Use
 
 Open **Linux Subsystem** from the application menu and follow the short wizard.
-Once setup completes, choose **Open terminal** to open the system's configured
-terminal emulator directly into Fedora. A terminal emulator must be installed
-and configured on the host. For a Flatpak terminal, VShell forwards the entry
-command to the host with `flatpak-spawn`, then attaches to Fedora there. The
-terminal Flatpak must allow host commands; Flathub Konsole already requests
-that permission. Linux Subsystem does not change the default terminal or
-install terminal-emulator-specific profiles; launching a terminal from the
-desktop continues to open a host shell.
+Once setup completes, choose **Open terminal** to open the bundled Konsole in
+the Fedora Virtual Shell. Konsole's system default is locked to VShell, its
+settings menu is disabled, and no separate host-shell profile is added. The
+application menu provides a dedicated **Konsole (Fedora Virtual Shell)** entry
+that opens the same profile. If the environment is not set up yet, this entry
+opens the setup window directly without briefly opening an empty Konsole. If
+the environment exists but is stopped, Konsole starts it when opening the
+profile. KDE Kiosk hides Konsole's stock launcher, which requests general shell
+access.
 
 Closing Linux Subsystem while setup or destruction is running hides its window while
 the operation continues. Open **Linux Subsystem** to bring the progress window

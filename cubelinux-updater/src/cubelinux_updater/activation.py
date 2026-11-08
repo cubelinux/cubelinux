@@ -1,6 +1,7 @@
 """Single-instance activation over a per-user local socket."""
 
 import os
+from enum import Enum, auto
 
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
@@ -10,24 +11,30 @@ SESSION_ID = str(os.getuid()) if hasattr(os, "getuid") else os.environ.get("USER
 SERVER_NAME = f"cubelinux-updater-session-{SESSION_ID}"
 
 
-def activate_existing_instance(show_window: bool = True) -> bool:
+class ActivationResult(Enum):
+    ACTIVATED = auto()
+    NO_SERVER = auto()
+    UNRESPONSIVE = auto()
+
+
+def activate_existing_instance(show_window: bool = True) -> ActivationResult:
     socket = QLocalSocket()
     socket.connectToServer(SERVER_NAME)
     if not socket.waitForConnected(250):
-        return False
+        return ActivationResult.NO_SERVER
 
     command = (b"show" if show_window else b"background") + b"\n"
     if socket.write(command) != len(command) or not socket.waitForBytesWritten(1000):
         LOGGER.warning("Could not send the activation request to the running updater")
-        return False
+        return ActivationResult.UNRESPONSIVE
     if not socket.waitForReadyRead(5000):
         LOGGER.warning("The running updater did not acknowledge the activation request")
-        return False
+        return ActivationResult.UNRESPONSIVE
     if bytes(socket.readAll()).strip() != b"ok":
         LOGGER.warning("The running updater returned an invalid activation response")
-        return False
+        return ActivationResult.UNRESPONSIVE
     socket.disconnectFromServer()
-    return True
+    return ActivationResult.ACTIVATED
 
 
 def connect_activation_server(server: QLocalServer, show_window) -> None:

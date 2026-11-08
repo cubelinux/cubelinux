@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -76,74 +78,85 @@ def _icon_source(rootfs: Path, icon: str) -> Path | None:
     return None
 
 
-def _desktop_launcher(rootfs: Path, source: Path, output: Path, icons: Path) -> bool:
+def _desktop_launcher(rootfs: Path, source: Path, icons: Path) -> dict[str, object] | None:
     values = _parse_desktop(source)
     name = _display_name(values)
     if (values.get("Type") != "Application" or not name or not values.get("Exec")
             or values.get("Hidden", "false").lower() == "true"
             or values.get("NoDisplay", "false").lower() == "true"):
-        return False
+        return None
     relative = source.relative_to(rootfs).as_posix()
     app_id = hashlib.sha256(relative.encode()).hexdigest()[:20]
-    destination = output / f"org.cubelinux.VShell.Fedora.{app_id}.desktop"
     icon_name = values.get("Icon", "applications-other")
     icon = _icon_source(rootfs, icon_name)
     if icon:
         icons.mkdir(parents=True, exist_ok=True)
         icon_name = f"cubelinux-vshell-fedora-{app_id}"
         shutil.copy2(icon, icons / f"{icon_name}{icon.suffix.lower()}")
+    return {"path": relative, "has_icon": bool(icon), "name": name}
 
-    # Desktop Entry Exec quoting uses double quotes and backslash escapes. Quote
-    # the source path so it remains one argument even for nested app folders.
-    escaped_path = relative.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
-    entry = [
-        "[Desktop Entry]",
-        "Type=Application",
-        f"Name={name} (Fedora)",
-        f"Exec=/usr/bin/cubelinux-vshell launch-app \"{escaped_path}\" %U",
-        f"Icon={icon_name}",
-        "Terminal=false",
-        "DBusActivatable=false",
-        f"Categories={values.get('Categories', 'Utility;')}",
-        _MARKER,
-    ]
-    for key in ("GenericName", "Comment", "StartupWMClass", "MimeType", "Keywords"):
-        if values.get(key):
-            entry.append(f"{key}={values[key]}")
-    output.mkdir(parents=True, exist_ok=True)
-    destination.write_text("\n".join(entry) + "\n", encoding="utf-8")
-    return True
+
+def _sync_system_launchers(rootfs: Path | None, launchers: list[dict[str, object]]) -> None:
+    """Ask the constrained Polkit helper to publish root-owned menu wrappers."""
+    pkexec = shutil.which("pkexec")
+    helper = "/usr/libexec/cubelinux-vshell-launcher-sync"
+    if not pkexec or not Path(helper).is_file():
+        if launchers:
+            print("VShell: cannot publish Fedora application menu entries; launcher sync helper is unavailable.")
+        return
+
+    request = {
+        "rootfs": str(rootfs.resolve()) if rootfs and rootfs.is_dir() else None,
+        "launchers": [
+            {"path": item["path"], "has_icon": item["has_icon"], "name": item["name"]}
+            for item in launchers
+        ],
+    }
+    try:
+        result = subprocess.run(
+            [pkexec, helper],
+            input=json.dumps(request),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"VShell: could not synchronize Fedora application menu entries: {error}")
+        return
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit status {result.returncode}"
+        print(f"VShell: could not synchronize Fedora application menu entries: {detail}")
 
 
 def discover_apps() -> None:
     """Refresh generated host launchers from the Fedora root filesystem."""
     rootfs = _rootfs_path()
-    output = _applications_dir()
+    legacy_output = _applications_dir()
     icon_output = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons/hicolor/scalable/apps"
-    live: set[Path] = set()
+    live: list[dict[str, object]] = []
     for source in _app_sources(rootfs):
-        values = _parse_desktop(source)
-        if values.get("Type") != "Application" or not values.get("Exec"):
-            continue
-        relative = source.relative_to(rootfs).as_posix()
-        app_id = hashlib.sha256(relative.encode()).hexdigest()[:20]
-        launcher = output / f"org.cubelinux.VShell.Fedora.{app_id}.desktop"
-        if _desktop_launcher(rootfs, source, output, icon_output):
-            live.add(launcher)
-    if output.is_dir():
-        for launcher in output.glob("org.cubelinux.VShell.Fedora.*.desktop"):
+        launcher = _desktop_launcher(rootfs, source, icon_output)
+        if launcher:
+            live.append(launcher)
+    if legacy_output.is_dir():
+        for launcher in legacy_output.glob("org.cubelinux.VShell.Fedora.*.desktop"):
             try:
                 marked = _MARKER in launcher.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 marked = False
-            if marked and launcher not in live:
+            if marked:
                 launcher.unlink(missing_ok=True)
-    live_ids = {path.stem.rsplit(".", 1)[-1] for path in live}
+    live_ids = {
+        hashlib.sha256(str(item["path"]).encode()).hexdigest()[:20]
+        for item in live
+    }
     if icon_output.is_dir():
         for icon_file in icon_output.glob("cubelinux-vshell-fedora-*"):
             app_id = icon_file.stem.removeprefix("cubelinux-vshell-fedora-")
             if app_id not in live_ids:
                 icon_file.unlink(missing_ok=True)
+    _sync_system_launchers(rootfs if rootfs.is_dir() else None, live)
 
 
 def watch_apps(interval: float = 4.0) -> None:

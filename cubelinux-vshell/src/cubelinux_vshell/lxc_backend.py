@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from typing import Callable, Sequence
 
+from . import slirp_network
+
 CONTAINER_NAME = "vshell"
 FEDORA_RELEASE = "44"
 GUEST_ID = 50000
@@ -230,10 +232,64 @@ def _wait_for_network(progress: Progress) -> None:
     else:
         detail = " LXC reported no IP addresses."
     raise VShellError(
-        "Fedora did not receive an IPv4 DHCP lease within 30 seconds. "
-        "Check that lxc-net and dnsmasq are running and the host firewall allows DHCP on lxcbr0."
+        "Fedora did not receive the slirp4netns network configuration within 30 seconds. "
+        "Check that the container network namespace is available and slirp4netns is running."
         + detail
     )
+
+
+def _ensure_slirp_network(progress: Progress) -> None:
+    try:
+        result = subprocess.run(
+            ["lxc-info", "--name", CONTAINER_NAME, "--lxcpath", str(_lxc_path()), "--pid"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise VShellError(f"Could not inspect the running Fedora container: {error}") from error
+    match = re.search(r"PID:\s*(\d+)", result.stdout) if result.returncode == 0 else None
+    if not match:
+        raise VShellError("LXC did not report the running Fedora container process ID.")
+    try:
+        network_started = slirp_network.ensure_running(int(match.group(1)))
+        if network_started:
+            _attach(
+                "/usr/bin/bash",
+                "-ceu",
+                "rm -f /etc/resolv.conf; printf 'nameserver 10.0.2.3\\n' > /etc/resolv.conf",
+                progress=progress,
+            )
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+        raise VShellError(f"Could not connect Fedora to the network: {error}") from error
+
+
+def _stop_slirp_network() -> None:
+    try:
+        slirp_network.stop()
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+        raise VShellError(f"Could not stop Fedora's user-mode network: {error}") from error
+
+
+def _ensure_slirp_config() -> bool:
+    """Migrate existing VShell containers from the host bridge to slirp4netns."""
+    config = _config_path()
+    if not config.is_file():
+        return False
+    contents = config.read_text(encoding="utf-8")
+    lines = contents.splitlines()
+    network_lines = [line for line in lines if line.startswith("lxc.net.")]
+    if network_lines == ["lxc.net.0.type = empty"]:
+        return False
+    updated = [line for line in lines if not line.startswith("lxc.net.")]
+    updated.insert(1 if updated and updated[0].startswith("lxc.include") else 0, "lxc.net.0.type = empty")
+    temporary = config.with_name(f".{config.name}.tmp")
+    temporary.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    temporary.chmod(config.stat().st_mode & 0o777)
+    temporary.replace(config)
+    return True
 
 
 def _host_runtime_dir(account: pwd.struct_passwd) -> Path | None:
@@ -293,9 +349,23 @@ def _ensure_host_desktop_mounts(account: pwd.struct_passwd) -> bool:
         return False
 
     lines = contents.rstrip().splitlines()
-    if marker in lines:
-        start = lines.index(marker)
-        lines = lines[:start]
+    host_mount_targets = {
+        CONTAINER_RUNTIME_DIR.lstrip("/"),
+        CONTAINER_X11_DIR.lstrip("/"),
+    }
+    preserved_lines: list[str] = []
+    for line in lines:
+        if line == marker:
+            continue
+        fields = line.split()
+        if (
+            len(fields) >= 4
+            and fields[0:2] == ["lxc.mount.entry", "="]
+            and fields[3] in host_mount_targets
+        ):
+            continue
+        preserved_lines.append(line)
+    lines = preserved_lines
     updated = "\n".join([*lines, *section]) + "\n"
     if updated == contents:
         return False
@@ -352,24 +422,27 @@ def _ensure_guest_x11_socket_path(progress: Progress | None = None) -> None:
 
 
 def _stop_container(progress: Progress) -> None:
-    _run(
-        _rootless_scope(
-            [
-                "lxc-stop",
-                "--name",
-                CONTAINER_NAME,
-                "--lxcpath",
-                str(_lxc_path()),
-                "--timeout",
-                "25",
-            ]
-        ),
-        progress,
-        stream=True,
-    )
+    if _container_running(progress):
+        _run(
+            _rootless_scope(
+                [
+                    "lxc-stop",
+                    "--name",
+                    CONTAINER_NAME,
+                    "--lxcpath",
+                    str(_lxc_path()),
+                    "--timeout",
+                    "25",
+                ]
+            ),
+            progress,
+            stream=True,
+        )
+    _stop_slirp_network()
 
 
 def _start_container(progress: Progress) -> None:
+    _ensure_slirp_config()
     _run(
         _rootless_scope(
             [
@@ -385,6 +458,7 @@ def _start_container(progress: Progress) -> None:
         stream=True,
     )
     _wait_until_running(progress)
+    _ensure_slirp_network(progress)
 
 
 def enter() -> int:
@@ -404,12 +478,15 @@ def enter() -> int:
 
     account = _account()
     root = _lxc_path()
+    network_config_changed = _ensure_slirp_config()
     mounts_changed = _ensure_host_desktop_mounts(account)
-    if mounts_changed and _container_running(print):
-        print("Refreshing Fedora's host desktop socket mounts...")
+    if (mounts_changed or network_config_changed) and _container_running(print):
+        print("Restarting Fedora to apply its network and desktop settings...")
         _stop_container(print)
     if not _container_running(print):
         _start_container(print)
+    else:
+        _ensure_slirp_network(print)
     _ensure_guest_x11_socket_path()
 
     term = os.environ.get("TERM", "xterm-256color")
@@ -467,22 +544,7 @@ def enter() -> int:
 def stop() -> None:
     if not is_initialized():
         raise VShellError("Virtual Shell is not set up yet.")
-    if _container_running(print):
-        _run(
-            _rootless_scope(
-                [
-                    "lxc-stop",
-                    "--name",
-                    CONTAINER_NAME,
-                    "--lxcpath",
-                    str(_lxc_path()),
-                    "--timeout",
-                    "25",
-                ]
-            ),
-            print,
-            stream=True,
-        )
+    _stop_container(print)
 
 
 def status() -> str:

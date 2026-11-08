@@ -1,0 +1,7 @@
+[Desktop Entry]
+DefaultProfile[$i]=VShell.profile
+
+[KDE Action Restrictions][$i]
+action/settings=false
+action/save_default=false
+action/save_sessions_profile=false

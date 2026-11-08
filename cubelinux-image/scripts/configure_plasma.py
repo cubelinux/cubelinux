@@ -15,7 +15,9 @@ FEDORA_KDE_PROFILE_GLOBALS = Path(
     "/usr/share/kde-settings/kde-profile/default/xdg/kdeglobals"
 )
 BRANDING_TARGET = Path("/usr/libexec/cubelinux-kickoff-branding.py")
-AUTOSTART_TARGET = Path("/etc/xdg/autostart/cubelinux-kickoff-branding.desktop")
+# Keep this image-owned service in KDE's system autostart resource path so the
+# kiosk can block user autostart entries without blocking launcher branding.
+AUTOSTART_TARGET = Path("/usr/share/autostart/cubelinux-kickoff-branding.desktop")
 
 
 def set_ini_value(path: Path, section: str, key: str, value: str) -> None:
@@ -85,6 +87,45 @@ def set_breeze_default() -> None:
     )
 
 
+def set_kiosk_restrictions() -> None:
+    # The cubelinux KIO build allows only trusted system application entries
+    # through this restriction; user-created desktop files remain blocked.
+    restrictions = (
+        "shell_access",
+        "run_command",
+        "action/run_command",
+        "run_desktop_files",
+        "run_executables",
+        "plasma-desktop/scripting_console",
+        "plasma/plasmashell/unlockedDesktop",
+    )
+    for restriction in restrictions:
+        set_ini_value(
+            KDE_GLOBALS,
+            "KDE Action Restrictions][$i",
+            restriction,
+            "false",
+        )
+
+
+def set_kiosk_resource_restrictions() -> None:
+    restrictions = (
+        "appdata_kdesktop",
+        "apps",
+        "autostart",
+        "data_konsole",
+        "services",
+        "xdgdata-apps",
+    )
+    for restriction in restrictions:
+        set_ini_value(
+            KDE_GLOBALS,
+            "KDE Resource Restrictions][$i",
+            restriction,
+            "false",
+        )
+
+
 def main() -> None:
     for path in (BREEZE_GLOBALS_SOURCE, BRANDING_SOURCE, AUTOSTART_SOURCE):
         if not path.is_file():
@@ -97,6 +138,8 @@ def main() -> None:
     shutil.copyfile(AUTOSTART_SOURCE, AUTOSTART_TARGET)
 
     set_breeze_default()
+    set_kiosk_restrictions()
+    set_kiosk_resource_restrictions()
 
 
 if __name__ == "__main__":

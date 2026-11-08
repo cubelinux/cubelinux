@@ -310,7 +310,7 @@ class SetupController(QObject):
     @staticmethod
     def _title_for_progress(message: str) -> str:
         steps = (
-            ("requesting one-time permission", "Preparing container networking"),
+            ("requesting one-time permission", "Preparing rootless containers"),
             ("checking your rootless container id mappings", "Preparing your account"),
             ("downloading the fedora environment", "Downloading Fedora image"),
             ("checking for fedora template updates", "Checking for Fedora image updates"),
@@ -372,13 +372,4 @@ class SetupController(QObject):
     @Slot()
     def openShell(self) -> None:
         if not self.busy and not self.folderSharingBusy and not self.destroying:
-            QProcess.startDetached(
-                "xdg-terminal-exec",
-                [
-                    "sh",
-                    "-c",
-                    "if [ -f /.flatpak-info ]; then "
-                    "exec flatpak-spawn --host cubelinux-vshell enter; "
-                    "else exec cubelinux-vshell enter; fi",
-                ],
-            )
+            QProcess.startDetached("konsole", ["--profile", "VShell"])

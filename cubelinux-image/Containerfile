@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 ARG BASE_IMAGE=quay.io/fedora/fedora-bootc:44
-FROM ${BASE_IMAGE}
+FROM ${BASE_IMAGE} AS packages
 
 ARG PACKAGES
 
@@ -14,9 +14,20 @@ RUN dnf -y install \
         ${PACKAGES} && \
     dnf clean all
 
-COPY scripts/configure_software_center.py /tmp/configure_software_center.py
-RUN python3 /tmp/configure_software_center.py && \
-    rm -f /tmp/configure_software_center.py
+FROM packages AS kio-build
+
+COPY patches/kf6-kio-kiosk-launch-policy.patch /tmp/kf6-kio-kiosk-launch-policy.patch
+COPY scripts/build_patched_kio.py /tmp/build_patched_kio.py
+RUN python3 /tmp/build_patched_kio.py \
+        /tmp/kf6-kio-kiosk-launch-policy.patch \
+        /tmp/patched-kio-rpms && \
+    rm -f /tmp/build_patched_kio.py /tmp/kf6-kio-kiosk-launch-policy.patch
+
+FROM packages AS final
+
+COPY --from=kio-build /tmp/patched-kio-rpms/ /tmp/patched-kio-rpms/
+RUN rpm -Uvh /tmp/patched-kio-rpms/*.rpm && \
+    rm -rf /tmp/patched-kio-rpms
 
 COPY .image-build/distro.json /tmp/distro.json
 COPY scripts/configure_distro.py /tmp/configure_distro.py
@@ -39,14 +50,8 @@ RUN python3 /tmp/configure_plasma.py && \
 
 COPY config/sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
 COPY bootc/kargs.d/10-quiet-boot.toml /usr/lib/bootc/kargs.d/10-quiet-boot.toml
-COPY config/systemd/cubelinux-disable-fedora-flatpak-remotes.service /usr/lib/systemd/system/
-COPY scripts/disable_fedora_flatpak_remotes.sh /usr/libexec/
-
 COPY .image-build/services.txt /tmp/component-services.txt
-RUN chmod 0755 /usr/libexec/disable_fedora_flatpak_remotes.sh && \
-    systemctl --root=/ mask flatpak-add-fedora-repos.service && \
-    systemctl --root=/ enable cubelinux-disable-fedora-flatpak-remotes.service && \
-    systemctl --root=/ enable NetworkManager.service firewalld.service && \
+RUN systemctl --root=/ enable NetworkManager.service firewalld.service && \
     systemctl --root=/ enable --force sddm.service && \
     systemctl --root=/ enable plasma-setup.service && \
     while IFS= read -r service; do \

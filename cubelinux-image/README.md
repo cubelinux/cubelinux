@@ -12,17 +12,22 @@
 
 cubelinux brings a complete desktop experience together in one operating
 system. It starts with a first boot setup to create your user, then opens into
-the KDE Plasma desktop with familiar tools like Dolphin.
+the restricted KDE Plasma desktop.
 
 The system includes an updater for checking and downloading cubelinux image
 updates. When an update is ready, restart to complete the installation.
 
-Flatpak is installed for desktop applications. KDE Discover is configured to
-use its Flatpak backend, with Flathub available as a system-wide remote. The
-image masks Fedora's first-boot Flatpak remote setup and disables any existing
-Fedora Flatpak remotes during the first boot after this change. System RPM
-updates remain part of the cubelinux image update flow. Discover's notifier is
-included to notify about Flatpak updates.
+This kiosk experiment removes Flatpak and KDE Discover from the host image and
+includes Dolphin for file management, pinned to the taskbar on first Plasma
+login. The first-login setup removes the stale Discover taskbar pin. KDE Kiosk
+disables shell access and Run
+Command, locks desktop customization, and restricts user-defined application
+launchers and autostart entries. Patched KIO blocks launching executable files
+and user-created desktop launchers. Dolphin's terminal actions stay unavailable
+while shell access is disabled. A dedicated Konsole launcher opens the locked
+Fedora Virtual Shell profile; KDE hides Konsole's stock launcher, and the image
+adds no separate host-shell profile. These are exploratory desktop
+restrictions, not an operating-system security boundary.
 
 Virtual Shell provides a separate Fedora environment for running command-line
 tools. It is under active development while its unprivileged container setup
@@ -45,7 +50,8 @@ cubelinux/
 |-- cubelinux-image/
 |   |-- bootc/kargs.d/                 # Shared bootc kernel arguments
 |   |-- config/                        # Base image, packages, Plasma defaults
-|   |-- scripts/                       # Prepare and verify image contents
+|   |-- patches/                       # Downstream patches for image packages
+|   |-- scripts/                       # Prepare, build, and verify image contents
 |   |-- tests/                         # Image-builder unit tests
 |   |-- Containerfile
 |   `-- README.md
@@ -62,8 +68,8 @@ cubelinux/
   SVG into the PNG watermark included in the initramfs.
 - **`cubelinux-image/config/plasma/`** holds shared Plasma defaults and
   first-login appearance assets. Keep the selected global theme in `kdeglobals`;
-  the launcher helper only updates the panel button after Plasma creates the
-  user's panel.
+  the launcher helper brands the panel button and pins Dolphin after Plasma
+  creates the user's panel.
 - **`cubelinux-updater/component.toml`** and
   **`cubelinux-vshell/component.toml`** describe each app's image contribution:
   packages it needs, systemd services to enable, and files to install with
@@ -72,7 +78,10 @@ cubelinux/
   Keep each app's code and local assets in its own top-level folder.
 - **`cubelinux-image/Containerfile`** contains shared image build operations.
   Do not add component-specific `COPY` statements or package lists here;
-  declare those in the component manifest.
+  declare those in the component manifest. It builds the installed KF6 KIO
+  subpackages from the matching Fedora source RPM with the cubelinux kiosk
+  launch policy patch in an intermediate stage, then installs those patched
+  RPMs into the image.
 - **`cubelinux-image/scripts/prepare_image.py`** validates configuration and
   manifests and creates `.image-build/`. That directory is generated and ignored
   by Git; do not edit or commit it.
@@ -80,11 +89,12 @@ cubelinux/
   operating-system identity and logo. Keep distro branding values in
   `cubelinux-image/config/image.toml`.
 - **`cubelinux-image/scripts/configure_plasma.py`** merges checked-in KDE
-  defaults into the image during the build, preserving Fedora's other profile
-  settings.
-- **`cubelinux-image/scripts/configure_software_center.py`** downloads and
-  validates Flathub's signed remote descriptor, installs it as a system-wide
-  Flatpak remote, and routes Discover launchers through Flatpak-only mode.
+  defaults into the image during the build and applies the experimental Kiosk
+  restrictions while preserving Fedora's other profile settings. The image's
+  KF6 KIO patch permits root-owned desktop entries from system application
+  directories while `run_desktop_files` is disabled, so user-created launchers
+  remain blocked. It also blocks launching executable binaries such as AppImages
+  and executable scripts through KIO's file-opening path.
 - **`cubelinux-image/bootc/` and `cubelinux-image/config/`** hold settings
   shared by the base system and desktop, not files owned by one app.
 
