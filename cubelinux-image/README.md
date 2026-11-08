@@ -66,10 +66,10 @@ cubelinux/
   About page icon. It downloads `distro.plymouth_logo.url` and converts that
   SVG into the PNG watermark included in the initramfs.
 - **`cubelinux-image/config/plasma/`** holds shared Plasma defaults. The Breeze
-  applet setup defaults brand Kickoff and remove the Discover taskbar pin while
-  pinning Dolphin as Plasma creates the initial panel for a new profile. They
-  do not rewrite existing user profiles. Keep the selected global theme in
-  `kdeglobals`.
+  applet setup defaults brand Kickoff and pin Dolphin as Plasma creates the
+  initial panel for a new profile. It leaves Discover launchers to Plasma's
+  packaged defaults and does not rewrite existing user profiles. Keep the
+  selected global theme in `kdeglobals`.
 - **`cubelinux-updater/component.toml`** and
   **`cubelinux-vshell/component.toml`** describe each app's image contribution:
   packages it needs, systemd services to enable, and files to install with
