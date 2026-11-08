@@ -110,8 +110,11 @@ Once setup completes, choose **Open terminal** to open the bundled Konsole in
 the Fedora Virtual Shell. Konsole's system default is locked to VShell, its
 settings menu is disabled, and no separate host-shell profile is added. The
 application menu provides a dedicated **Konsole (Fedora Virtual Shell)** entry
-that opens the same profile. KDE Kiosk hides Konsole's stock launcher, which
-requests general shell access.
+that opens the same profile. If the environment is not set up yet, this entry
+opens the setup window directly without briefly opening an empty Konsole. If
+the environment exists but is stopped, Konsole starts it when opening the
+profile. KDE Kiosk hides Konsole's stock launcher, which requests general shell
+access.
 
 Closing Linux Subsystem while setup or destruction is running hides its window while
 the operation continues. Open **Linux Subsystem** to bring the progress window

@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -22,7 +23,14 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication
 
 from .controller import SetupController
-from .lxc_backend import VShellError, enter, install_shutdown_hook, status, stop
+from .lxc_backend import (
+    VShellError,
+    enter,
+    install_shutdown_hook,
+    is_initialized,
+    status,
+    stop,
+)
 from .lxc_apps import launch_app
 from .lxc_setup import initialize
 from .app_discovery import watch_apps
@@ -138,9 +146,50 @@ def _claim_setup_instance(lock: QLockFile) -> bool:
     return False
 
 
+def _launch_detached(command: list[str]) -> None:
+    try:
+        subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as error:
+        raise VShellError(f"Could not start {command[0]}: {error}") from error
+
+
+def _open_terminal() -> None:
+    if not is_initialized():
+        executable = shutil.which("cubelinux-vshell")
+        command = (
+            [executable]
+            if executable
+            else [sys.executable, "-m", "cubelinux_vshell.main"]
+        )
+    else:
+        executable = shutil.which("konsole")
+        if not executable:
+            raise VShellError("Konsole is not installed on this system.")
+        command = [executable, "--profile", "VShell"]
+    _launch_detached(command)
+
+
 def _run_command(arguments: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="cubelinux-vshell")
-    parser.add_argument("command", choices=("init", "enter", "stop", "status", "activate-if-busy", "watch-apps", "launch-app"))
+    parser.add_argument(
+        "command",
+        choices=(
+            "init",
+            "enter",
+            "open-terminal",
+            "stop",
+            "status",
+            "activate-if-busy",
+            "watch-apps",
+            "launch-app",
+        ),
+    )
     parser.add_argument("app", nargs="?")
     parser.add_argument("files", nargs="*")
     parsed = parser.parse_args(arguments)
@@ -150,6 +199,9 @@ def _run_command(arguments: list[str]) -> int:
             return 0
         if parsed.command == "enter":
             return enter()
+        if parsed.command == "open-terminal":
+            _open_terminal()
+            return 0
         if parsed.command == "stop":
             stop()
             return 0
