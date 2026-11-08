@@ -5,7 +5,6 @@ FROM ${BASE_IMAGE} AS packages
 ARG PACKAGES
 
 RUN dnf -y install \
-        --exclude='dolphin*' \
         --exclude='plasma-discover-packagekit*' \
         --exclude='plasma-discover-rpm-ostree*' \
         --exclude='plasma-discover-snap*' \

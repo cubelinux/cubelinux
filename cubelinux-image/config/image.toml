@@ -18,6 +18,7 @@ url = "https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/primary-on-trans
 [packages]
 base = [
   "bluedevil",
+  "dolphin",
   "generic-logos",
   "kde-gtk-config",
   "kde-partitionmanager",

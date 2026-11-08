@@ -96,7 +96,6 @@ def set_kiosk_restrictions() -> None:
         "run_executables",
         "plasma-desktop/scripting_console",
         "plasma/plasmashell/unlockedDesktop",
-        "plasma/containment_actions",
     )
     for restriction in restrictions:
         set_ini_value(
