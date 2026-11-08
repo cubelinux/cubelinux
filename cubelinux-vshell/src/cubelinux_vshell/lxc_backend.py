@@ -293,9 +293,23 @@ def _ensure_host_desktop_mounts(account: pwd.struct_passwd) -> bool:
         return False
 
     lines = contents.rstrip().splitlines()
-    if marker in lines:
-        start = lines.index(marker)
-        lines = lines[:start]
+    host_mount_targets = {
+        CONTAINER_RUNTIME_DIR.lstrip("/"),
+        CONTAINER_X11_DIR.lstrip("/"),
+    }
+    preserved_lines: list[str] = []
+    for line in lines:
+        if line == marker:
+            continue
+        fields = line.split()
+        if (
+            len(fields) >= 4
+            and fields[0:2] == ["lxc.mount.entry", "="]
+            and fields[3] in host_mount_targets
+        ):
+            continue
+        preserved_lines.append(line)
+    lines = preserved_lines
     updated = "\n".join([*lines, *section]) + "\n"
     if updated == contents:
         return False
