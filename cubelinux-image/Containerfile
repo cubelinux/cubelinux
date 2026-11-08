@@ -65,6 +65,7 @@ RUN systemctl --root=/ enable NetworkManager.service firewalld.service && \
 # Verify the completed filesystem before BuildKit exports or publishes it.
 RUN --mount=type=bind,source=.image-build,target=/tmp/cubelinux-image-build,ro \
     --mount=type=bind,source=scripts,target=/tmp/cubelinux-image-scripts,ro \
+    --mount=type=bind,source=config,target=/tmp/config,ro \
     python3 /tmp/cubelinux-image-scripts/verify_image.py \
         --rootfs / \
         --distro /tmp/cubelinux-image-build/distro.json \
