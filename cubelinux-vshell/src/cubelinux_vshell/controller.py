@@ -310,7 +310,7 @@ class SetupController(QObject):
     @staticmethod
     def _title_for_progress(message: str) -> str:
         steps = (
-            ("requesting one-time permission", "Preparing container networking"),
+            ("requesting one-time permission", "Preparing rootless containers"),
             ("checking your rootless container id mappings", "Preparing your account"),
             ("downloading the fedora environment", "Downloading Fedora image"),
             ("checking for fedora template updates", "Checking for Fedora image updates"),

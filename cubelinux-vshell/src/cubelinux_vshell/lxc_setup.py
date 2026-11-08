@@ -14,9 +14,9 @@ from .lxc_backend import (
     CONTAINER_NAME, FEDORA_RELEASE, GUEST_ID, ID_COUNT, VShellError,
     _account, _arch, _attach, _container_running, _config_path,
     _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
-    _escape_mount_path, _home, _lxc_path, _report, _rootless_scope, _run,
-    _start_container, _stop_container, _wait_for_network, _wait_until_running,
-    is_initialized,
+    _ensure_slirp_config, _ensure_slirp_network, _escape_mount_path, _home,
+    _lxc_path, _report, _rootless_scope, _run, _start_container,
+    _stop_container, _wait_for_network, is_initialized,
 )
 from .shared_folders import clear_shared_folders, sync_saved_shared_folders
 from .port_forwarding import clear_port_forwarding_settings
@@ -53,29 +53,7 @@ def _id_ranges(account: pwd.struct_passwd) -> tuple[tuple[int, int], tuple[int, 
     return uid_range, gid_range
 
 
-def _has_network_permission(account: pwd.struct_passwd) -> bool:
-    config = Path("/etc/lxc/lxc-usernet")
-    if not config.is_file():
-        return False
-    try:
-        lines = config.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return False
-    for line in lines:
-        fields = line.split()
-        if len(fields) != 4 or fields[:3] != [account.pw_name, "veth", "lxcbr0"]:
-            continue
-        try:
-            if int(fields[3]) > 0:
-                return True
-        except ValueError:
-            continue
-    return False
-
-
-def _host_network_ready(account: pwd.struct_passwd) -> bool:
-    if not Path("/sys/class/net/lxcbr0").exists() or not _has_network_permission(account):
-        return False
+def _host_setup_ready(account: pwd.struct_passwd) -> bool:
     try:
         _id_ranges(account)
     except VShellError:
@@ -90,7 +68,7 @@ def _host_setup(progress: Progress) -> None:
         raise VShellError(
             "The LXC host setup helper is missing. Install the current Vireak OS image and try again."
         )
-    _report(progress, "Requesting one-time permission to enable rootless LXC networking…")
+    _report(progress, "Requesting one-time permission to prepare rootless containers…")
     _run([pkexec, helper], progress, stream=True)
 
 
@@ -148,9 +126,7 @@ def _write_create_config(path: Path, account: pwd.struct_passwd, uid_range: tupl
     gid_start, _ = gid_range
     lines = [
         "lxc.include = /usr/share/lxc/config/common.conf",
-        "lxc.net.0.type = veth",
-        "lxc.net.0.link = lxcbr0",
-        "lxc.net.0.flags = up",
+        "lxc.net.0.type = empty",
         *_mapping_lines(uid_start, gid_start, account.pw_uid, account.pw_gid),
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -161,11 +137,8 @@ def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
     username = account.pw_name
     script = (
         "set -eu; "
-        # The Fedora container image may use a systemd-resolved stub address,
-        # but systemd-resolved is not running yet in this LXC container. Use
-        # the DHCP-provided bridge gateway, where lxc-net's dnsmasq serves DNS.
-        # The address can appear before DHCP installs the default route, so
-        # allow that route time to arrive before reporting a network failure.
+        # slirp4netns configures a static guest address and route. Its built-in
+        # DNS proxy is at 10.0.2.3; the host's loopback resolver is not reachable.
         "gateway=\"\"; "
         "attempt=0; "
         "while [ \"$attempt\" -lt 30 ]; do "
@@ -176,7 +149,7 @@ def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
         "echo 'Fedora did not receive a network gateway after 30 seconds. Current routes and addresses:' >&2; "
         "ip -4 route show >&2; ip -4 address show >&2; exit 1; fi; "
         "rm -f /etc/resolv.conf; "
-        "printf 'nameserver %s\\n' \"$gateway\" > /etc/resolv.conf; "
+        "printf 'nameserver 10.0.2.3\\n' > /etc/resolv.conf; "
         "dns_ready=0; "
         "for attempt in 1 2 3 4 5; do "
         "if getent ahostsv4 mirrors.fedoraproject.org >/dev/null; then "
@@ -225,15 +198,23 @@ def _mark_initialized() -> None:
 def initialize(progress: Progress = print, *, refresh_template: bool = False) -> None:
     """Prepare the host and create a rootless Fedora shell with home shared."""
     if is_initialized():
+        changed = _ensure_slirp_config()
+        if changed and _container_running(progress):
+            _report(progress, "Updating Fedora's user-mode network…")
+            _stop_container(progress)
+            _start_container(progress)
+        elif _container_running(progress):
+            _ensure_slirp_network(progress)
         _report(progress, "Fedora Virtual Shell is already set up.")
         return
     account = _account()
+    network_config_changed = _ensure_slirp_config()
     lxc_create = shutil.which("lxc-create")
     if not lxc_create:
         raise VShellError("LXC is not installed. Update to the current Vireak OS image and reboot.")
 
-    if _host_network_ready(account):
-        _report(progress, "Host container networking is ready.")
+    if _host_setup_ready(account):
+        _report(progress, "Rootless container ID mappings are ready.")
     else:
         _host_setup(progress)
     _report(progress, "Checking your rootless container ID mappings…")
@@ -295,23 +276,16 @@ def initialize(progress: Progress = print, *, refresh_template: bool = False) ->
                         f"Update error: {update_error}; cached image error: {cache_error}"
                     ) from cache_error
 
-    if not _container_running(progress):
+    container_running = _container_running(progress)
+    if container_running and network_config_changed:
+        _report(progress, "Updating Fedora's user-mode network…")
+        _stop_container(progress)
+        container_running = False
+    if not container_running:
         _report(progress, "Starting Fedora for first-time setup…")
-        _run(
-            _rootless_scope(
-                [
-                    "lxc-start",
-                    "--name",
-                    CONTAINER_NAME,
-                    "--lxcpath",
-                    str(root),
-                    "--daemon",
-                ]
-            ),
-            progress,
-            stream=True,
-        )
-        _wait_until_running(progress)
+        _start_container(progress)
+    else:
+        _ensure_slirp_network(progress)
 
     _wait_for_network(progress)
     _configure_guest(account, progress)
@@ -323,34 +297,8 @@ def initialize(progress: Progress = print, *, refresh_template: bool = False) ->
 
     # Restart so LXC applies the home and desktop socket mounts.
     _report(progress, "Restarting Fedora to apply your shared home folder…")
-    _run(
-        _rootless_scope(
-            [
-                "lxc-stop",
-                "--name",
-                CONTAINER_NAME,
-                "--lxcpath",
-                str(root),
-            ]
-        ),
-        progress,
-        stream=True,
-    )
-    _run(
-        _rootless_scope(
-            [
-                "lxc-start",
-                "--name",
-                CONTAINER_NAME,
-                "--lxcpath",
-                str(root),
-                "--daemon",
-            ]
-        ),
-        progress,
-        stream=True,
-    )
-    _wait_until_running(progress)
+    _stop_container(progress)
+    _start_container(progress)
     _ensure_guest_x11_socket_path(progress)
     _mark_initialized()
     _report(progress, "Fedora Virtual Shell is ready.")
@@ -362,13 +310,14 @@ def destroy_container(progress: Progress = print) -> None:
     if not is_initialized():
         container_path = root / CONTAINER_NAME
         if not container_path.exists() and not container_path.is_symlink():
+            _stop_container(progress)
             clear_shared_folders()
             clear_port_forwarding_settings()
             _report(progress, "The Fedora environment is already destroyed.")
             return
         if _container_running(progress):
             _report(progress, "Stopping the incomplete Fedora container…")
-            _stop_container(progress)
+        _stop_container(progress)
         _report(progress, "Cleaning up the incomplete Fedora container…")
         _remove_partial_container(root)
         clear_shared_folders()
@@ -377,7 +326,7 @@ def destroy_container(progress: Progress = print) -> None:
 
     if _container_running(progress):
         _report(progress, "Stopping Fedora before destruction…")
-        _stop_container(progress)
+    _stop_container(progress)
 
     _report(progress, "Destroying the Fedora container and its installed data…")
     _run(

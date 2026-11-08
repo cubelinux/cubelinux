@@ -12,7 +12,8 @@ from urllib.parse import unquote, urlparse
 from .lxc_backend import (
     CONTAINER_NAME, CONTAINER_RUNTIME_DIR, GUEST_ID, VShellError,
     _account, _container_running, _container_runtime_value,
-    _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts, _home,
+    _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
+    _ensure_slirp_config, _ensure_slirp_network, _home,
     _host_runtime_dir, _lxc_path, _rootfs_path, _start_container,
     _stop_container, is_initialized,
 )
@@ -104,10 +105,14 @@ def launch_app(desktop_file: str, files: list[str] | None = None) -> int:
     values = _parse_desktop(source)
     if values.get("Type") != "Application" or not values.get("Exec"):
         raise VShellError("The Fedora application entry is missing or cannot be launched.")
-    if _ensure_host_desktop_mounts(account) and _container_running(print):
+    network_config_changed = _ensure_slirp_config()
+    mounts_changed = _ensure_host_desktop_mounts(account)
+    if (mounts_changed or network_config_changed) and _container_running(print):
         _stop_container(print)
     if not _container_running(print):
         _start_container(print)
+    else:
+        _ensure_slirp_network(print)
     _ensure_guest_x11_socket_path()
     guest_desktop_file = "/" + relative.as_posix()
     command = [

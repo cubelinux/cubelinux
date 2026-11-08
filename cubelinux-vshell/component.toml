@@ -1,6 +1,6 @@
 id = "vshell"
-packages = ["dnsmasq", "konsole", "lxc", "lxc-templates", "qt6-qtsvg", "shadow-utils"]
-services = ["lxc-net.service"]
+packages = ["konsole", "lxc", "lxc-templates", "qt6-qtsvg", "shadow-utils", "slirp4netns"]
+services = []
 
 [[files]]
 source = "src/cubelinux_vshell"
@@ -45,24 +45,17 @@ source = "data/org.cubelinux.VShellAppDiscovery.desktop"
 destination = "/etc/xdg/autostart/org.cubelinux.VShellAppDiscovery.desktop"
 
 [[files]]
+source = "data/lxc-net-disabled.conf"
+destination = "/usr/lib/systemd/system/lxc-net.service.d/90-cubelinux-vshell.conf"
+mode = "0644"
+
+[[files]]
 source = "data/VShell.profile"
 destination = "/usr/share/konsole/VShell.profile"
 
 [[files]]
 source = "data/konsolerc"
 destination = "/etc/xdg/konsolerc"
-
-[[files]]
-source = "data/lxc-sysconfig"
-destination = "/etc/sysconfig/lxc"
-
-[[files]]
-source = "data/cubelinux-vshell.zone.xml"
-destination = "/usr/lib/firewalld/zones/cubelinux-vshell.xml"
-
-[[files]]
-source = "data/vshell-egress.policy.xml"
-destination = "/usr/lib/firewalld/policies/vshell-egress.xml"
 
 [[files]]
 source = "data/org.cubelinux.VShell.LxcSetup.policy"

@@ -4,7 +4,6 @@
 import os
 import pwd
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +12,6 @@ from pathlib import Path
 RANGE_SIZE = 65536
 RANGE_MIN = 100000
 RANGE_LIMIT = 600100000
-FIREWALL_ZONE = "cubelinux-vshell"
 
 
 class SetupError(Exception):
@@ -92,65 +90,6 @@ def ensure_subids(user):
         raise SetupError("Could not verify the subordinate group ID range.")
 
 
-def ensure_network_permission(user):
-    config_dir = Path("/etc/lxc")
-    config_dir.mkdir(parents=True, exist_ok=True)
-    config = config_dir / "lxc-usernet"
-    if config.is_symlink():
-        raise SetupError("Refusing to update a symlink at /etc/lxc/lxc-usernet.")
-    if config.exists():
-        lines = config.read_text(encoding="utf-8").splitlines()
-    else:
-        lines = []
-    wanted = f"{user.pw_name} veth lxcbr0 1"
-    if wanted not in lines:
-        with config.open("a", encoding="utf-8") as output:
-            if lines and config.stat().st_size and not config.read_bytes().endswith(b"\n"):
-                output.write("\n")
-            output.write(wanted + "\n")
-        os.chmod(config, 0o644)
-
-
-def start_bridge():
-    result = subprocess.run(
-        ["/usr/bin/systemctl", "enable", "--now", "lxc-net.service"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        check=False,
-    )
-    if result.returncode:
-        raise SetupError(result.stdout.strip() or "Could not start the LXC network bridge.")
-
-
-def assign_bridge_firewall_zone():
-    firewall_cmd = shutil.which("firewall-cmd")
-    if not firewall_cmd:
-        return
-    state = subprocess.run(
-        [firewall_cmd, "--state"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        check=False,
-    )
-    if state.returncode or state.stdout.strip() != "running":
-        return
-
-    result = subprocess.run(
-        [firewall_cmd, "--zone=" + FIREWALL_ZONE, "--change-interface=lxcbr0"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        check=False,
-    )
-    if result.returncode:
-        raise SetupError(
-            result.stdout.strip()
-            or f"Could not assign lxcbr0 to the {FIREWALL_ZONE} firewall zone."
-        )
-
-
 def provision_user_from_useradd():
     if os.geteuid() != 0:
         raise SetupError("The user-creation hook must run as root.")
@@ -162,12 +101,11 @@ def provision_user_from_useradd():
     except KeyError as error:
         raise SetupError(f"Could not find the newly created account {username}.") from error
 
-    # System accounts do not need rootless container mappings or a bridge quota.
+    # System accounts do not need rootless container mappings.
     if user.pw_uid < 1000:
         return 0
 
     ensure_subids(user)
-    ensure_network_permission(user)
     return 0
 
 
@@ -186,13 +124,10 @@ def main():
         raise SetupError("Run Virtual Shell from your normal desktop account.")
     user = pwd.getpwuid(caller_uid)
     if not re.fullmatch(r"[a-z_][a-z0-9_-]*", user.pw_name):
-        raise SetupError("Your account name cannot be used for LXC network setup.")
+        raise SetupError("Your account name cannot be used for the Fedora container setup.")
 
     ensure_subids(user)
-    ensure_network_permission(user)
-    start_bridge()
-    assign_bridge_firewall_zone()
-    print("Rootless LXC is ready for this user.")
+    print("Rootless LXC ID mappings are ready for this user.")
     return 0
 
 

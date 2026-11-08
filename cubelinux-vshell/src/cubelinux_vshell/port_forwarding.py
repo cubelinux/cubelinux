@@ -1,25 +1,23 @@
-"""Discover Fedora TCP listeners and proxy selected ports on the host."""
+"""Discover Fedora TCP listeners and publish them through slirp4netns."""
 
 from __future__ import annotations
 
 import ipaddress
 import json
 import os
-import select
-import socket
-import socketserver
 import subprocess
-import threading
 import time
 from pathlib import Path
 
+from . import slirp_network
 from .lxc_backend import CONTAINER_NAME, VShellError, _container_running, _lxc_path
 
 _MIN_AUTOMATIC_PORT = 1024
-# systemd-resolved uses this for LLMNR in a base Fedora system. It is host
-# name-resolution infrastructure, not an application service to proxy.
+# systemd-resolved uses this for LLMNR in a base Fedora system. It is not an
+# application service to expose on the host.
 _NON_APPLICATION_PORTS = {5355}
 _STATE_MAX_AGE = 15
+_SLIRP_GUEST_IPV4 = "10.0.2.100"
 
 
 def _data_dir() -> Path:
@@ -131,27 +129,6 @@ def _write_state(ports: list[dict[str, object]]) -> None:
         return
 
 
-def _container_ipv4() -> str | None:
-    result = subprocess.run(
-        ["lxc-info", "--name", CONTAINER_NAME, "--lxcpath", str(_lxc_path()), "--ips"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        check=False,
-        timeout=5,
-    )
-    if result.returncode:
-        return None
-    for value in result.stdout.split():
-        try:
-            address = ipaddress.ip_address(value)
-        except ValueError:
-            continue
-        if isinstance(address, ipaddress.IPv4Address) and not (address.is_loopback or address.is_unspecified):
-            return str(address)
-    return None
-
-
 def _listening_tcp_ports(guest_ip: str) -> set[int]:
     command = [
         "lxc-attach", "--name", CONTAINER_NAME, "--lxcpath", str(_lxc_path()),
@@ -177,8 +154,8 @@ def _listening_tcp_ports(guest_ip: str) -> set[int]:
             port = int(port_hex, 16)
         except (IndexError, ValueError):
             continue
-        # Host-side forwarding can reach wildcard or container-interface
-        # listeners. A guest-loopback-only listener is isolated from this proxy.
+        # Host forwarding can reach wildcard or TAP-interface listeners. A
+        # guest-loopback-only listener stays private to the Fedora namespace.
         wildcard = not local_address.strip("0")
         interface_bound = False
         if len(local_address) == 8:
@@ -196,143 +173,132 @@ def _listening_tcp_ports(guest_ip: str) -> set[int]:
     return ports
 
 
-class _ForwardingServer(socketserver.ThreadingTCPServer):
-    allow_reuse_address = True
-    daemon_threads = True
-    block_on_close = False
-
-    def __init__(self, bind_address: str, port: int, target: tuple[str, int]) -> None:
-        self.target = target
-        self._connection_limit = threading.BoundedSemaphore(64)
-        super().__init__((bind_address, port), _ForwardingHandler, bind_and_activate=True)
-
-    def process_request(self, request: socket.socket, client_address: tuple[str, int]) -> None:
-        if not self._connection_limit.acquire(blocking=False):
-            self.shutdown_request(request)
-            return
-        try:
-            super().process_request(request, client_address)
-        except Exception:
-            self._connection_limit.release()
-            raise
-
-    def process_request_thread(self, request: socket.socket, client_address: tuple[str, int]) -> None:
-        try:
-            super().process_request_thread(request, client_address)
-        finally:
-            self._connection_limit.release()
+def _host_forwardings() -> list[dict[str, object]]:
+    result = slirp_network.api_request({"execute": "list_hostfwd"})
+    response = result.get("return")
+    entries = response.get("entries") if isinstance(response, dict) else None
+    if not isinstance(entries, list):
+        raise RuntimeError("slirp4netns returned an invalid forwarded-port list.")
+    return [entry for entry in entries if isinstance(entry, dict) and entry.get("proto") == "tcp"]
 
 
-class _ForwardingHandler(socketserver.BaseRequestHandler):
-    def handle(self) -> None:
-        try:
-            guest = socket.create_connection(self.server.target, timeout=4)
-        except OSError:
-            return
-        client = self.request
-        client.setblocking(False)
-        guest.setblocking(False)
-        peers = {client: guest, guest: client}
-        open_reads = {client, guest}
-        last_activity = time.monotonic()
-        try:
-            while open_reads:
-                timeout = max(0, 120 - (time.monotonic() - last_activity))
-                readable, _, _ = select.select(list(open_reads), [], [], timeout)
-                if not readable:
-                    return
-                for source in readable:
-                    destination = peers[source]
-                    try:
-                        payload = source.recv(65536)
-                    except OSError:
-                        payload = b""
-                    if not payload:
-                        open_reads.discard(source)
-                        try:
-                            destination.shutdown(socket.SHUT_WR)
-                        except OSError:
-                            pass
-                        continue
-                    last_activity = time.monotonic()
-                    view = memoryview(payload)
-                    while view:
-                        try:
-                            sent = destination.send(view)
-                        except (BlockingIOError, InterruptedError):
-                            _, writable, _ = select.select([], [destination], [], 5)
-                            if not writable:
-                                return
-                            continue
-                        except OSError:
-                            return
-                        view = view[sent:]
-        finally:
-            guest.close()
+def _remove_forwarding(entry: dict[str, object]) -> None:
+    forwarding_id = entry.get("id")
+    if isinstance(forwarding_id, bool) or not isinstance(forwarding_id, int):
+        raise RuntimeError("slirp4netns returned a forwarded port without a valid ID.")
+    slirp_network.api_request(
+        {"execute": "remove_hostfwd", "arguments": {"id": forwarding_id}}
+    )
+
+
+def _add_forwarding(port: int, host_address: str) -> None:
+    slirp_network.api_request(
+        {
+            "execute": "add_hostfwd",
+            "arguments": {
+                "proto": "tcp",
+                "host_addr": host_address,
+                "host_port": port,
+                "guest_addr": _SLIRP_GUEST_IPV4,
+                "guest_port": port,
+            },
+        }
+    )
 
 
 class PortForwardingMonitor:
-    """Keep local TCP listeners synchronized with Fedora's active services."""
+    """Synchronize detected guest listeners with slirp4netns host forwards."""
 
     def __init__(self) -> None:
-        self._servers: dict[int, tuple[str, str, _ForwardingServer, threading.Thread]] = {}
-        self._errors: dict[int, tuple[str, str, str]] = {}
-
-    @staticmethod
-    def _stop(server: _ForwardingServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=1)
+        self._errors: dict[int, str] = {}
 
     def refresh(self) -> None:
         try:
             running = _container_running(lambda _message: None)
-            guest_ip = _container_ipv4() if running else None
-            guest_ports = _listening_tcp_ports(guest_ip) if running and guest_ip else set()
-            public_ports = _read_public_ports()
         except (OSError, subprocess.TimeoutExpired, VShellError):
-            running, guest_ip, guest_ports, public_ports = False, None, set(), set()
+            running = False
+
+        self._errors = {}
+        if not running:
+            try:
+                slirp_network.stop()
+            except (OSError, RuntimeError, subprocess.TimeoutExpired):
+                pass
+            _write_state([])
+            return
+
+        try:
+            guest_ports = _listening_tcp_ports(_SLIRP_GUEST_IPV4)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            self._errors = {-1: f"Could not inspect Fedora's listening ports: {error}"}
+            return
+        try:
+            public_ports = _read_public_ports()
+        except VShellError as error:
+            public_ports = set()
+            settings_error = str(error)
+        else:
+            settings_error = ""
 
         desired = {
-            port: (guest_ip or "", "0.0.0.0" if port in public_ports else "127.0.0.1")
+            port: "0.0.0.0" if port in public_ports else "127.0.0.1"
             for port in guest_ports
         }
-        for port, (target_ip, bind_ip, server, thread) in list(self._servers.items()):
-            if desired.get(port) != (target_ip, bind_ip):
-                self._stop(server, thread)
-                del self._servers[port]
-        self._errors = {port: error for port, error in self._errors.items() if desired.get(port) == error[:2]}
 
-        for port, (target_ip, bind_ip) in desired.items():
-            if port in self._servers:
+        try:
+            entries = _host_forwardings()
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            message = str(error)
+            self._errors = {port: message for port in desired}
+            self._publish(desired)
+            return
+
+        retained: dict[int, dict[str, object]] = {}
+        for entry in entries:
+            port = entry.get("host_port")
+            address = entry.get("host_addr", "0.0.0.0")
+            if isinstance(port, bool) or not isinstance(port, int):
+                try:
+                    _remove_forwarding(entry)
+                except (OSError, RuntimeError, subprocess.TimeoutExpired):
+                    pass
+                continue
+            if desired.get(port) != address or port in retained:
+                try:
+                    _remove_forwarding(entry)
+                except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+                    self._errors[port] = str(error)
+                continue
+            retained[port] = entry
+
+        for port, address in desired.items():
+            if port in retained:
                 continue
             try:
-                server = _ForwardingServer(bind_ip, port, (target_ip, port))
-            except OSError as error:
-                self._errors[port] = (target_ip, bind_ip, str(error))
-                continue
-            thread = threading.Thread(target=server.serve_forever, name=f"vshell-port-{port}", daemon=True)
-            thread.start()
-            self._servers[port] = (target_ip, bind_ip, server, thread)
+                _add_forwarding(port, address)
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+                self._errors[port] = str(error)
 
+        if settings_error:
+            for port in desired:
+                self._errors.setdefault(port, settings_error)
+
+        self._publish(desired)
+
+    def _publish(self, desired: dict[int, str]) -> None:
         rows: list[dict[str, object]] = []
-        for port, (_target_ip, bind_ip) in sorted(desired.items()):
+        for port, address in sorted(desired.items()):
             row: dict[str, object] = {
                 "port": port,
                 "protocol": "TCP",
                 "hostAddress": f"localhost:{port}",
-                "publicAccess": bind_ip == "0.0.0.0",
-                "status": "Forwarding",
-                "error": "",
+                "publicAccess": address == "0.0.0.0",
+                "status": "Unavailable" if port in self._errors else "Forwarding",
+                "error": self._errors.get(port, ""),
             }
-            if port in self._errors:
-                row["status"] = "Unavailable"
-                row["error"] = self._errors[port][2]
             rows.append(row)
         _write_state(rows)
 
     def close(self) -> None:
-        for _target, _bind, server, thread in self._servers.values():
-            self._stop(server, thread)
-        self._servers.clear()
+        # slirp4netns owns the forwards and is stopped with the LXC container.
         _write_state([])
