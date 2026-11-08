@@ -15,7 +15,9 @@ FEDORA_KDE_PROFILE_GLOBALS = Path(
     "/usr/share/kde-settings/kde-profile/default/xdg/kdeglobals"
 )
 BRANDING_TARGET = Path("/usr/libexec/cubelinux-kickoff-branding.py")
-AUTOSTART_TARGET = Path("/etc/xdg/autostart/cubelinux-kickoff-branding.desktop")
+# Keep this image-owned service in KDE's system autostart resource path so the
+# kiosk can block user autostart entries without blocking launcher branding.
+AUTOSTART_TARGET = Path("/usr/share/autostart/cubelinux-kickoff-branding.desktop")
 
 
 def set_ini_value(path: Path, section: str, key: str, value: str) -> None:
