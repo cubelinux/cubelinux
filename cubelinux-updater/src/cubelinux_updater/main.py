@@ -4,8 +4,8 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import qInstallMessageHandler
-from PySide6.QtNetwork import QLocalServer
+from PySide6.QtCore import QLockFile, QStandardPaths, qInstallMessageHandler
+from PySide6.QtNetwork import QAbstractSocket, QLocalServer
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -14,6 +14,7 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cubelinux_updater.activation import (
+    ActivationResult,
     SERVER_NAME,
     activate_existing_instance,
     connect_activation_server,
@@ -74,24 +75,76 @@ def main() -> int:
         exc_info=(exception_type, exception, traceback),
     )
 
-    if activate_existing_instance(show_window=not start_in_background):
+    def fail_to_start(details: str) -> int:
+        LOGGER.error("Updater could not start: %s", details)
+        if not start_in_background:
+            QMessageBox.critical(
+                None,
+                "Updater could not start",
+                f"{details}\n\nCheck ~/.local/state/cubelinux-updater/cubelinux-updater.log for details.",
+            )
+        return 1
+
+    activation = activate_existing_instance(show_window=not start_in_background)
+    if activation is ActivationResult.ACTIVATED:
         LOGGER.info("Activated the existing updater process")
         return 0
+    if activation is ActivationResult.UNRESPONSIVE:
+        return fail_to_start("An existing updater instance did not respond.")
 
     server = QLocalServer()
-    if not server.listen(SERVER_NAME):
-        if activate_existing_instance(show_window=not start_in_background):
+    runtime_dir = QStandardPaths.writableLocation(QStandardPaths.RuntimeLocation)
+    if not runtime_dir:
+        return fail_to_start("The desktop session runtime directory is unavailable.")
+
+    startup_lock = QLockFile(
+        str(Path(runtime_dir) / f"{SERVER_NAME}.startup.lock")
+    )
+    startup_lock.setStaleLockTime(0)
+    if not startup_lock.tryLock(5000):
+        activation = activate_existing_instance(show_window=not start_in_background)
+        if activation is ActivationResult.ACTIVATED:
             LOGGER.info("Activated the updater after a simultaneous startup")
             return 0
-
-        error = server.errorString()
-        LOGGER.error("Could not listen on the session socket: %s", error)
-        QMessageBox.critical(
-            None,
-            "Updater could not start",
-            f"Another updater instance may be starting, or its session socket is unavailable.\n\n{error}\n\nCheck ~/.local/state/cubelinux-updater/cubelinux-updater.log for details.",
+        return fail_to_start(
+            "Another updater instance is starting or did not respond "
+            f"(startup lock: {startup_lock.error()})."
         )
-        return 1
+
+    try:
+        # Serialize server creation, then check again in case another launch
+        # completed while this process was waiting for the startup lock.
+        activation = activate_existing_instance(show_window=not start_in_background)
+        if activation is ActivationResult.ACTIVATED:
+            LOGGER.info("Activated the updater after a simultaneous startup")
+            return 0
+        if activation is ActivationResult.UNRESPONSIVE:
+            return fail_to_start("An existing updater instance did not respond.")
+
+        if not server.listen(SERVER_NAME):
+            error = server.errorString()
+            if server.serverError() == QAbstractSocket.SocketError.AddressInUseError:
+                activation = activate_existing_instance(
+                    show_window=not start_in_background
+                )
+                if activation is ActivationResult.ACTIVATED:
+                    LOGGER.info("Activated the updater after a simultaneous startup")
+                    return 0
+                if activation is ActivationResult.UNRESPONSIVE:
+                    return fail_to_start("An existing updater instance did not respond.")
+                if QLocalServer.removeServer(SERVER_NAME) and server.listen(SERVER_NAME):
+                    LOGGER.warning("Removed a stale updater session socket and recovered")
+                else:
+                    error = server.errorString()
+
+            if not server.isListening():
+                LOGGER.error("Could not listen on the session socket: %s", error)
+                return fail_to_start(
+                    "Another updater instance may be starting, or its session socket "
+                    f"is unavailable.\n\n{error}"
+                )
+    finally:
+        startup_lock.unlock()
 
     engine = QQmlApplicationEngine()
 
