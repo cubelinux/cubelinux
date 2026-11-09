@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import platform
+import pwd
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,14 @@ from .version import __version__
 
 _USER_ID = os.getuid() if hasattr(os, "getuid") else os.getpid()
 _SERVER_NAME = f"cubelinux-vshell-setup-{_USER_ID}"
+
+
+def _is_plasma_setup_account() -> bool:
+    """Avoid starting user-scoped VShell services in Plasma Setup's temporary session."""
+    try:
+        return pwd.getpwuid(os.getuid()).pw_name == "plasma-setup"
+    except (KeyError, OSError):
+        return False
 
 
 def _about_components_json() -> str:
@@ -227,6 +236,8 @@ def _run_command(arguments: list[str]) -> int:
 
 def main() -> int:
     if len(sys.argv) > 1:
+        if sys.argv[1] in ("init", "watch-apps") and _is_plasma_setup_account():
+            return 0
         if sys.argv[1] not in ("watch-apps", "launch-app"):
             try:
                 install_shutdown_hook()
