@@ -263,6 +263,10 @@ def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
         "install -d -m 0750 /etc/sudoers.d; "
         "printf '%s\\n' '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/90-vshell; "
         "chmod 0440 /etc/sudoers.d/90-vshell; "
+        # The resolver address belongs to this LXC network, so write it after
+        # LXC starts instead of changing BuildKit's mounted /etc/resolv.conf.
+        "rm -f /etc/resolv.conf; "
+        "printf '%s\\n' 'nameserver 10.0.2.3' > /etc/resolv.conf; "
         "systemd-machine-id-setup"
     )
     _report(progress, "Preparing your Runtime user and shell…")
