@@ -16,7 +16,7 @@ from pathlib import Path
 APPLICATIONS_DIR = Path("/usr/local/share/applications")
 MARKER = "X-CubeLinux-VShell-HostLauncher=true"
 PREFIX = "org.cubelinux.VShell"
-CONTAINERS = {"vshell": "Runtime", "fedora": "Fedora"}
+CONTAINERS = {"vshell": "Runtime", "fedora-runtime": "Fedora"}
 MAX_INPUT_BYTES = 1_048_576
 MAX_LAUNCHERS = 2048
 MAX_DESKTOP_BYTES = 1_048_576

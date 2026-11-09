@@ -1,4 +1,4 @@
-"""Manage host folders shared with CubeLinux container environments."""
+"""Manage host folders shared with cubelinux container environments."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from .lxc_backend import (
 
 _SECTION = "# VShell additional shared folders"
 _HOST_SECTION = "# VShell host desktop sockets"
-_GUEST_SHARE_ROOT = Path("mnt/vshell-shares")
+_GUEST_SHARE_ROOT = Path("var/lib/vshell-shares")
 
 
 def _metadata_path(container_name: str = CONTAINER_NAME) -> Path:

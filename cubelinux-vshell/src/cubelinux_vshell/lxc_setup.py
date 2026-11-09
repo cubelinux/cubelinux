@@ -1,4 +1,4 @@
-"""Create, configure, and reset the persistent CubeLinux Runtime environment."""
+"""Create, configure, and reset the persistent cubelinux Runtime environment."""
 
 from __future__ import annotations
 
@@ -14,11 +14,12 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 from .lxc_backend import (
-    BUNDLED_RUNTIME_OCI_IMAGE, CONTAINER_NAME, GUEST_ID, ID_COUNT, VShellError,
+    BUNDLED_RUNTIME_OCI_IMAGE, CONTAINER_NAME, FEDORA_CONTAINER_NAME, GUEST_ID,
+    ID_COUNT, VShellError,
     _account, _attach, _container_running, _config_path,
     _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
     _ensure_slirp_config, _ensure_slirp_network, _escape_mount_path, _home,
-    _lxc_path, _report, _rootless_scope, _run, _start_container,
+    _lxc_path, _report, _rootfs_path, _rootless_scope, _run, _start_container,
     _stop_container, _wait_for_network, is_initialized,
 )
 from .shared_folders import clear_shared_folders, sync_saved_shared_folders
@@ -30,7 +31,7 @@ REMOTE_RUNTIME_OCI_IMAGE = "docker://ghcr.io/cubelinux/cubelinux-vshell-runtime:
 
 @contextmanager
 def _runtime_operation_lock(progress: Progress) -> Iterator[None]:
-    """Serialize automatic startup, manual setup, and Runtime reset operations."""
+    """Serialize lifecycle operations for all VShell environments."""
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
     lock_dir = Path(runtime_dir) if runtime_dir else Path.home() / ".local/state/cubelinux-vshell"
     if (
@@ -106,7 +107,7 @@ def _host_setup(progress: Progress) -> None:
     pkexec = shutil.which("pkexec")
     if not pkexec or not Path(helper).is_file():
         raise VShellError(
-            "The LXC host setup helper is missing. Install the current Vireak OS image and try again."
+            "The LXC host setup helper is missing. Install the current cubelinux image and try again."
         )
     _report(progress, "Requesting one-time permission to prepare rootless containers…")
     _run([pkexec, helper], progress, stream=True)
@@ -126,16 +127,16 @@ def _mapping_lines(uid_start: int, gid_start: int, uid: int, gid: int) -> list[s
     return lines
 
 
-def _remove_partial_container(root: Path) -> None:
-    """Remove only the incomplete VShell directory left by a failed create."""
-    container_path = root / CONTAINER_NAME
+def _remove_partial_container(root: Path, container_name: str = CONTAINER_NAME) -> None:
+    """Remove only the incomplete LXC directory left by a failed create."""
+    container_path = root / container_name
     if not container_path.exists():
         if container_path.is_symlink():
             raise VShellError("Refusing to remove an unexpected LXC container path.")
         return
     resolved_root = root.resolve()
     resolved_container = container_path.resolve()
-    if resolved_container.parent != resolved_root or resolved_container.name != CONTAINER_NAME:
+    if resolved_container.parent != resolved_root or resolved_container.name != container_name:
         raise VShellError("Refusing to remove an unexpected LXC container path.")
     shutil.rmtree(resolved_container)
 
@@ -145,6 +146,7 @@ def _write_create_config(
     account: pwd.struct_passwd,
     uid_range: tuple[int, int],
     gid_range: tuple[int, int],
+    container_name: str = CONTAINER_NAME,
 ) -> None:
     uid_start, _ = uid_range
     gid_start, _ = gid_range
@@ -152,7 +154,7 @@ def _write_create_config(
         "# VShell runtime rootfs",
         # The lxc-oci template adds the installed common, userns, and OCI
         # configuration files after this initial config is written.
-        f"lxc.uts.name = {CONTAINER_NAME}",
+        f"lxc.uts.name = {container_name}",
         "lxc.net.0.type = empty",
         "lxc.mount.entry = tmpfs tmp tmpfs rw,create=dir,mode=1777 0 0",
         "lxc.mount.entry = tmpfs var tmpfs rw,create=dir,mode=0755 0 0",
@@ -162,9 +164,9 @@ def _write_create_config(
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _set_rootfs_readonly() -> bool:
+def _set_rootfs_readonly(container_name: str = CONTAINER_NAME) -> bool:
     """Protect the guest OS after its account and host mounts are configured."""
-    config = _config_path()
+    config = _config_path(container_name)
     original = config.read_text(encoding="utf-8")
     lines = original.splitlines()
     for index, line in enumerate(lines):
@@ -184,9 +186,9 @@ def _set_rootfs_readonly() -> bool:
     return True
 
 
-def _remove_legacy_flatpak_mount() -> bool:
+def _remove_legacy_flatpak_mount(container_name: str = CONTAINER_NAME) -> bool:
     """Stop binding the old persistent system Flatpak store into Runtime."""
-    config = _config_path()
+    config = _config_path(container_name)
     original = config.read_text(encoding="utf-8")
     kept = []
     for line in original.splitlines():
@@ -205,10 +207,14 @@ def _remove_legacy_flatpak_mount() -> bool:
     return True
 
 
-def _ensure_user_flathub(account: pwd.struct_passwd, progress: Progress) -> None:
+def _ensure_user_flathub(
+    account: pwd.struct_passwd,
+    progress: Progress,
+    container_name: str = CONTAINER_NAME,
+) -> None:
     """Configure Flathub in the shared guest home; tolerate offline startup."""
     attach = [
-        "lxc-attach", "--name", CONTAINER_NAME, "--lxcpath", str(_lxc_path()),
+        "lxc-attach", "--name", container_name, "--lxcpath", str(_lxc_path()),
         "--clear-env", "--uid", str(GUEST_ID), "--gid", str(GUEST_ID),
         "--set-var", f"HOME=/home/{account.pw_name}",
         "--set-var", f"USER={account.pw_name}",
@@ -221,7 +227,7 @@ def _ensure_user_flathub(account: pwd.struct_passwd, progress: Progress) -> None
     try:
         listed = subprocess.run(
             list_command, capture_output=True, text=True, errors="replace",
-            check=False, timeout=5,
+        check=False, timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired):
         return
@@ -246,7 +252,11 @@ def _ensure_user_flathub(account: pwd.struct_passwd, progress: Progress) -> None
         _report(progress, "Flathub is unavailable; VShell will retry when opened again.")
 
 
-def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
+def _configure_guest(
+    account: pwd.struct_passwd,
+    progress: Progress,
+    container_name: str = CONTAINER_NAME,
+) -> None:
     username = account.pw_name
     script = (
         "set -eu; "
@@ -267,12 +277,13 @@ def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
         "printf '%s\\n' 'nameserver 10.0.2.3' > /etc/resolv.conf; "
         "systemd-machine-id-setup"
     )
-    _report(progress, "Preparing your Runtime user and shell…")
-    _attach("/usr/bin/bash", "-ceu", script, progress=progress)
+    label = "Runtime" if container_name == CONTAINER_NAME else "Fedora"
+    _report(progress, f"Preparing your {label} user and shell…")
+    _attach("/usr/bin/bash", "-ceu", script, progress=progress, container_name=container_name)
 
 
-def _bind_home(account: pwd.struct_passwd) -> None:
-    config = _config_path()
+def _bind_home(account: pwd.struct_passwd, container_name: str = CONTAINER_NAME) -> None:
+    config = _config_path(container_name)
     contents = config.read_text(encoding="utf-8")
     marker = "# VShell home bind"
     mount_line = (
@@ -284,9 +295,9 @@ def _bind_home(account: pwd.struct_passwd) -> None:
     config.write_text(contents.rstrip() + "\n" + mount_line + "\n", encoding="utf-8")
 
 
-def _mark_initialized() -> None:
+def _mark_initialized(container_name: str = CONTAINER_NAME) -> None:
     """Record readiness only after all container and desktop setup succeeds."""
-    config = _config_path()
+    config = _config_path(container_name)
     contents = config.read_text(encoding="utf-8")
     markers = ("# VShell home bind", "# VShell immutable Runtime rootfs")
     for marker in markers:
@@ -295,37 +306,54 @@ def _mark_initialized() -> None:
     config.write_text(contents, encoding="utf-8")
 
 
-def initialize(progress: Progress = print, *, pull_latest_runtime: bool = False) -> None:
-    """Create or start Runtime, using the bundled image unless explicitly reset."""
+def initialize(
+    progress: Progress = print,
+    *,
+    container_name: str = CONTAINER_NAME,
+    pull_latest_runtime: bool = False,
+) -> None:
+    """Create or start an environment from the bundled image by default."""
     with _runtime_operation_lock(progress):
-        _initialize_unlocked(progress, pull_latest_runtime=pull_latest_runtime)
+        _initialize_unlocked(
+            progress,
+            container_name=container_name,
+            pull_latest_runtime=pull_latest_runtime,
+        )
 
 
 def _initialize_unlocked(
-    progress: Progress, *, pull_latest_runtime: bool = False
+    progress: Progress,
+    *,
+    container_name: str = CONTAINER_NAME,
+    pull_latest_runtime: bool = False,
 ) -> None:
-    if is_initialized():
-        changed = _ensure_slirp_config()
-        changed = _remove_legacy_flatpak_mount() or changed
-        changed = _set_rootfs_readonly() or changed
-        running = _container_running(progress)
+    label = "Runtime" if container_name == CONTAINER_NAME else "Fedora"
+    if is_initialized(container_name):
+        changed = _ensure_slirp_config(container_name)
+        changed = _remove_legacy_flatpak_mount(container_name) or changed
+        config_path = _config_path(container_name)
+        config_before = config_path.read_text(encoding="utf-8")
+        sync_saved_shared_folders(container_name)
+        changed = config_path.read_text(encoding="utf-8") != config_before or changed
+        changed = _set_rootfs_readonly(container_name) or changed
+        running = _container_running(progress, container_name)
         if changed and running:
-            _report(progress, "Applying Runtime storage and network settings…")
-            _stop_container(progress)
+            _report(progress, f"Applying {label} storage and network settings…")
+            _stop_container(progress, container_name)
             running = False
         if not running:
-            _start_container(progress)
+            _start_container(progress, container_name)
         else:
-            _ensure_slirp_network(progress)
-        _ensure_guest_x11_socket_path(progress)
-        _ensure_user_flathub(_account(), progress)
-        _report(progress, "CubeLinux Runtime is already set up.")
+            _ensure_slirp_network(progress, container_name)
+        _ensure_guest_x11_socket_path(progress, container_name)
+        _ensure_user_flathub(_account(), progress, container_name)
+        _report(progress, f"{label} is already set up.")
         return
     account = _account()
-    network_config_changed = _ensure_slirp_config()
+    network_config_changed = _ensure_slirp_config(container_name)
     lxc_create = shutil.which("lxc-create")
     if not lxc_create:
-        raise VShellError("LXC is not installed. Update to the current Vireak OS image and reboot.")
+        raise VShellError("LXC is not installed. Update to the current cubelinux image and reboot.")
 
     if _host_setup_ready(account):
         _report(progress, "Rootless container ID mappings are ready.")
@@ -334,7 +362,8 @@ def _initialize_unlocked(
     _report(progress, "Checking your rootless container ID mappings…")
     uid_range, gid_range = _id_ranges(account)
     root = _lxc_path()
-    config_path = _config_path()
+    config_path = _config_path(container_name)
+    rootfs = _rootfs_path(container_name)
     root.mkdir(parents=True, exist_ok=True)
 
     if not config_path.exists():
@@ -344,18 +373,25 @@ def _initialize_unlocked(
             else BUNDLED_RUNTIME_OCI_IMAGE
         )
         if pull_latest_runtime:
-            _report(progress, "Pulling the latest Runtime image from GHCR…")
+            _report(progress, f"Pulling the latest {label} image from GHCR…")
         else:
-            _report(progress, "Creating the LXC Runtime from CubeLinux's bundled image…")
+            target = "LXC Runtime" if container_name == CONTAINER_NAME else "Fedora container"
+            _report(progress, f"Creating the {target} from cubelinux's bundled image…")
         with tempfile.TemporaryDirectory(prefix="cubelinux-vshell-") as temporary:
             create_config = Path(temporary) / "lxc.conf"
-            _write_create_config(create_config, account, uid_range, gid_range)
+            _write_create_config(
+                create_config,
+                account,
+                uid_range,
+                gid_range,
+                container_name,
+            )
             try:
                 _run(
                     _rootless_scope(
                         [
                             lxc_create,
-                            "--name", CONTAINER_NAME,
+                            "--name", container_name,
                             "--lxcpath", str(root),
                             "--config", str(create_config),
                             "--template", "oci",
@@ -366,21 +402,21 @@ def _initialize_unlocked(
                     stream=True,
                 )
             except VShellError as error:
-                _remove_partial_container(root)
+                _remove_partial_container(root, container_name)
                 if pull_latest_runtime:
                     raise VShellError(
-                        "Could not download or unpack the latest VShell Runtime image from GHCR. "
+                        f"Could not download or unpack the latest {label} image from GHCR. "
                         f"Check your internet connection and try again. Details: {error}"
                     ) from error
                 raise VShellError(
-                    "Could not create Runtime from the image bundled with CubeLinux. "
+                    f"Could not create {label} from the image bundled with cubelinux. "
                     "Repair or reinstall the host image, then try again. "
                     f"Details: {error}"
                 ) from error
         if not (rootfs / "usr/lib/systemd/systemd").is_file():
-            _remove_partial_container(root)
+            _remove_partial_container(root, container_name)
             raise VShellError(
-                "The Runtime image did not contain systemd. "
+                f"The {label} image did not contain systemd. "
                 "The container was cleaned up; try again or report the image build issue."
             )
     elif "# VShell runtime rootfs" not in config_path.read_text(encoding="utf-8"):
@@ -388,81 +424,113 @@ def _initialize_unlocked(
             "An incomplete older environment is present. Reset it before creating the OCI Runtime."
         )
 
-    container_running = _container_running(progress)
+    container_running = _container_running(progress, container_name)
     if container_running and network_config_changed:
-        _report(progress, "Updating Runtime's user-mode network…")
-        _stop_container(progress)
+        _report(progress, f"Updating {label}'s user-mode network…")
+        _stop_container(progress, container_name)
         container_running = False
     if not container_running:
-        _report(progress, "Starting Runtime for first-time setup…")
-        _start_container(progress)
+        _report(progress, f"Starting {label} for first-time setup…")
+        _start_container(progress, container_name)
     else:
-        _ensure_slirp_network(progress)
+        _ensure_slirp_network(progress, container_name)
 
-    _wait_for_network(progress)
-    _configure_guest(account, progress)
-    _report(progress, "Sharing your home folder…")
-    _bind_home(account)
-    sync_saved_shared_folders()
-    _report(progress, "Connecting Runtime to your desktop session...")
-    _ensure_host_desktop_mounts(account)
+    _wait_for_network(progress, container_name)
+    _configure_guest(account, progress, container_name)
+    _report(progress, f"Sharing your home folder with {label}…")
+    _bind_home(account, container_name)
+    sync_saved_shared_folders(container_name)
+    _report(progress, f"Connecting {label} to your desktop session...")
+    _ensure_host_desktop_mounts(account, container_name)
 
     # Add the host-specific account and sudo policy before locking the rootfs.
     # Then restart with only the shared home retained as persistent writable data.
-    _set_rootfs_readonly()
-    _report(progress, "Restarting Runtime with its read-only system…")
-    _stop_container(progress)
-    _start_container(progress)
-    _ensure_guest_x11_socket_path(progress)
-    _ensure_user_flathub(account, progress)
-    _mark_initialized()
-    _report(progress, "CubeLinux Runtime is ready.")
+    _set_rootfs_readonly(container_name)
+    _report(progress, f"Restarting {label} with its read-only system…")
+    _stop_container(progress, container_name)
+    _start_container(progress, container_name)
+    _ensure_guest_x11_socket_path(progress, container_name)
+    _ensure_user_flathub(account, progress, container_name)
+    _mark_initialized(container_name)
+    _report(progress, f"{label} is ready.")
 
 
-def destroy_container(progress: Progress = print) -> None:
+def destroy_container(
+    progress: Progress = print,
+    *,
+    container_name: str = CONTAINER_NAME,
+) -> None:
     """Remove the guest rootfs without recreating it."""
     with _runtime_operation_lock(progress):
-        _destroy_container_unlocked(progress)
+        _destroy_container_unlocked(progress, container_name)
 
 
 def reset_runtime(progress: Progress = print) -> None:
     """Recreate Runtime from the latest registry image as one locked operation."""
+    reset_environment(CONTAINER_NAME, progress)
+
+
+def create_fedora_environment(progress: Progress = print) -> None:
+    """Create the optional Fedora environment from the bundled custom OCI image."""
     with _runtime_operation_lock(progress):
-        _destroy_container_unlocked(progress)
-        _initialize_unlocked(progress, pull_latest_runtime=True)
+        container_path = _lxc_path() / FEDORA_CONTAINER_NAME
+        if not is_initialized(FEDORA_CONTAINER_NAME) and (
+            container_path.exists() or container_path.is_symlink()
+        ):
+            _report(progress, "Cleaning up the incomplete Fedora container…")
+            _destroy_container_unlocked(progress, FEDORA_CONTAINER_NAME)
+        # The Create action uses the same image shipped in the host image.
+        # Network access is only needed for the optional Fedora user's Flathub
+        # setup; container creation itself should work offline.
+        _initialize_unlocked(progress, container_name=FEDORA_CONTAINER_NAME)
 
 
-def _destroy_container_unlocked(progress: Progress) -> None:
-    """Remove the guest rootfs while the lifecycle lock is held."""
+def reset_environment(container_name: str, progress: Progress = print) -> None:
+    """Recreate one environment from the latest registry image."""
+    with _runtime_operation_lock(progress):
+        _destroy_container_unlocked(progress, container_name)
+        _initialize_unlocked(
+            progress,
+            container_name=container_name,
+            pull_latest_runtime=True,
+        )
+
+
+def _destroy_container_unlocked(
+    progress: Progress,
+    container_name: str = CONTAINER_NAME,
+) -> None:
+    """Remove one guest rootfs while the lifecycle lock is held."""
+    label = "Runtime" if container_name == CONTAINER_NAME else "Fedora"
     root = _lxc_path()
-    if not is_initialized():
-        container_path = root / CONTAINER_NAME
+    if not is_initialized(container_name):
+        container_path = root / container_name
         if not container_path.exists() and not container_path.is_symlink():
-            _stop_container(progress)
-            clear_shared_folders()
-            clear_port_forwarding_settings()
-            _report(progress, "The Runtime environment is already reset.")
+            _stop_container(progress, container_name)
+            clear_shared_folders(container_name)
+            clear_port_forwarding_settings(container_name)
+            _report(progress, f"The {label} environment is already reset.")
             return
-        if _container_running(progress):
-            _report(progress, "Stopping the incomplete Runtime container…")
-        _stop_container(progress)
-        _report(progress, "Cleaning up the incomplete Runtime container…")
-        _remove_partial_container(root)
-        clear_shared_folders()
-        clear_port_forwarding_settings()
+        if _container_running(progress, container_name):
+            _report(progress, f"Stopping the incomplete {label} container…")
+        _stop_container(progress, container_name)
+        _report(progress, f"Cleaning up the incomplete {label} container…")
+        _remove_partial_container(root, container_name)
+        clear_shared_folders(container_name)
+        clear_port_forwarding_settings(container_name)
         return
 
-    if _container_running(progress):
-        _report(progress, "Stopping Runtime before reset…")
-    _stop_container(progress)
+    if _container_running(progress, container_name):
+        _report(progress, f"Stopping {label} before reset…")
+    _stop_container(progress, container_name)
 
-    _report(progress, "Resetting Runtime's system filesystem…")
+    _report(progress, f"Resetting {label}'s system filesystem…")
     _run(
         _rootless_scope(
             [
                 "lxc-destroy",
                 "--name",
-                CONTAINER_NAME,
+                container_name,
                 "--lxcpath",
                 str(root),
                 "--force",
@@ -471,5 +539,5 @@ def _destroy_container_unlocked(progress: Progress) -> None:
         progress,
         stream=True,
     )
-    clear_shared_folders()
-    clear_port_forwarding_settings()
+    clear_shared_folders(container_name)
+    clear_port_forwarding_settings(container_name)

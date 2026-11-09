@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
-_CONTAINERS = {"vshell", "fedora"}
+_CONTAINERS = {"vshell", "fedora-runtime"}
 _DEFAULT_UNIT = "cubelinux-vshell-slirp4netns.service"
 _TAP = "tap0"
 

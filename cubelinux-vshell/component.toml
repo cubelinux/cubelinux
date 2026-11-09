@@ -18,6 +18,7 @@ destination = "/usr/lib/cubelinux-vshell/cubelinux_vshell"
 mode = "0644"
 
 [[downloads]]
+# Keep the Fedora mark available for a separate Fedora environment card.
 url = "https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/third-party/fedora-icon.svg"
 destination = "/usr/lib/cubelinux-vshell/cubelinux_vshell/qml/fedora-icon.svg"
 mode = "0644"
@@ -66,6 +67,10 @@ mode = "0644"
 [[files]]
 source = "data/VShell.profile"
 destination = "/usr/share/konsole/VShell.profile"
+
+[[files]]
+source = "data/Fedora.profile"
+destination = "/usr/share/konsole/Fedora.profile"
 
 [[files]]
 source = "data/konsolerc"

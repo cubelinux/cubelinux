@@ -99,9 +99,9 @@ Controls.ScrollView {
                 columnSpacing: Kirigami.Units.mediumSpacing
 
                 Image {
-                    source: "fedora-icon.svg"
-                    sourceSize.width: 128
-                    sourceSize.height: 128
+                    source: "file:///usr/share/icons/hicolor/256x256/apps/cubelinux-logo.png"
+                    sourceSize.width: 256
+                    sourceSize.height: 256
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     Layout.preferredWidth: 64
@@ -122,7 +122,7 @@ Controls.ScrollView {
                         spacing: Kirigami.Units.mediumSpacing
 
                         Kirigami.Heading {
-                            text: qsTr("CubeLinux Runtime")
+                            text: qsTr("cubelinux Runtime")
                             level: 2
                         }
 
@@ -205,12 +205,16 @@ Controls.ScrollView {
                         Controls.MenuItem {
                             text: qsTr("Reset Runtime…")
                             icon.name: "view-refresh"
-                            enabled: controller.ready || controller.destroyFailed
+                            enabled: controller.ready || controller.setupFailed || controller.destroyFailed
                             onTriggered: page.destroyRequested()
                         }
                     }
                 }
             }
+        }
+
+        FedoraEnvironmentCard {
+            controller: page.controller
         }
 
         Item {

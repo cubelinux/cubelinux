@@ -169,8 +169,12 @@ def _launch_detached(command: list[str]) -> None:
         raise VShellError(f"Could not start {command[0]}: {error}") from error
 
 
-def _open_terminal() -> None:
-    if not is_initialized():
+def _open_terminal(container_name: str = CONTAINER_NAME) -> None:
+    if not is_initialized(container_name):
+        if container_name != CONTAINER_NAME:
+            raise VShellError(
+                "Create the Fedora environment in Linux Subsystem before opening its terminal."
+            )
         executable = shutil.which("cubelinux-vshell")
         command = (
             [executable]
@@ -181,7 +185,8 @@ def _open_terminal() -> None:
         executable = shutil.which("konsole")
         if not executable:
             raise VShellError("Konsole is not installed on this system.")
-        command = [executable, "--profile", "VShell"]
+        profile = "VShell" if container_name == CONTAINER_NAME else "Fedora"
+        command = [executable, "--profile", profile]
     _launch_detached(command)
 
 
@@ -207,13 +212,13 @@ def _run_command(arguments: list[str]) -> int:
     try:
         if parsed.command == "init":
             if parsed.container != "vshell":
-                raise VShellError("Only CubeLinux Runtime initialization is available right now.")
+                raise VShellError("Only cubelinux Runtime initialization is available right now.")
             initialize()
             return 0
         if parsed.command == "enter":
             return enter(parsed.container)
         if parsed.command == "open-terminal":
-            _open_terminal()
+            _open_terminal(parsed.container)
             return 0
         if parsed.command == "stop":
             stop(parsed.container)

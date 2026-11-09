@@ -34,7 +34,7 @@ Kirigami.ApplicationWindow {
         AboutApplicationPage {
             applicationName: qsTr("Linux Subsystem")
             productName: qsTr("Linux Subsystem")
-            description: qsTr("Manage your CubeLinux Runtime environment.")
+            description: qsTr("Manage your cubelinux Runtime environment.")
             version: softwareVersion
             homepage: "https://cubelinux.github.io"
             bugAddress: "https://github.com/cubelinux/cubelinux/issues"
@@ -133,7 +133,7 @@ Kirigami.ApplicationWindow {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: qsTr("This resets the Runtime system filesystem and container settings. Your shared home folder and user-installed Flatpak apps will remain. Runtime will be recreated from the image included with CubeLinux; no template download is needed.")
+                    text: qsTr("This resets the Runtime system filesystem and container settings. Your shared home folder and user-installed Flatpak apps will remain. Runtime will be recreated from the image included with cubelinux; no template download is needed.")
                     wrapMode: Text.Wrap
                 }
 

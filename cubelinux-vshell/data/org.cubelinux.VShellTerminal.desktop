@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Konsole (Fedora Virtual Shell)
+Name=Konsole (cubelinux Runtime)
 GenericName=Terminal Emulator
-Comment=Open the Fedora Virtual Shell in Konsole
+Comment=Open the cubelinux Runtime terminal
 Exec=cubelinux-vshell open-terminal
 TryExec=konsole
 Icon=utilities-terminal

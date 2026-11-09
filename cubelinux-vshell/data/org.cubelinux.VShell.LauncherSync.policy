@@ -3,7 +3,7 @@
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <policyconfig>
-  <vendor>cubeLinux</vendor>
+  <vendor>cubelinux</vendor>
   <action id="org.cubelinux.VShell.LauncherSync">
     <description>Update Fedora application menu entries</description>
     <message>Authentication is required to update Fedora application menu entries</message>

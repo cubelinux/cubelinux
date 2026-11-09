@@ -1,4 +1,4 @@
-"""Rootless LXC setup and shell entry for CubeLinux Runtime."""
+"""Rootless LXC setup and shell entry for cubelinux Runtime."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from typing import Callable, Sequence
 from . import slirp_network
 
 CONTAINER_NAME = "vshell"
-FEDORA_CONTAINER_NAME = "fedora"
+FEDORA_CONTAINER_NAME = "fedora-runtime"
 CONTAINER_NAMES = (CONTAINER_NAME, FEDORA_CONTAINER_NAME)
 GUEST_ID = 50000
 ID_COUNT = 65536
@@ -24,6 +24,11 @@ CONTAINER_X11_DIR = "/mnt/vshell-host-x11"
 CONTAINER_X11_TMPFILES = "/etc/tmpfiles.d/cubelinux-vshell-x11.conf"
 BUNDLED_RUNTIME_OCI_IMAGE = "oci:/usr/lib/cubelinux-vshell/runtime-oci:main"
 SHUTDOWN_HOOK = """#!/bin/sh
+# Stop the cubelinux Runtime container before the Plasma user manager exits.
+/usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
+/usr/bin/cubelinux-vshell stop --container fedora-runtime >/dev/null 2>&1 || true
+"""
+_PREVIOUS_SHUTDOWN_HOOK = """#!/bin/sh
 # Stop the CubeLinux Runtime container before the Plasma user manager exits.
 /usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
 """
@@ -62,11 +67,13 @@ def install_shutdown_hook() -> None:
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     hook = config_home / "plasma-workspace" / "shutdown" / "cubelinux-vshell-stop"
     try:
-        if hook.is_file() and hook.read_text(encoding="utf-8") == SHUTDOWN_HOOK:
-            hook.chmod(0o755)
-            return
         if hook.exists():
-            return
+            existing = hook.read_text(encoding="utf-8") if hook.is_file() else ""
+            if existing == SHUTDOWN_HOOK:
+                hook.chmod(0o755)
+                return
+            if existing != _PREVIOUS_SHUTDOWN_HOOK:
+                return
         hook.parent.mkdir(parents=True, exist_ok=True)
         hook.write_text(SHUTDOWN_HOOK, encoding="utf-8")
         hook.chmod(0o755)
