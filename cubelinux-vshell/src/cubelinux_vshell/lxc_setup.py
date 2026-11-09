@@ -18,7 +18,7 @@ from .lxc_backend import (
     _account, _attach, _container_running, _config_path,
     _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
     _ensure_slirp_config, _ensure_slirp_network, _escape_mount_path, _home,
-    _lxc_path, _report, _rootfs_path, _rootless_scope, _run, _start_container,
+    _lxc_path, _report, _rootless_scope, _run, _start_container,
     _stop_container, _wait_for_network, is_initialized,
 )
 from .shared_folders import clear_shared_folders, sync_saved_shared_folders
@@ -145,7 +145,6 @@ def _write_create_config(
     account: pwd.struct_passwd,
     uid_range: tuple[int, int],
     gid_range: tuple[int, int],
-    rootfs: Path,
 ) -> None:
     uid_start, _ = uid_range
     gid_start, _ = gid_range
@@ -153,7 +152,6 @@ def _write_create_config(
         "# VShell runtime rootfs",
         # The lxc-oci template adds the installed common, userns, and OCI
         # configuration files after this initial config is written.
-        f"lxc.rootfs.path = dir:{_escape_mount_path(str(rootfs))}",
         f"lxc.uts.name = {CONTAINER_NAME}",
         "lxc.net.0.type = empty",
         "lxc.mount.entry = tmpfs tmp tmpfs rw,create=dir,mode=1777 0 0",
@@ -340,7 +338,6 @@ def _initialize_unlocked(
     root.mkdir(parents=True, exist_ok=True)
 
     if not config_path.exists():
-        rootfs = _rootfs_path()
         runtime_image = (
             REMOTE_RUNTIME_OCI_IMAGE
             if pull_latest_runtime
@@ -352,9 +349,7 @@ def _initialize_unlocked(
             _report(progress, "Creating the LXC Runtime from CubeLinux's bundled image…")
         with tempfile.TemporaryDirectory(prefix="cubelinux-vshell-") as temporary:
             create_config = Path(temporary) / "lxc.conf"
-            _write_create_config(
-                create_config, account, uid_range, gid_range, rootfs
-            )
+            _write_create_config(create_config, account, uid_range, gid_range)
             try:
                 _run(
                     _rootless_scope(
