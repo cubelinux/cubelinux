@@ -151,8 +151,8 @@ def _write_create_config(
     gid_start, _ = gid_range
     lines = [
         "# VShell runtime rootfs",
-        # Apply Fedora-specific defaults to this OCI root filesystem.
-        "lxc.include = /usr/share/lxc/config/fedora.common.conf",
+        # The lxc-oci template adds the installed common, userns, and OCI
+        # configuration files after this initial config is written.
         f"lxc.rootfs.path = dir:{_escape_mount_path(str(rootfs))}",
         f"lxc.uts.name = {CONTAINER_NAME}",
         "lxc.net.0.type = empty",

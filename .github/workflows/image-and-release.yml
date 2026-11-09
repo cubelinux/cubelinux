@@ -100,7 +100,7 @@ jobs:
             BASE_IMAGE=${{ steps.packages.outputs.base_image }}
             PACKAGES=${{ steps.packages.outputs.packages }}
             VSHELL_RUNTIME_IMAGE=ghcr.io/cubelinux/cubelinux-vshell-runtime:main
-            VSHELL_RUNTIME_CACHE_KEY=${{ github.run_id }}-${{ github.run_attempt }}
+            VSHELL_RUNTIME_CACHE_BUSTER=${{ github.run_id }}-${{ github.run_attempt }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

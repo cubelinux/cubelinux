@@ -123,7 +123,10 @@ def verify_rootfs(rootfs: Path, distro_path: Path, component_root: Path) -> int:
 def verify_vshell_runtime(rootfs: Path) -> None:
     """Check the host OCI tools and bundled local Runtime image layout."""
     host_required = (
-        "usr/share/lxc/config/fedora.common.conf",
+        "usr/share/lxc/config/common.conf",
+        "usr/share/lxc/config/common.seccomp",
+        "usr/share/lxc/config/userns.conf",
+        "usr/share/lxc/config/oci.common.conf",
         "usr/share/lxc/templates/lxc-oci",
         "usr/bin/jq",
         "usr/bin/skopeo",
@@ -196,7 +199,10 @@ def verify_image(image: str) -> None:
     image_paths = {
         "/usr/lib/os-release",
         "/etc/xdg/kcm-about-distrorc",
-        "/usr/share/lxc/config/fedora.common.conf",
+        "/usr/share/lxc/config/common.conf",
+        "/usr/share/lxc/config/common.seccomp",
+        "/usr/share/lxc/config/userns.conf",
+        "/usr/share/lxc/config/oci.common.conf",
         "/usr/share/lxc/templates/lxc-oci",
         "/usr/bin/jq",
         "/usr/bin/skopeo",

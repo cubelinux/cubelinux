@@ -19,8 +19,8 @@ RUN dnf -y install \
 # Keep a local OCI layout for first-login setup, which must work offline.
 FROM packages AS vshell-runtime-bundle
 ARG VSHELL_RUNTIME_IMAGE
-ARG VSHELL_RUNTIME_CACHE_KEY=local
-RUN test -n "${VSHELL_RUNTIME_CACHE_KEY}" && \
+ARG VSHELL_RUNTIME_CACHE_BUSTER=local
+RUN test -n "${VSHELL_RUNTIME_CACHE_BUSTER}" && \
     mkdir -p /usr/lib/cubelinux-vshell && \
     skopeo copy "docker://${VSHELL_RUNTIME_IMAGE}" \
         oci:/usr/lib/cubelinux-vshell/runtime-oci:main
