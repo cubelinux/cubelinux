@@ -15,7 +15,8 @@ from pathlib import Path
 
 APPLICATIONS_DIR = Path("/usr/local/share/applications")
 MARKER = "X-CubeLinux-VShell-HostLauncher=true"
-PREFIX = "org.cubelinux.VShell.Fedora"
+PREFIX = "org.cubelinux.VShell"
+CONTAINERS = {"vshell": "Runtime", "fedora": "Fedora"}
 MAX_INPUT_BYTES = 1_048_576
 MAX_LAUNCHERS = 2048
 MAX_DESKTOP_BYTES = 1_048_576
@@ -41,19 +42,17 @@ def _secure_applications_dir() -> None:
             raise SyncError(f"The application directory is not safely owned: {directory}.")
 
 
-def _rootfs_path(value, user) -> Path:
-    if not isinstance(value, str) or not value or len(value) > 4096:
-        raise SyncError("The Fedora root filesystem path is invalid.")
-    given = Path(value)
-    if not given.is_absolute():
-        raise SyncError("The Fedora root filesystem path must be absolute.")
+def _rootfs_path(container_name, user) -> Path:
+    if container_name not in CONTAINERS:
+        raise SyncError("The Linux environment identifier is invalid.")
+    given = Path(user.pw_dir) / ".local/share/vshell/containers" / container_name / "rootfs"
     try:
         rootfs = given.resolve(strict=True)
-        rootfs.relative_to(Path(user.pw_dir).resolve(strict=True))
+        rootfs.relative_to((Path(user.pw_dir) / ".local/share/vshell/containers").resolve(strict=True))
     except (OSError, ValueError) as error:
-        raise SyncError("The Fedora root filesystem must be inside your home folder.") from error
-    if not rootfs.is_dir() or tuple(rootfs.parts[-4:]) != ("vshell", "containers", "vshell", "rootfs"):
-        raise SyncError("The Fedora root filesystem is not in the VShell container location.")
+        raise SyncError("The Linux environment root filesystem is outside its managed location.") from error
+    if not rootfs.is_dir() or tuple(rootfs.parts[-3:]) != ("containers", container_name, "rootfs"):
+        raise SyncError("The Linux environment root filesystem is not in its managed location.")
     return rootfs
 
 
@@ -128,40 +127,56 @@ def _exec_path(value: str) -> str:
     return escaped
 
 
-def _launcher_contents(uid: int, rootfs: Path, entry: dict) -> tuple[str, str] | None:
-    if not isinstance(entry, dict) or set(entry) != {"path", "has_icon", "name"}:
+def _launcher_contents(uid: int, container_name: str, entry: dict, user) -> tuple[str, str] | None:
+    if (not isinstance(entry, dict)
+            or entry.get("container") != container_name
+            or entry.get("kind") not in ("desktop", "flatpak")
+            or set(entry) not in (
+                {"container", "kind", "path", "has_icon", "name"},
+                {"container", "kind", "app_id", "has_icon", "name"},
+            )):
         raise SyncError("The launcher request has an invalid entry.")
     if not isinstance(entry["has_icon"], bool):
         raise SyncError("The launcher icon flag is invalid.")
-    relative = _relative_desktop_path(entry["path"])
-    candidate = rootfs.joinpath(*relative.split("/"))
-    try:
-        source = candidate.resolve(strict=True)
-        source.relative_to(rootfs)
-        if not source.is_file():
+    if entry["kind"] == "flatpak":
+        app_id = entry.get("app_id")
+        if (not isinstance(app_id, str) or len(app_id) > 255
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9][A-Za-z0-9_-]*)+", app_id)):
+            raise SyncError("The Flatpak application identifier is invalid.")
+        identifier = f"flatpak:{app_id}"
+        digest = hashlib.sha256(f"{container_name}:{identifier}".encode()).hexdigest()[:20]
+    else:
+        relative = _relative_desktop_path(entry.get("path"))
+        rootfs = _rootfs_path(container_name, user)
+        candidate = rootfs.joinpath(*relative.split("/"))
+        try:
+            source = candidate.resolve(strict=True)
+            source.relative_to(rootfs)
+            if not source.is_file():
+                return None
+        except (OSError, ValueError):
             return None
-    except (OSError, ValueError):
-        return None
-
-    values = _desktop_values(source)
-    if (values.get("Type") != "Application" or not values.get("Exec")
-            or values.get("Hidden", "false").lower() == "true"
-            or values.get("NoDisplay", "false").lower() == "true"):
-        return None
+        values = _desktop_values(source)
+        if (values.get("Type") != "Application" or not values.get("Exec")
+                or values.get("Hidden", "false").lower() == "true"
+                or values.get("NoDisplay", "false").lower() == "true"):
+            return None
+        identifier = relative
+        digest = hashlib.sha256(f"{container_name}:{relative}".encode()).hexdigest()[:20]
     try:
         name = _safe_name(entry["name"])
     except SyncError:
         return None
 
-    app_id = hashlib.sha256(relative.encode()).hexdigest()[:20]
-    filename = f"{PREFIX}.{uid}.{app_id}.desktop"
-    icon = f"cubelinux-vshell-fedora-{app_id}" if entry["has_icon"] else "applications-other"
-    mime_types = _safe_mime_types(values.get("MimeType", ""))
+    filename = f"{PREFIX}.{container_name}.{uid}.{digest}.desktop"
+    icon = f"cubelinux-vshell-{container_name}-{digest}" if entry["has_icon"] else "applications-other"
+    mime_types = _safe_mime_types(values.get("MimeType", "")) if entry["kind"] == "desktop" else []
+    label = CONTAINERS[container_name]
     contents = "\n".join((
         "[Desktop Entry]",
         "Type=Application",
-        f"Name={_desktop_escape(name)} (Fedora)",
-        f'Exec=/usr/bin/cubelinux-vshell launch-app "{_exec_path(relative)}" %U',
+        f"Name={_desktop_escape(name)} ({label})",
+        f'Exec=/usr/bin/cubelinux-vshell launch-app --container {container_name} "{_exec_path(identifier)}" %U',
         f"Icon={icon}",
         *([f"MimeType={';'.join(mime_types)};"] if mime_types else []),
         "Terminal=false",
@@ -195,8 +210,8 @@ def _write_launcher(filename: str, contents: str) -> None:
 
 
 def _remove_stale_launchers(uid: int, live: set[str]) -> None:
-    pattern = f"{PREFIX}.{uid}.*.desktop"
-    for path in APPLICATIONS_DIR.glob(pattern):
+    patterns = (f"{PREFIX}.*.{uid}.*.desktop", f"{PREFIX}.Fedora.{uid}.*.desktop")
+    for path in (path for pattern in patterns for path in APPLICATIONS_DIR.glob(pattern)):
         if path.name in live:
             continue
         try:
@@ -229,17 +244,17 @@ def main() -> int:
         request = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise SyncError("The launcher request is not valid JSON.") from error
-    if not isinstance(request, dict) or set(request) != {"rootfs", "launchers"}:
+    if not isinstance(request, dict) or set(request) != {"launchers"}:
         raise SyncError("The launcher request has an invalid format.")
     launchers = request["launchers"]
     if not isinstance(launchers, list) or len(launchers) > MAX_LAUNCHERS:
         raise SyncError("The launcher request contains too many entries.")
-    rootfs = _rootfs_path(request["rootfs"], user) if launchers else None
-
     _secure_applications_dir()
     live = set()
     for entry in launchers:
-        rendered = _launcher_contents(uid, rootfs, entry)
+        if not isinstance(entry, dict) or entry.get("container") not in CONTAINERS:
+            raise SyncError("A launcher has an invalid environment identifier.")
+        rendered = _launcher_contents(uid, entry["container"], entry, user)
         if rendered is None:
             continue
         filename, contents = rendered

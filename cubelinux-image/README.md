@@ -77,11 +77,11 @@ cubelinux/
   HTTPS downloads for assets that should only enter the image during builds.
   Keep each app's code and local assets in its own top-level folder.
 - **`cubelinux-image/Containerfile`** contains shared image build operations.
-  Do not add component-specific `COPY` statements or package lists here;
-  declare those in the component manifest. It builds the installed KF6 KIO
-  subpackages from the matching Fedora source RPM with the cubelinux kiosk
-  launch policy patch in an intermediate stage, then installs those patched
-  RPMs into the image.
+  Declare component packages and local files in the component manifest. The
+  Containerfile also builds patched KF6 KIO subpackages in an intermediate
+  stage and bundles the separately published VShell runtime as a local OCI
+  layout. First setup can therefore run offline; Reset Runtime pulls the latest
+  runtime image from GHCR.
 - **`cubelinux-image/scripts/prepare_image.py`** validates configuration and
   manifests and creates `.image-build/`. That directory is generated and ignored
   by Git; do not edit or commit it.
@@ -108,6 +108,11 @@ to the image configuration.
 1. Update the app and its `component.toml` in `cubelinux-updater/` or
    `cubelinux-vshell/`.
 2. The image workflow runs automatically when either component folder changes.
+   The VShell runtime image is built separately and must already be published
+   to GHCR. The host image bundles that OCI image as the offline source for
+   creating a per-user LXC instance after Plasma Setup. Reset Runtime pulls the
+   current `:main` image online. A new runtime release is available to automatic
+   first setup after the host image is rebuilt.
 3. `cubelinux-image/config/image.toml` selects components by local path. Remove
    its `[[components]]` entry to exclude a component from the image.
 

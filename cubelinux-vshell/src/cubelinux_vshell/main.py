@@ -1,4 +1,4 @@
-"""Launch Virtual Shell or operate its Fedora LXC environment."""
+"""Launch Linux Subsystem or operate its LXC environments."""
 
 import argparse
 import json
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import QApplication
 
 from .controller import SetupController
 from .lxc_backend import (
+    CONTAINER_NAMES,
     VShellError,
     enter,
     install_shutdown_hook,
@@ -190,20 +191,23 @@ def _run_command(arguments: list[str]) -> int:
             "launch-app",
         ),
     )
+    parser.add_argument("--container", choices=CONTAINER_NAMES, default="vshell")
     parser.add_argument("app", nargs="?")
     parser.add_argument("files", nargs="*")
     parsed = parser.parse_args(arguments)
     try:
         if parsed.command == "init":
+            if parsed.container != "vshell":
+                raise VShellError("Only CubeLinux Runtime initialization is available right now.")
             initialize()
             return 0
         if parsed.command == "enter":
-            return enter()
+            return enter(parsed.container)
         if parsed.command == "open-terminal":
             _open_terminal()
             return 0
         if parsed.command == "stop":
-            stop()
+            stop(parsed.container)
             return 0
         if parsed.command == "activate-if-busy":
             return 0 if _request_setup_status() == "busy" else 1
@@ -212,9 +216,9 @@ def _run_command(arguments: list[str]) -> int:
             return 0
         if parsed.command == "launch-app":
             if not parsed.app:
-                parser.error("launch-app requires a Fedora desktop file path")
-            return launch_app(parsed.app, parsed.files)
-        print(status())
+                parser.error("launch-app requires a container desktop application identifier")
+            return launch_app(parsed.app, parsed.files, parsed.container)
+        print(status(parsed.container))
         return 0
     except (VShellError, OSError) as error:
         print(f"cubelinux-vshell: {error}", file=sys.stderr)

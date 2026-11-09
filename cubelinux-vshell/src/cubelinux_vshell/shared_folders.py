@@ -1,4 +1,4 @@
-"""Manage host folders shared with the Fedora LXC environment."""
+"""Manage host folders shared with CubeLinux container environments."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from .lxc_backend import (
     VShellError,
     _container_running,
     _config_path,
+    _container_name,
     _ensure_guest_x11_socket_path,
     _escape_mount_path,
     _lxc_path,
@@ -26,16 +27,16 @@ _HOST_SECTION = "# VShell host desktop sockets"
 _GUEST_SHARE_ROOT = Path("mnt/vshell-shares")
 
 
-def _metadata_path() -> Path:
-    return _lxc_path().parent / f"{CONTAINER_NAME}-shared-folders.json"
+def _metadata_path(container_name: str = CONTAINER_NAME) -> Path:
+    return _lxc_path().parent / f"{_container_name(container_name)}-shared-folders.json"
 
 
 def _share_id(path: Path) -> str:
     return hashlib.sha256(os.fsencode(str(path))).hexdigest()[:16]
 
 
-def _load() -> list[dict[str, str]]:
-    metadata = _metadata_path()
+def _load(container_name: str = CONTAINER_NAME) -> list[dict[str, str]]:
+    metadata = _metadata_path(container_name)
     if not metadata.exists():
         return []
     try:
@@ -59,10 +60,10 @@ def _load() -> list[dict[str, str]]:
     return sorted(shares, key=lambda entry: entry["path"].casefold())
 
 
-def list_shared_folders() -> list[dict[str, str]]:
+def list_shared_folders(container_name: str = CONTAINER_NAME) -> list[dict[str, str]]:
     """Return UI-safe metadata for the selected host folders."""
     result: list[dict[str, str]] = []
-    for entry in _load():
+    for entry in _load(container_name):
         path = Path(entry["path"])
         result.append(
             {
@@ -76,8 +77,8 @@ def list_shared_folders() -> list[dict[str, str]]:
     return result
 
 
-def _save(entries: list[dict[str, str]]) -> None:
-    metadata = _metadata_path()
+def _save(entries: list[dict[str, str]], container_name: str = CONTAINER_NAME) -> None:
+    metadata = _metadata_path(container_name)
     metadata.parent.mkdir(parents=True, exist_ok=True)
     if not entries:
         metadata.unlink(missing_ok=True)
@@ -117,52 +118,53 @@ def _write_config_entries(config: Path, entries: list[dict[str, str]]) -> None:
     config.write_text("\n".join(cleaned).rstrip() + "\n", encoding="utf-8")
 
 
-def _apply(entries: list[dict[str, str]], progress) -> list[dict[str, str]]:
-    config = _config_path()
+def _apply(entries: list[dict[str, str]], progress, container_name: str = CONTAINER_NAME) -> list[dict[str, str]]:
+    container_name = _container_name(container_name)
+    config = _config_path(container_name)
     if not config.is_file():
-        raise VShellError("The Fedora environment is not set up yet.")
-    old_entries = _load()
+        raise VShellError("The Runtime environment is not set up yet.")
+    old_entries = _load(container_name)
     old_config = config.read_text(encoding="utf-8")
-    was_running = _container_running(progress)
+    was_running = _container_running(progress, container_name)
     if was_running:
-        _report(progress, "Stopping Fedora to update shared folders…")
-        _stop_container(progress)
+        _report(progress, "Stopping Runtime to update shared folders…")
+        _stop_container(progress, container_name)
 
     try:
-        _save(entries)
+        _save(entries, container_name)
         _write_config_entries(config, entries)
         if was_running:
-            _report(progress, "Applying folder access and starting Fedora…")
-            _start_container(progress)
-            _ensure_guest_x11_socket_path(progress)
+            _report(progress, "Applying folder access and starting Runtime…")
+            _start_container(progress, container_name)
+            _ensure_guest_x11_socket_path(progress, container_name)
     except Exception as error:
         rollback_errors: list[str] = []
         try:
-            _save(old_entries)
+            _save(old_entries, container_name)
             config.write_text(old_config, encoding="utf-8")
         except OSError as rollback_error:
             rollback_errors.append(str(rollback_error))
-        if was_running and not _container_running(progress):
+        if was_running and not _container_running(progress, container_name):
             try:
-                _start_container(progress)
-                _ensure_guest_x11_socket_path(progress)
+                _start_container(progress, container_name)
+                _ensure_guest_x11_socket_path(progress, container_name)
             except Exception as rollback_error:
                 rollback_errors.append(str(rollback_error))
         detail = f"Could not update shared folders: {error}"
         if rollback_errors:
             detail += "; rollback also failed: " + "; ".join(rollback_errors)
         raise VShellError(detail) from error
-    return list_shared_folders()
+    return list_shared_folders(container_name)
 
 
-def add_shared_folder(folder: str, progress) -> list[dict[str, str]]:
-    """Share a selected host folder read-write with the Fedora user."""
+def add_shared_folder(folder: str, progress, container_name: str = CONTAINER_NAME) -> list[dict[str, str]]:
+    """Share a selected host folder read-write with the Runtime user."""
     try:
         path = Path(folder).expanduser().resolve(strict=True)
     except (OSError, RuntimeError) as error:
         raise VShellError(f"Could not open the selected folder: {error}") from error
     if not path.is_dir():
-        raise VShellError("Select a folder to share with Fedora.")
+        raise VShellError("Select a folder to share with Runtime.")
     if path == Path(path.anchor):
         raise VShellError("Sharing the host filesystem root is not allowed.")
     if any(character in str(path) for character in ("\n", "\r", "\0")):
@@ -173,29 +175,31 @@ def add_shared_folder(folder: str, progress) -> list[dict[str, str]]:
     except ValueError:
         pass
     else:
-        raise VShellError("Your home folder and its contents are already shared with Fedora.")
-    entries = _load()
+        raise VShellError("Your home folder and its contents are already shared with Runtime.")
+    container_name = _container_name(container_name)
+    entries = _load(container_name)
     if any(entry["path"] == str(path) for entry in entries):
-        raise VShellError("That folder is already shared with Fedora.")
+        raise VShellError("That folder is already shared with Runtime.")
     entries.append({"id": _share_id(path), "path": str(path)})
     entries.sort(key=lambda entry: entry["path"].casefold())
-    return _apply(entries, progress)
+    return _apply(entries, progress, container_name)
 
 
-def remove_shared_folder(share_id: str, progress) -> list[dict[str, str]]:
-    """Remove a selected bind mount from Fedora."""
-    entries = _load()
+def remove_shared_folder(share_id: str, progress, container_name: str = CONTAINER_NAME) -> list[dict[str, str]]:
+    """Remove a selected bind mount from Runtime."""
+    container_name = _container_name(container_name)
+    entries = _load(container_name)
     updated = [entry for entry in entries if entry["id"] != share_id]
     if len(updated) == len(entries):
         raise VShellError("That shared folder is no longer configured.")
-    return _apply(updated, progress)
+    return _apply(updated, progress, container_name)
 
 
-def sync_saved_shared_folders() -> None:
+def sync_saved_shared_folders(container_name: str = CONTAINER_NAME) -> None:
     """Write saved share mounts into a newly created container config."""
-    _write_config_entries(_config_path(), _load())
+    _write_config_entries(_config_path(container_name), _load(container_name))
 
 
-def clear_shared_folders() -> None:
-    """Forget extra folder shares when the Fedora environment is destroyed."""
-    _metadata_path().unlink(missing_ok=True)
+def clear_shared_folders(container_name: str = CONTAINER_NAME) -> None:
+    """Forget extra folder shares when the Runtime environment is reset."""
+    _metadata_path(container_name).unlink(missing_ok=True)

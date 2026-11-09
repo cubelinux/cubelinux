@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
 ARG BASE_IMAGE=quay.io/fedora/fedora-bootc:44
+ARG VSHELL_RUNTIME_IMAGE=ghcr.io/cubelinux/cubelinux-vshell-runtime:main
+
 FROM ${BASE_IMAGE} AS packages
 
 ARG PACKAGES
@@ -13,6 +15,15 @@ RUN dnf -y install \
         --exclude=PackageKit \
         ${PACKAGES} && \
     dnf clean all
+
+# Keep a local OCI layout for first-login setup, which must work offline.
+FROM packages AS vshell-runtime-bundle
+ARG VSHELL_RUNTIME_IMAGE
+ARG VSHELL_RUNTIME_CACHE_KEY=local
+RUN test -n "${VSHELL_RUNTIME_CACHE_KEY}" && \
+    mkdir -p /usr/lib/cubelinux-vshell && \
+    skopeo copy "docker://${VSHELL_RUNTIME_IMAGE}" \
+        oci:/usr/lib/cubelinux-vshell/runtime-oci:main
 
 FROM packages AS kio-build
 
@@ -41,6 +52,11 @@ RUN set -eux; \
     bootc container lint
 
 COPY .image-build/rootfs/ /
+
+# Keep the original OCI image layout so first login can initialize VShell offline.
+COPY --from=vshell-runtime-bundle \
+    /usr/lib/cubelinux-vshell/runtime-oci/ \
+    /usr/lib/cubelinux-vshell/runtime-oci/
 
 # Add the cubelinux widget defaults to the Breeze theme package in the image.
 COPY config/plasma/plasmoidsetupscripts/ \

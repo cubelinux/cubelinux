@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Prepare CubeLinux Runtime
+Comment=Create and start the user-specific LXC Runtime after Plasma Setup
+Exec=/usr/bin/cubelinux-vshell init
+OnlyShowIn=KDE;
+NoDisplay=true
+X-KDE-autostart-after=panel
