@@ -23,10 +23,17 @@ MAX_LAUNCHERS = 2048
 MAX_DESKTOP_BYTES = 1_048_576
 MAX_MIME_TYPES = 128
 MAX_MIME_FIELD_BYTES = 32_768
+MAX_CATEGORIES = 128
+MAX_CATEGORIES_FIELD_BYTES = 32_768
 _MIME_TYPE_RE = re.compile(
     r"[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\Z",
     re.ASCII,
 )
+_CATEGORY_RE = re.compile(r"[A-Za-z0-9-]{1,64}\Z", re.ASCII)
+_MAIN_CATEGORIES = {
+    "AudioVideo", "Development", "Education", "Game", "Graphics", "HealthFitness",
+    "Network", "Office", "Science", "Settings", "System", "Utility",
+}
 
 
 class SyncError(Exception):
@@ -134,6 +141,25 @@ def _safe_mime_types(value: str) -> list[str]:
     return mime_types
 
 
+def _safe_categories(value: str) -> list[str]:
+    """Keep valid desktop categories and supply a menu category when missing."""
+    categories = []
+    seen = set()
+    if isinstance(value, str) and len(value) <= MAX_CATEGORIES_FIELD_BYTES:
+        for item in value.split(";"):
+            category = item.strip()
+            if (not category or not _CATEGORY_RE.fullmatch(category)
+                    or category in seen):
+                continue
+            categories.append(category)
+            seen.add(category)
+            if len(categories) >= MAX_CATEGORIES:
+                break
+    if not any(category in _MAIN_CATEGORIES for category in categories):
+        categories.insert(0, "Utility")
+    return categories
+
+
 def _desktop_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n")
 
@@ -149,11 +175,14 @@ def _exec_path(value: str) -> str:
 def _launcher_contents(uid: int, container_name: str, entry: dict, user) -> tuple[str, str] | None:
     if (not isinstance(entry, dict)
             or entry.get("container") != container_name
-            or entry.get("kind") not in ("desktop", "flatpak")
-            or set(entry) not in (
-                {"container", "kind", "path", "has_icon", "name"},
-                {"container", "kind", "app_id", "has_icon", "name"},
-            )):
+            or entry.get("kind") not in ("desktop", "flatpak")):
+        raise SyncError("The launcher request has an invalid entry.")
+    expected_keys = (
+        {"container", "kind", "app_id", "has_icon", "name", "categories"}
+        if entry["kind"] == "flatpak"
+        else {"container", "kind", "path", "has_icon", "name"}
+    )
+    if set(entry) != expected_keys:
         raise SyncError("The launcher request has an invalid entry.")
     if not isinstance(entry["has_icon"], bool):
         raise SyncError("The launcher icon flag is invalid.")
@@ -164,6 +193,9 @@ def _launcher_contents(uid: int, container_name: str, entry: dict, user) -> tupl
             raise SyncError("The Flatpak application identifier is invalid.")
         identifier = f"flatpak:{app_id}"
         digest = hashlib.sha256(f"{container_name}:{identifier}".encode()).hexdigest()[:20]
+        if not isinstance(entry.get("categories"), str):
+            raise SyncError("The Flatpak application categories are invalid.")
+        categories = _safe_categories(entry["categories"])
     else:
         relative = _relative_desktop_path(entry.get("path"))
         rootfs = _rootfs_path(container_name, user)
@@ -180,6 +212,7 @@ def _launcher_contents(uid: int, container_name: str, entry: dict, user) -> tupl
                 or values.get("Hidden", "false").lower() == "true"
                 or values.get("NoDisplay", "false").lower() == "true"):
             return None
+        categories = _safe_categories(values.get("Categories", ""))
         identifier = relative
         digest = hashlib.sha256(f"{container_name}:{relative}".encode()).hexdigest()[:20]
     try:
@@ -197,6 +230,7 @@ def _launcher_contents(uid: int, container_name: str, entry: dict, user) -> tupl
         f"Name={_desktop_escape(name)} ({label})",
         f'Exec=/usr/bin/cubelinux-vshell launch-app --container {container_name} "{_exec_path(identifier)}" %U',
         f"Icon={icon}",
+        f"Categories={';'.join(categories)};",
         *([f"MimeType={';'.join(mime_types)};"] if mime_types else []),
         "Terminal=false",
         "DBusActivatable=false",

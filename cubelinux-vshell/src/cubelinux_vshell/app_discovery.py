@@ -135,6 +135,7 @@ def _flatpak_launcher(source: Path, icons: Path) -> dict[str, object] | None:
         "app_id": app_id,
         "has_icon": has_icon,
         "name": name,
+        "categories": values.get("Categories", ""),
     }
 
 
