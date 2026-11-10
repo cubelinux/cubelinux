@@ -14,24 +14,30 @@ from typing import Callable, Sequence
 
 from . import slirp_network
 
-CONTAINER_NAME = "vshell"
+CONTAINER_NAME = "cubelinux-runtime"
 FEDORA_CONTAINER_NAME = "fedora-runtime"
+LEGACY_CONTAINER_NAME = "vshell"
 CONTAINER_NAMES = (CONTAINER_NAME, FEDORA_CONTAINER_NAME)
+_LXC_CONTAINER_NAMES = (*CONTAINER_NAMES, LEGACY_CONTAINER_NAME)
 GUEST_ID = 50000
 ID_COUNT = 65536
 CONTAINER_RUNTIME_DIR = "/mnt/vshell-host-runtime"
 CONTAINER_X11_DIR = "/mnt/vshell-host-x11"
 CONTAINER_X11_TMPFILES = "/etc/tmpfiles.d/cubelinux-vshell-x11.conf"
-BUNDLED_RUNTIME_OCI_IMAGE = "oci:/usr/lib/cubelinux-vshell/runtime-oci:main"
 SHUTDOWN_HOOK = """#!/bin/sh
 # Stop the cubelinux Runtime container before the Plasma user manager exits.
 /usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
 /usr/bin/cubelinux-vshell stop --container fedora-runtime >/dev/null 2>&1 || true
+/usr/bin/cubelinux-vshell stop --container vshell >/dev/null 2>&1 || true
 """
-_PREVIOUS_SHUTDOWN_HOOK = """#!/bin/sh
+_PREVIOUS_SHUTDOWN_HOOKS = ("""#!/bin/sh
+# Stop the cubelinux Runtime container before the Plasma user manager exits.
+/usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
+/usr/bin/cubelinux-vshell stop --container fedora-runtime >/dev/null 2>&1 || true
+""", """#!/bin/sh
 # Stop the CubeLinux Runtime container before the Plasma user manager exits.
 /usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
-"""
+""")
 Progress = Callable[[str], None]
 
 
@@ -49,7 +55,7 @@ def _lxc_path() -> Path:
 
 
 def _container_name(container_name: str = CONTAINER_NAME) -> str:
-    if container_name not in CONTAINER_NAMES:
+    if container_name not in _LXC_CONTAINER_NAMES:
         raise VShellError("Unknown Linux environment.")
     return container_name
 
@@ -72,7 +78,7 @@ def install_shutdown_hook() -> None:
             if existing == SHUTDOWN_HOOK:
                 hook.chmod(0o755)
                 return
-            if existing != _PREVIOUS_SHUTDOWN_HOOK:
+            if existing not in _PREVIOUS_SHUTDOWN_HOOKS:
                 return
         hook.parent.mkdir(parents=True, exist_ok=True)
         hook.write_text(SHUTDOWN_HOOK, encoding="utf-8")
@@ -469,8 +475,12 @@ def enter(container_name: str = CONTAINER_NAME) -> int:
     """Start the persistent container and attach the mapped Runtime user."""
     container_name = _container_name(container_name)
     if not is_initialized(container_name):
-        if container_name != CONTAINER_NAME:
+        if container_name == FEDORA_CONTAINER_NAME:
             raise VShellError("The Fedora environment has not been created yet.")
+        if container_name == LEGACY_CONTAINER_NAME:
+            raise VShellError(
+                "The previous VShell environment is not ready. Open Linux Subsystem to migrate or recreate Runtime."
+            )
         if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
             executable = shutil.which("cubelinux-vshell") or "/usr/bin/cubelinux-vshell"
             subprocess.Popen(

@@ -14,15 +14,19 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 from .lxc_backend import (
-    BUNDLED_RUNTIME_OCI_IMAGE, CONTAINER_NAME, FEDORA_CONTAINER_NAME, GUEST_ID,
-    ID_COUNT, VShellError,
+    CONTAINER_NAME, FEDORA_CONTAINER_NAME, GUEST_ID, ID_COUNT,
+    LEGACY_CONTAINER_NAME, VShellError,
     _account, _attach, _container_running, _config_path,
     _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
     _ensure_slirp_config, _ensure_slirp_network, _escape_mount_path, _home,
     _lxc_path, _report, _rootfs_path, _rootless_scope, _run, _start_container,
     _stop_container, _wait_for_network, is_initialized,
 )
-from .shared_folders import clear_shared_folders, sync_saved_shared_folders
+from .shared_folders import (
+    clear_shared_folders,
+    copy_saved_shared_folders,
+    sync_saved_shared_folders,
+)
 from .port_forwarding import clear_port_forwarding_settings
 
 Progress = Callable[[str], None]
@@ -306,26 +310,81 @@ def _mark_initialized(container_name: str = CONTAINER_NAME) -> None:
     config.write_text(contents, encoding="utf-8")
 
 
+def _migrate_legacy_runtime(progress: Progress) -> None:
+    """Rename the previous default LXC instance without discarding its rootfs."""
+    root = _lxc_path()
+    legacy_path = root / LEGACY_CONTAINER_NAME
+    current_path = root / CONTAINER_NAME
+    if not legacy_path.exists() and not legacy_path.is_symlink():
+        return
+    if legacy_path.is_symlink():
+        raise VShellError("The previous VShell container path is a symlink; it was left untouched.")
+    if current_path.exists() or current_path.is_symlink():
+        if is_initialized(CONTAINER_NAME):
+            return
+        raise VShellError(
+            "Both the previous VShell container and cubelinux Runtime exist, and the new one is incomplete. "
+            "Neither container was changed."
+        )
+
+    if not is_initialized(LEGACY_CONTAINER_NAME):
+        _report(progress, "Cleaning up an incomplete previous VShell container…")
+        _stop_container(progress, LEGACY_CONTAINER_NAME)
+        copy_saved_shared_folders(LEGACY_CONTAINER_NAME, CONTAINER_NAME)
+        _remove_partial_container(root, LEGACY_CONTAINER_NAME)
+        return
+
+    _report(progress, "Stopping the previous VShell container before renaming it…")
+    _stop_container(progress, LEGACY_CONTAINER_NAME)
+    old_config = legacy_path / "config"
+    new_config = current_path / "config"
+    original_contents = old_config.read_text(encoding="utf-8")
+    contents = original_contents.replace(
+        _escape_mount_path(str(legacy_path)),
+        _escape_mount_path(str(current_path)),
+    ).replace(str(legacy_path), str(current_path))
+    lines = contents.splitlines()
+    renamed_uts = False
+    for index, line in enumerate(lines):
+        if line.strip().startswith("lxc.uts.name ="):
+            lines[index] = f"lxc.uts.name = {CONTAINER_NAME}"
+            renamed_uts = True
+    if not renamed_uts:
+        lines.append(f"lxc.uts.name = {CONTAINER_NAME}")
+    contents = "\n".join(lines) + "\n"
+
+    _report(progress, f"Renaming the container to {CONTAINER_NAME}…")
+    os.replace(legacy_path, current_path)
+    temporary = new_config.with_name(f".{new_config.name}.migration")
+    try:
+        temporary.write_text(contents, encoding="utf-8")
+        temporary.chmod(new_config.stat().st_mode & 0o777)
+        temporary.replace(new_config)
+        copy_saved_shared_folders(LEGACY_CONTAINER_NAME, CONTAINER_NAME)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        os.replace(current_path, legacy_path)
+        old_config.write_text(original_contents, encoding="utf-8")
+        raise
+    _report(progress, f"The existing container is now named {CONTAINER_NAME}.")
+
+
 def initialize(
     progress: Progress = print,
     *,
     container_name: str = CONTAINER_NAME,
-    pull_latest_runtime: bool = False,
 ) -> None:
-    """Create or start an environment from the bundled image by default."""
+    """Create or start an environment using the published Runtime image."""
     with _runtime_operation_lock(progress):
-        _initialize_unlocked(
-            progress,
-            container_name=container_name,
-            pull_latest_runtime=pull_latest_runtime,
-        )
+        if container_name == CONTAINER_NAME:
+            _migrate_legacy_runtime(progress)
+        _initialize_unlocked(progress, container_name=container_name)
 
 
 def _initialize_unlocked(
     progress: Progress,
     *,
     container_name: str = CONTAINER_NAME,
-    pull_latest_runtime: bool = False,
 ) -> None:
     label = "Runtime" if container_name == CONTAINER_NAME else "Fedora"
     if is_initialized(container_name):
@@ -367,16 +426,7 @@ def _initialize_unlocked(
     root.mkdir(parents=True, exist_ok=True)
 
     if not config_path.exists():
-        runtime_image = (
-            REMOTE_RUNTIME_OCI_IMAGE
-            if pull_latest_runtime
-            else BUNDLED_RUNTIME_OCI_IMAGE
-        )
-        if pull_latest_runtime:
-            _report(progress, f"Pulling the latest {label} image from GHCR…")
-        else:
-            target = "LXC Runtime" if container_name == CONTAINER_NAME else "Fedora container"
-            _report(progress, f"Creating the {target} from cubelinux's bundled image…")
+        _report(progress, f"Pulling the {label} image from GHCR…")
         with tempfile.TemporaryDirectory(prefix="cubelinux-vshell-") as temporary:
             create_config = Path(temporary) / "lxc.conf"
             _write_create_config(
@@ -395,7 +445,7 @@ def _initialize_unlocked(
                             "--lxcpath", str(root),
                             "--config", str(create_config),
                             "--template", "oci",
-                            "--", "--url", runtime_image,
+                            "--", "--url", REMOTE_RUNTIME_OCI_IMAGE,
                         ]
                     ),
                     progress,
@@ -403,14 +453,9 @@ def _initialize_unlocked(
                 )
             except VShellError as error:
                 _remove_partial_container(root, container_name)
-                if pull_latest_runtime:
-                    raise VShellError(
-                        f"Could not download or unpack the latest {label} image from GHCR. "
-                        f"Check your internet connection and try again. Details: {error}"
-                    ) from error
                 raise VShellError(
-                    f"Could not create {label} from the image bundled with cubelinux. "
-                    "Repair or reinstall the host image, then try again. "
+                    f"Could not download or unpack the {label} image from GHCR. "
+                    "Check your internet connection and try again. "
                     f"Details: {error}"
                 ) from error
         if not (rootfs / "usr/lib/systemd/systemd").is_file():
@@ -471,7 +516,7 @@ def reset_runtime(progress: Progress = print) -> None:
 
 
 def create_fedora_environment(progress: Progress = print) -> None:
-    """Create the optional Fedora environment from the bundled custom OCI image."""
+    """Create the optional Fedora environment from the published custom OCI image."""
     with _runtime_operation_lock(progress):
         container_path = _lxc_path() / FEDORA_CONTAINER_NAME
         if not is_initialized(FEDORA_CONTAINER_NAME) and (
@@ -479,21 +524,16 @@ def create_fedora_environment(progress: Progress = print) -> None:
         ):
             _report(progress, "Cleaning up the incomplete Fedora container…")
             _destroy_container_unlocked(progress, FEDORA_CONTAINER_NAME)
-        # The Create action uses the same image shipped in the host image.
-        # Network access is only needed for the optional Fedora user's Flathub
-        # setup; container creation itself should work offline.
         _initialize_unlocked(progress, container_name=FEDORA_CONTAINER_NAME)
 
 
 def reset_environment(container_name: str, progress: Progress = print) -> None:
     """Recreate one environment from the latest registry image."""
     with _runtime_operation_lock(progress):
+        if container_name == CONTAINER_NAME:
+            _migrate_legacy_runtime(progress)
         _destroy_container_unlocked(progress, container_name)
-        _initialize_unlocked(
-            progress,
-            container_name=container_name,
-            pull_latest_runtime=True,
-        )
+        _initialize_unlocked(progress, container_name=container_name)
 
 
 def _destroy_container_unlocked(

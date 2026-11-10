@@ -40,17 +40,6 @@ def copy_from_image(container: str, image_path: str, destination: Path) -> bytes
     return destination.read_bytes()
 
 
-def copy_tree_from_image(container: str, image_path: str, destination: Path) -> None:
-    destination.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["docker", "cp", f"{container}:{image_path}/.", str(destination)],
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-
 def verify_rootfs(rootfs: Path, distro_path: Path, component_root: Path) -> int:
     distro = json.loads(distro_path.read_text(encoding="utf-8"))
     fields = distro["os_release"]
@@ -121,7 +110,7 @@ def verify_rootfs(rootfs: Path, distro_path: Path, component_root: Path) -> int:
 
 
 def verify_vshell_runtime(rootfs: Path) -> None:
-    """Check the host OCI tools and bundled local Runtime image layout."""
+    """Check the host tools needed to pull and create VShell OCI containers."""
     host_required = (
         "usr/share/lxc/config/common.conf",
         "usr/share/lxc/config/common.seccomp",
@@ -135,55 +124,6 @@ def verify_vshell_runtime(rootfs: Path) -> None:
     for relative in host_required:
         if not (rootfs / relative).is_file():
             raise ValueError(f"host image is missing VShell OCI support file {relative}")
-
-    runtime = rootfs / "usr/lib/cubelinux-vshell/runtime-oci"
-    layout_path = runtime / "oci-layout"
-    index_path = runtime / "index.json"
-    if not layout_path.is_file() or not index_path.is_file():
-        raise ValueError("host image is missing the bundled VShell Runtime OCI layout")
-    layout = json.loads(layout_path.read_text(encoding="utf-8"))
-    if layout.get("imageLayoutVersion") != "1.0.0":
-        raise ValueError("bundled VShell Runtime has an unsupported OCI layout version")
-    index = json.loads(index_path.read_text(encoding="utf-8"))
-    manifest_descriptor = next(
-        (
-            descriptor
-            for descriptor in index.get("manifests", [])
-            if descriptor.get("annotations", {}).get(
-                "org.opencontainers.image.ref.name"
-            ) == "main"
-        ),
-        None,
-    )
-    if manifest_descriptor is None:
-        raise ValueError("bundled VShell Runtime OCI layout has no main image tag")
-
-    def blob_for(descriptor: dict[str, object]) -> Path:
-        digest = descriptor.get("digest")
-        if not isinstance(digest, str) or ":" not in digest:
-            raise ValueError("bundled VShell Runtime contains an invalid OCI digest")
-        algorithm, value = digest.split(":", 1)
-        if not algorithm.isalnum() or not value.isalnum():
-            raise ValueError("bundled VShell Runtime contains an unsafe OCI digest")
-        blob = runtime / "blobs" / algorithm / value
-        if not blob.is_file():
-            raise ValueError(f"bundled VShell Runtime is missing OCI blob {digest}")
-        return blob
-
-    manifest = json.loads(blob_for(manifest_descriptor).read_text(encoding="utf-8"))
-    config_descriptor = manifest.get("config")
-    if not isinstance(config_descriptor, dict):
-        raise ValueError("bundled VShell Runtime OCI manifest has no image config")
-    image_config = json.loads(blob_for(config_descriptor).read_text(encoding="utf-8"))
-    if image_config.get("os") != "linux" or not image_config.get("architecture"):
-        raise ValueError("bundled VShell Runtime OCI image config is invalid")
-    layers = manifest.get("layers")
-    if not isinstance(layers, list) or not layers:
-        raise ValueError("bundled VShell Runtime OCI manifest has no filesystem layers")
-    for layer in layers:
-        if not isinstance(layer, dict):
-            raise ValueError("bundled VShell Runtime OCI manifest has an invalid layer")
-        blob_for(layer)
 
 
 def verify_image(image: str) -> None:
@@ -229,11 +169,6 @@ def verify_image(image: str) -> None:
             rootfs = Path(temporary)
             for image_path in sorted(image_paths):
                 copy_from_image(container, image_path, rootfs / image_path.lstrip("/"))
-            copy_tree_from_image(
-                container,
-                "/usr/lib/cubelinux-vshell/runtime-oci",
-                rootfs / "usr/lib/cubelinux-vshell/runtime-oci",
-            )
             verify_vshell_runtime(rootfs)
             count = verify_rootfs(rootfs, distro_path, component_root)
     finally:

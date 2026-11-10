@@ -200,6 +200,14 @@ def sync_saved_shared_folders(container_name: str = CONTAINER_NAME) -> None:
     _write_config_entries(_config_path(container_name), _load(container_name))
 
 
+def copy_saved_shared_folders(source: str, destination: str) -> None:
+    """Carry existing folder shares forward when renaming a container."""
+    source_entries = _load(source)
+    destination_entries = _load(destination)
+    merged = {entry["id"]: entry for entry in (*destination_entries, *source_entries)}
+    _save(list(merged.values()), destination)
+
+
 def clear_shared_folders(container_name: str = CONTAINER_NAME) -> None:
     """Forget extra folder shares when the Runtime environment is reset."""
     _metadata_path(container_name).unlink(missing_ok=True)

@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
-_CONTAINERS = {"vshell", "fedora-runtime"}
+_DEFAULT_CONTAINER = "cubelinux-runtime"
+_LEGACY_CONTAINER = "vshell"
+_CONTAINERS = {_DEFAULT_CONTAINER, "fedora-runtime", _LEGACY_CONTAINER}
 _DEFAULT_UNIT = "cubelinux-vshell-slirp4netns.service"
 _TAP = "tap0"
 
@@ -27,7 +29,11 @@ def _container_name(container_name: str) -> str:
 
 def _unit(container_name: str) -> str:
     container_name = _container_name(container_name)
-    return _DEFAULT_UNIT if container_name == "vshell" else f"cubelinux-vshell-slirp4netns-{container_name}.service"
+    return (
+        _DEFAULT_UNIT
+        if container_name in (_DEFAULT_CONTAINER, _LEGACY_CONTAINER)
+        else f"cubelinux-vshell-slirp4netns-{container_name}.service"
+    )
 
 
 def _runtime_dir() -> Path:
@@ -42,22 +48,22 @@ def _runtime_dir() -> Path:
     return path
 
 
-def api_socket_path(container_name: str = "vshell") -> Path:
+def api_socket_path(container_name: str = _DEFAULT_CONTAINER) -> Path:
     container_name = _container_name(container_name)
-    suffix = "" if container_name == "vshell" else f"-{container_name}"
+    suffix = "" if container_name in (_DEFAULT_CONTAINER, _LEGACY_CONTAINER) else f"-{container_name}"
     return _runtime_dir() / f"cubelinux-vshell-slirp4netns{suffix}.sock"
 
 
-def _pid_path(container_name: str = "vshell") -> Path:
+def _pid_path(container_name: str = _DEFAULT_CONTAINER) -> Path:
     container_name = _container_name(container_name)
-    suffix = "" if container_name == "vshell" else f"-{container_name}"
+    suffix = "" if container_name in (_DEFAULT_CONTAINER, _LEGACY_CONTAINER) else f"-{container_name}"
     return _runtime_dir() / f"cubelinux-vshell-slirp4netns{suffix}.pid"
 
 
 @contextmanager
-def _network_lock(container_name: str = "vshell") -> Iterator[None]:
+def _network_lock(container_name: str = _DEFAULT_CONTAINER) -> Iterator[None]:
     container_name = _container_name(container_name)
-    suffix = "" if container_name == "vshell" else f"-{container_name}"
+    suffix = "" if container_name in (_DEFAULT_CONTAINER, _LEGACY_CONTAINER) else f"-{container_name}"
     path = _runtime_dir() / f"cubelinux-vshell-slirp4netns{suffix}.lock"
     with path.open("a", encoding="ascii") as lock:
         path.chmod(0o600)
@@ -68,7 +74,7 @@ def _network_lock(container_name: str = "vshell") -> Iterator[None]:
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
-def _unit_active(container_name: str = "vshell") -> bool:
+def _unit_active(container_name: str = _DEFAULT_CONTAINER) -> bool:
     result = subprocess.run(
         ["systemctl", "--user", "is-active", "--quiet", _unit(container_name)],
         stdout=subprocess.DEVNULL,
@@ -78,7 +84,7 @@ def _unit_active(container_name: str = "vshell") -> bool:
     return result.returncode == 0
 
 
-def _stop_unit(container_name: str = "vshell") -> None:
+def _stop_unit(container_name: str = _DEFAULT_CONTAINER) -> None:
     unit = _unit(container_name)
     stopped = subprocess.run(
         ["systemctl", "--user", "stop", unit],
@@ -101,7 +107,7 @@ def _stop_unit(container_name: str = "vshell") -> None:
 
 
 def api_request(
-    request: dict[str, Any], *, timeout: float = 2.0, container_name: str = "vshell"
+    request: dict[str, Any], *, timeout: float = 2.0, container_name: str = _DEFAULT_CONTAINER
 ) -> dict[str, Any]:
     """Send one JSON request to slirp4netns' local control socket."""
     payload = json.dumps(request, separators=(",", ":")).encode("utf-8")
@@ -132,7 +138,7 @@ def api_request(
     return decoded
 
 
-def _ready(container_name: str = "vshell") -> bool:
+def _ready(container_name: str = _DEFAULT_CONTAINER) -> bool:
     if not _unit_active(container_name) or not api_socket_path(container_name).exists():
         return False
     try:
@@ -147,13 +153,13 @@ def _ready(container_name: str = "vshell") -> bool:
     return isinstance(response, dict) and isinstance(response.get("entries"), list)
 
 
-def ensure_running(container_pid: int, container_name: str = "vshell") -> bool:
+def ensure_running(container_pid: int, container_name: str = _DEFAULT_CONTAINER) -> bool:
     """Start or reuse slirp4netns for the running LXC network namespace."""
     with _network_lock(container_name):
         return _ensure_running_locked(container_pid, container_name)
 
 
-def _ensure_running_locked(container_pid: int, container_name: str = "vshell") -> bool:
+def _ensure_running_locked(container_pid: int, container_name: str = _DEFAULT_CONTAINER) -> bool:
     container_name = _container_name(container_name)
     if container_pid <= 1:
         raise RuntimeError("LXC did not provide a valid container process ID.")
@@ -234,12 +240,12 @@ def _ensure_running_locked(container_pid: int, container_name: str = "vshell") -
     raise RuntimeError(f"slirp4netns did not become ready: {detail}")
 
 
-def stop(container_name: str = "vshell") -> None:
+def stop(container_name: str = _DEFAULT_CONTAINER) -> None:
     """Stop the VShell slirp4netns unit and remove its runtime state."""
     with _network_lock(container_name):
         _stop_locked(container_name)
 
 
-def _stop_locked(container_name: str = "vshell") -> None:
+def _stop_locked(container_name: str = _DEFAULT_CONTAINER) -> None:
     _stop_unit(container_name)
 

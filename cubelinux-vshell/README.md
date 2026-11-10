@@ -27,9 +27,9 @@ layouts to the window instead of relying on fixed positioning. Use cubelinux
 names and visual assets; do not imply that Linux Subsystem is an official KDE
 product.
 
-The host image bundles the Fedora 44 VShell Runtime OCI image. After Plasma
-Setup, VShell creates the signed-in user's unprivileged LXC instance from that
-local image without a first-run wizard or a Fedora template download.
+After Plasma Setup, VShell automatically prepares the Runtime on the user's
+first KDE login and starts it on later logins. See **Image source** for image
+pull, reset, and migration behavior.
 slirp4netns gives the container outbound
 connectivity without a host bridge, DHCP server, or veth permission. When Plasma
 Setup creates the desktop account, a system hook
@@ -53,7 +53,7 @@ the guest's `/tmp` and linked back after Runtime mounts its temporary
 filesystem there. The container user is mapped to the desktop user's host ID,
 so those sockets accept connections as that user.
 
-The optional Fedora environment is created from the same bundled custom OCI
+The optional Fedora environment is created from the same published custom OCI
 image when the user selects **Create Fedora container**. Its system filesystem
 is made read-only after the guest account is prepared; `/tmp` and `/var` are
 temporary writable filesystems, and the signed-in user's home is shared with it.
@@ -105,8 +105,9 @@ Inc., or its subsidiaries in the United States and other countries.
 
 The container runs as an unprivileged user namespace. Container root maps to
 subordinate host IDs; the Runtime user maps to the desktop user's own ID
-so the shared home folder remains writable. The LXC instance is created under
-`~/.local/share/vshell/containers`; its system files are read-only after setup. `/tmp` and
+so the shared home folder remains writable. The default LXC instance is named
+`cubelinux-runtime` and is created under
+`~/.local/share/vshell/containers/cubelinux-runtime`; its system files are read-only after setup. `/tmp` and
 `/var` are ephemeral writable mounts; the shared home is the only default
 persistent writable mount. User-scoped Flatpak metadata and app data therefore
 remain available after a Runtime reset.
@@ -117,36 +118,35 @@ audio, and session-bus sockets.
 
 ## Image source
 
-The host image bundles the Runtime OCI image at
-`/usr/lib/cubelinux-vshell/runtime-oci`; it does not contain a user-specific
-LXC instance. After Plasma Setup, VShell uses LXC's OCI template to create that
-user's instance from the bundled image. **Reset Runtime** instead fetches
-`ghcr.io/cubelinux/cubelinux-vshell-runtime:main` from GHCR. The `:main` tag is
-mutable, so reset uses the version currently published under that tag without
-requiring a host image update. LXC uses a local layer cache when available to
-reduce repeated downloads.
+The host image does not bundle the Runtime OCI image or a user-specific LXC
+instance. At the first KDE login after Plasma Setup, VShell uses LXC's OCI
+template to pull `ghcr.io/cubelinux/cubelinux-vshell-runtime:main` and create
+the `cubelinux-runtime` instance. This first setup needs internet access. The
+`:main` tag is mutable; **Reset Runtime** pulls the version currently published
+under that tag without requiring a host image update. LXC uses a local layer
+cache when available to reduce repeated downloads. When the new Runtime path
+is absent, the next Runtime initialization moves an initialized instance named
+`vshell` in place to `cubelinux-runtime`, preserving its root filesystem and
+settings. An incomplete old instance is cleaned up before Runtime is created
+again.
 
 ## Use
 
-After Plasma Setup, VShell automatically creates the user's LXC Runtime
-instance from the local OCI image bundled in the host image, then starts it at
-each desktop login. Creating the instance imports the local image and does not
-download the Runtime image from the internet.
-Open **Linux Subsystem** from the application menu to view or manage it. Choose
-**Open Runtime terminal** to open the bundled
+Open **Linux Subsystem** from the application menu to view or manage Runtime.
+Choose **Open Runtime terminal** to open the bundled
 Konsole in the Linux environment. Konsole's system default is locked to VShell,
 its settings menu is disabled, and no separate host-shell profile is added. The
 application menu provides a dedicated **Konsole (Runtime)** entry that opens
 the same profile. If Runtime is not set up yet, this entry opens Linux
-Subsystem to initialize it automatically without briefly opening an empty Konsole. If
-the environment exists but is stopped, Konsole starts it when opening the
-profile. KDE Kiosk hides Konsole's stock launcher, which requests general shell
-access.
+Subsystem to initialize it automatically without briefly opening an empty
+Konsole. If the environment exists but is stopped, Konsole starts it when
+opening the profile. KDE Kiosk hides Konsole's stock launcher, which requests
+general shell access.
 
-Closing Linux Subsystem while setup or destruction is running hides its window while
-the operation continues. Open **Linux Subsystem** to bring the progress window
-back. If the operation finishes successfully while hidden,
-the app exits; if it fails, the window reopens with the error.
+Closing Linux Subsystem while setup or destruction is running hides its window
+while the operation continues. Open **Linux Subsystem** to bring the progress
+window back. If the operation finishes successfully while hidden, the app exits;
+if it fails, the window reopens with the error.
 
 The installed `cubelinux-vshell` command also supports these operations:
 
@@ -163,9 +163,9 @@ from persisting. `cubelinux-vshell stop` shuts down the container. Use **Reset
 Runtime** in Linux Subsystem to recreate the LXC instance by pulling the
 current `:main` runtime image from GHCR. Reset needs internet access. The shared
 host home and user-installed Flatpak apps remain; guest-side RPM/DNF changes
-and container settings are cleared.
-Existing environments created by older VShell versions are left intact until
-you reset them.
+and container settings are cleared. The initialized legacy default container
+named `vshell` is migrated in place the next time Runtime initializes, if the
+new Runtime path is absent.
 Open **About Linux Subsystem** from the right-side application menu to see the
 app version, project links, Qt build and runtime versions, PySide6, KDE
 Frameworks/Kirigami, Plasma, Python, distribution, kernel, and architecture
