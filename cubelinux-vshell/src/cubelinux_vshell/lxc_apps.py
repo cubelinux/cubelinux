@@ -13,7 +13,7 @@ from .lxc_backend import (
     CONTAINER_NAME, CONTAINER_RUNTIME_DIR, GUEST_ID, VShellError,
     _account, _container_running, _container_runtime_value,
     _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
-    _container_name, _ensure_slirp_config, _ensure_slirp_network, _home,
+    _container_name, _ensure_slirp_network, _home,
     _host_runtime_dir, _lxc_path, _rootfs_path, _start_container,
     _stop_container, is_initialized,
 )
@@ -125,9 +125,8 @@ def launch_app(
             values["Exec"], files or [], _display_name(values), guest_desktop_file,
             values.get("Icon", ""), account
         )
-    network_config_changed = _ensure_slirp_config(container_name)
     mounts_changed = _ensure_host_desktop_mounts(account, container_name)
-    if (mounts_changed or network_config_changed) and _container_running(print, container_name):
+    if mounts_changed and _container_running(print, container_name):
         _stop_container(print, container_name)
     if not _container_running(print, container_name):
         _start_container(print, container_name)

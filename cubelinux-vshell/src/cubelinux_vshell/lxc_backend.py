@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import platform
 import pwd
 import re
 import shutil
@@ -15,29 +16,19 @@ from typing import Callable, Sequence
 from . import slirp_network
 
 CONTAINER_NAME = "cubelinux-runtime"
-FEDORA_CONTAINER_NAME = "fedora-runtime"
-LEGACY_CONTAINER_NAME = "vshell"
+FEDORA_CONTAINER_NAME = "fedora"
 CONTAINER_NAMES = (CONTAINER_NAME, FEDORA_CONTAINER_NAME)
-_LXC_CONTAINER_NAMES = (*CONTAINER_NAMES, LEGACY_CONTAINER_NAME)
+FEDORA_RELEASE = "44"
 GUEST_ID = 50000
 ID_COUNT = 65536
 CONTAINER_RUNTIME_DIR = "/mnt/vshell-host-runtime"
 CONTAINER_X11_DIR = "/mnt/vshell-host-x11"
 CONTAINER_X11_TMPFILES = "/etc/tmpfiles.d/cubelinux-vshell-x11.conf"
 SHUTDOWN_HOOK = """#!/bin/sh
-# Stop the cubelinux Runtime container before the Plasma user manager exits.
+# Stop cubelinux containers before the Plasma user manager exits.
 /usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
-/usr/bin/cubelinux-vshell stop --container fedora-runtime >/dev/null 2>&1 || true
-/usr/bin/cubelinux-vshell stop --container vshell >/dev/null 2>&1 || true
+/usr/bin/cubelinux-vshell stop --container fedora >/dev/null 2>&1 || true
 """
-_PREVIOUS_SHUTDOWN_HOOKS = ("""#!/bin/sh
-# Stop the cubelinux Runtime container before the Plasma user manager exits.
-/usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
-/usr/bin/cubelinux-vshell stop --container fedora-runtime >/dev/null 2>&1 || true
-""", """#!/bin/sh
-# Stop the CubeLinux Runtime container before the Plasma user manager exits.
-/usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
-""")
 Progress = Callable[[str], None]
 
 
@@ -49,13 +40,22 @@ def _home() -> Path:
     return Path.home().resolve()
 
 
+def _arch() -> str:
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        return "amd64"
+    if machine in ("aarch64", "arm64"):
+        return "arm64"
+    raise VShellError(f"Fedora LXC images are not available for this architecture: {machine}.")
+
+
 def _lxc_path() -> Path:
     data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
     return data_home / "vshell" / "containers"
 
 
 def _container_name(container_name: str = CONTAINER_NAME) -> str:
-    if container_name not in _LXC_CONTAINER_NAMES:
+    if container_name not in CONTAINER_NAMES:
         raise VShellError("Unknown Linux environment.")
     return container_name
 
@@ -77,8 +77,6 @@ def install_shutdown_hook() -> None:
             existing = hook.read_text(encoding="utf-8") if hook.is_file() else ""
             if existing == SHUTDOWN_HOOK:
                 hook.chmod(0o755)
-                return
-            if existing not in _PREVIOUS_SHUTDOWN_HOOKS:
                 return
         hook.parent.mkdir(parents=True, exist_ok=True)
         hook.write_text(SHUTDOWN_HOOK, encoding="utf-8")
@@ -206,11 +204,21 @@ def _wait_until_running(progress: Progress, container_name: str = CONTAINER_NAME
         if _container_running(progress, container_name):
             return
         time.sleep(1)
-    raise VShellError("Runtime did not finish starting. Check the LXC log and try setup again.")
+    label = (
+        "Fedora"
+        if container_name == FEDORA_CONTAINER_NAME
+        else "Runtime"
+    )
+    raise VShellError(f"{label} did not finish starting. Check the LXC log and try again.")
 
 
 def _wait_for_network(progress: Progress, container_name: str = CONTAINER_NAME) -> None:
-    _report(progress, "Connecting Runtime to the network…")
+    label = (
+        "Fedora"
+        if container_name == FEDORA_CONTAINER_NAME
+        else "Runtime"
+    )
+    _report(progress, f"Connecting {label} to the network…")
     deadline = time.monotonic() + 30
     reported_ips = ""
     while time.monotonic() < deadline:
@@ -245,7 +253,7 @@ def _wait_for_network(progress: Progress, container_name: str = CONTAINER_NAME) 
     else:
         detail = " LXC reported no IP addresses."
     raise VShellError(
-        "Runtime did not receive the slirp4netns network configuration within 30 seconds. "
+        f"{label} did not receive the slirp4netns network configuration within 30 seconds. "
         "Check that the container network namespace is available and slirp4netns is running."
         + detail
     )
@@ -253,6 +261,11 @@ def _wait_for_network(progress: Progress, container_name: str = CONTAINER_NAME) 
 
 def _ensure_slirp_network(progress: Progress, container_name: str = CONTAINER_NAME) -> None:
     container_name = _container_name(container_name)
+    label = (
+        "Fedora"
+        if container_name == FEDORA_CONTAINER_NAME
+        else "Runtime"
+    )
     try:
         result = subprocess.run(
             ["lxc-info", "--name", container_name, "--lxcpath", str(_lxc_path()), "--pid"],
@@ -263,40 +276,27 @@ def _ensure_slirp_network(progress: Progress, container_name: str = CONTAINER_NA
             timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        raise VShellError(f"Could not inspect the running Runtime container: {error}") from error
+        raise VShellError(f"Could not inspect the running {label} container: {error}") from error
     match = re.search(r"PID:\s*(\d+)", result.stdout) if result.returncode == 0 else None
     if not match:
-        raise VShellError("LXC did not report the running Runtime container process ID.")
+        raise VShellError(f"LXC did not report the running {label} container process ID.")
     try:
         slirp_network.ensure_running(int(match.group(1)), container_name)
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
-        raise VShellError(f"Could not connect Runtime to the network: {error}") from error
+        raise VShellError(f"Could not connect {label} to the network: {error}") from error
 
 
 def _stop_slirp_network(container_name: str = CONTAINER_NAME) -> None:
+    container_name = _container_name(container_name)
+    label = (
+        "Fedora"
+        if container_name == FEDORA_CONTAINER_NAME
+        else "Runtime"
+    )
     try:
-        slirp_network.stop(_container_name(container_name))
+        slirp_network.stop(container_name)
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
-        raise VShellError(f"Could not stop Runtime's user-mode network: {error}") from error
-
-
-def _ensure_slirp_config(container_name: str = CONTAINER_NAME) -> bool:
-    """Migrate existing VShell containers from the host bridge to slirp4netns."""
-    config = _config_path(container_name)
-    if not config.is_file():
-        return False
-    contents = config.read_text(encoding="utf-8")
-    lines = contents.splitlines()
-    network_lines = [line for line in lines if line.startswith("lxc.net.")]
-    if network_lines == ["lxc.net.0.type = empty"]:
-        return False
-    updated = [line for line in lines if not line.startswith("lxc.net.")]
-    updated.insert(1 if updated and updated[0].startswith("lxc.include") else 0, "lxc.net.0.type = empty")
-    temporary = config.with_name(f".{config.name}.tmp")
-    temporary.write_text("\n".join(updated) + "\n", encoding="utf-8")
-    temporary.chmod(config.stat().st_mode & 0o777)
-    temporary.replace(config)
-    return True
+        raise VShellError(f"Could not stop {label}'s user-mode network: {error}") from error
 
 
 def _host_runtime_dir(account: pwd.struct_passwd) -> Path | None:
@@ -452,7 +452,6 @@ def _stop_container(progress: Progress, container_name: str = CONTAINER_NAME) ->
 
 def _start_container(progress: Progress, container_name: str = CONTAINER_NAME) -> None:
     container_name = _container_name(container_name)
-    _ensure_slirp_config(container_name)
     _run(
         _rootless_scope(
             [
@@ -477,10 +476,6 @@ def enter(container_name: str = CONTAINER_NAME) -> int:
     if not is_initialized(container_name):
         if container_name == FEDORA_CONTAINER_NAME:
             raise VShellError("The Fedora environment has not been created yet.")
-        if container_name == LEGACY_CONTAINER_NAME:
-            raise VShellError(
-                "The previous VShell environment is not ready. Open Linux Subsystem to migrate or recreate Runtime."
-            )
         if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
             executable = shutil.which("cubelinux-vshell") or "/usr/bin/cubelinux-vshell"
             subprocess.Popen(
@@ -495,10 +490,10 @@ def enter(container_name: str = CONTAINER_NAME) -> int:
 
     account = _account()
     root = _lxc_path()
-    network_config_changed = _ensure_slirp_config(container_name)
     mounts_changed = _ensure_host_desktop_mounts(account, container_name)
-    if (mounts_changed or network_config_changed) and _container_running(print, container_name):
-        print("Restarting Runtime to apply its network and desktop settings...")
+    if mounts_changed and _container_running(print, container_name):
+        label = "Fedora" if container_name == FEDORA_CONTAINER_NAME else "Runtime"
+        print(f"Restarting {label} to apply its desktop settings...")
         _stop_container(print, container_name)
     if not _container_running(print, container_name):
         _start_container(print, container_name)

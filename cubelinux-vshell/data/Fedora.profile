@@ -1,5 +1,5 @@
 [General]
-Command=/usr/bin/cubelinux-vshell enter --container fedora-runtime
+Command=/usr/bin/cubelinux-vshell enter --container fedora
 Icon=utilities-terminal
-Name=Fedora Virtual Shell
+Name=Fedora
 Parent=FALLBACK/

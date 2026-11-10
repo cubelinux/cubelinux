@@ -27,9 +27,8 @@ from PySide6.QtWidgets import QApplication
 from .controller import SetupController
 from .lxc_backend import (
     CONTAINER_NAME,
+    CONTAINER_NAMES,
     FEDORA_CONTAINER_NAME,
-    LEGACY_CONTAINER_NAME,
-    _LXC_CONTAINER_NAMES,
     VShellError,
     enter,
     install_shutdown_hook,
@@ -263,10 +262,6 @@ def _start_first_run_setup() -> None:
 
 
 def _open_terminal(container_name: str = CONTAINER_NAME) -> None:
-    if container_name == LEGACY_CONTAINER_NAME:
-        raise VShellError(
-            "The previous VShell container is being migrated. Open the cubelinux Runtime terminal after setup finishes."
-        )
     if not is_initialized(container_name):
         if container_name != CONTAINER_NAME:
             raise VShellError(
@@ -303,7 +298,7 @@ def _run_command(arguments: list[str]) -> int:
             "launch-app",
         ),
     )
-    parser.add_argument("--container", choices=_LXC_CONTAINER_NAMES, default=CONTAINER_NAME)
+    parser.add_argument("--container", choices=CONTAINER_NAMES, default=CONTAINER_NAME)
     parser.add_argument("app", nargs="?")
     parser.add_argument("files", nargs="*")
     parsed = parser.parse_args(arguments)

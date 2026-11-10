@@ -120,21 +120,22 @@ def _write_config_entries(config: Path, entries: list[dict[str, str]]) -> None:
 
 def _apply(entries: list[dict[str, str]], progress, container_name: str = CONTAINER_NAME) -> list[dict[str, str]]:
     container_name = _container_name(container_name)
+    label = "Fedora" if container_name == "fedora" else "Runtime"
     config = _config_path(container_name)
     if not config.is_file():
-        raise VShellError("The Runtime environment is not set up yet.")
+        raise VShellError(f"The {label} environment is not set up yet.")
     old_entries = _load(container_name)
     old_config = config.read_text(encoding="utf-8")
     was_running = _container_running(progress, container_name)
     if was_running:
-        _report(progress, "Stopping Runtime to update shared folders…")
+        _report(progress, f"Stopping {label} to update shared folders…")
         _stop_container(progress, container_name)
 
     try:
         _save(entries, container_name)
         _write_config_entries(config, entries)
         if was_running:
-            _report(progress, "Applying folder access and starting Runtime…")
+            _report(progress, f"Applying folder access and starting {label}…")
             _start_container(progress, container_name)
             _ensure_guest_x11_socket_path(progress, container_name)
     except Exception as error:
@@ -150,7 +151,7 @@ def _apply(entries: list[dict[str, str]], progress, container_name: str = CONTAI
                 _ensure_guest_x11_socket_path(progress, container_name)
             except Exception as rollback_error:
                 rollback_errors.append(str(rollback_error))
-        detail = f"Could not update shared folders: {error}"
+        detail = f"Could not update {label} shared folders: {error}"
         if rollback_errors:
             detail += "; rollback also failed: " + "; ".join(rollback_errors)
         raise VShellError(detail) from error
@@ -158,13 +159,14 @@ def _apply(entries: list[dict[str, str]], progress, container_name: str = CONTAI
 
 
 def add_shared_folder(folder: str, progress, container_name: str = CONTAINER_NAME) -> list[dict[str, str]]:
-    """Share a selected host folder read-write with the Runtime user."""
+    """Share a selected host folder read-write with the environment user."""
+    label = "Fedora" if container_name == "fedora" else "Runtime"
     try:
         path = Path(folder).expanduser().resolve(strict=True)
     except (OSError, RuntimeError) as error:
         raise VShellError(f"Could not open the selected folder: {error}") from error
     if not path.is_dir():
-        raise VShellError("Select a folder to share with Runtime.")
+        raise VShellError(f"Select a folder to share with {label}.")
     if path == Path(path.anchor):
         raise VShellError("Sharing the host filesystem root is not allowed.")
     if any(character in str(path) for character in ("\n", "\r", "\0")):
@@ -175,18 +177,18 @@ def add_shared_folder(folder: str, progress, container_name: str = CONTAINER_NAM
     except ValueError:
         pass
     else:
-        raise VShellError("Your home folder and its contents are already shared with Runtime.")
+        raise VShellError(f"Your home folder and its contents are already shared with {label}.")
     container_name = _container_name(container_name)
     entries = _load(container_name)
     if any(entry["path"] == str(path) for entry in entries):
-        raise VShellError("That folder is already shared with Runtime.")
+        raise VShellError(f"That folder is already shared with {label}.")
     entries.append({"id": _share_id(path), "path": str(path)})
     entries.sort(key=lambda entry: entry["path"].casefold())
     return _apply(entries, progress, container_name)
 
 
 def remove_shared_folder(share_id: str, progress, container_name: str = CONTAINER_NAME) -> list[dict[str, str]]:
-    """Remove a selected bind mount from Runtime."""
+    """Remove a selected bind mount from an environment."""
     container_name = _container_name(container_name)
     entries = _load(container_name)
     updated = [entry for entry in entries if entry["id"] != share_id]
@@ -198,14 +200,6 @@ def remove_shared_folder(share_id: str, progress, container_name: str = CONTAINE
 def sync_saved_shared_folders(container_name: str = CONTAINER_NAME) -> None:
     """Write saved share mounts into a newly created container config."""
     _write_config_entries(_config_path(container_name), _load(container_name))
-
-
-def copy_saved_shared_folders(source: str, destination: str) -> None:
-    """Carry existing folder shares forward when renaming a container."""
-    source_entries = _load(source)
-    destination_entries = _load(destination)
-    merged = {entry["id"]: entry for entry in (*destination_entries, *source_entries)}
-    _save(list(merged.values()), destination)
 
 
 def clear_shared_folders(container_name: str = CONTAINER_NAME) -> None:

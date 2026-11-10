@@ -68,7 +68,8 @@ Kirigami.ApplicationWindow {
             return
         }
         closeAfterSetup = false
-        if (setupController.setupFailed || setupController.destroyFailed) {
+        if (setupController.setupFailed || setupController.destroyFailed
+                || setupController.fedoraSetupFailed) {
             root.showNormal()
             root.raise()
             root.requestActivate()
@@ -106,7 +107,11 @@ Kirigami.ApplicationWindow {
                 Layout.fillHeight: true
                 controller: setupController
                 onDestroyRequested: destroyDialog.open()
-                onSettingsRequested: root.pageStack.push(environmentSettingsPage)
+                onSettingsRequested: containerName => {
+                    setupController.selectSettingsContainer(containerName)
+                    root.pageStack.push(environmentSettingsPage)
+                }
+                onFedoraResetRequested: fedoraResetDialog.open()
             }
         }
 
@@ -164,6 +169,57 @@ Kirigami.ApplicationWindow {
             ]
 
             onClosed: destroyAcknowledged.checked = false
+        }
+
+        Kirigami.Dialog {
+            id: fedoraResetDialog
+
+            modal: true
+            title: qsTr("Reset Fedora environment?")
+            width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, 520)
+            anchors.centerIn: parent
+            padding: Kirigami.Units.largeSpacing
+            showCloseButton: true
+            standardButtons: Kirigami.Dialog.NoButton
+
+            ColumnLayout {
+                spacing: Kirigami.Units.mediumSpacing
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("This removes Fedora's container and immediately downloads a fresh Fedora image from the LXC image server. DNF-installed packages, system changes, additional shared-folder settings, and public port choices will be cleared. Your host home folder and its files remain.")
+                    wrapMode: Text.Wrap
+                }
+
+                Controls.CheckBox {
+                    id: fedoraResetAcknowledged
+                    Layout.fillWidth: true
+                    text: qsTr("I understand Fedora's system changes and package installs will be removed.")
+                }
+            }
+
+            customFooterActions: [
+                Kirigami.Action {
+                    text: qsTr("Cancel")
+                    icon.name: "dialog-cancel"
+                    onTriggered: fedoraResetDialog.close()
+                },
+
+                Kirigami.Action {
+                    text: qsTr("Reset and download Fedora")
+                    icon.name: "view-refresh"
+                    enabled: fedoraResetAcknowledged.checked
+                             && !setupController.busy
+                             && !setupController.fedoraBusy
+                    onTriggered: {
+                        fedoraResetAcknowledged.checked = false
+                        setupController.resetFedoraContainer()
+                        fedoraResetDialog.close()
+                    }
+                }
+            ]
+
+            onClosed: fedoraResetAcknowledged.checked = false
         }
 
         Component.onCompleted: setupController.refreshStatus()

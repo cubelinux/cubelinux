@@ -15,8 +15,7 @@ from typing import Any, Iterator
 
 
 _DEFAULT_CONTAINER = "cubelinux-runtime"
-_LEGACY_CONTAINER = "vshell"
-_CONTAINERS = {_DEFAULT_CONTAINER, "fedora-runtime", _LEGACY_CONTAINER}
+_CONTAINERS = {_DEFAULT_CONTAINER, "fedora"}
 _DEFAULT_UNIT = "cubelinux-vshell-slirp4netns.service"
 _TAP = "tap0"
 
@@ -31,7 +30,7 @@ def _unit(container_name: str) -> str:
     container_name = _container_name(container_name)
     return (
         _DEFAULT_UNIT
-        if container_name in (_DEFAULT_CONTAINER, _LEGACY_CONTAINER)
+        if container_name == _DEFAULT_CONTAINER
         else f"cubelinux-vshell-slirp4netns-{container_name}.service"
     )
 
@@ -50,20 +49,20 @@ def _runtime_dir() -> Path:
 
 def api_socket_path(container_name: str = _DEFAULT_CONTAINER) -> Path:
     container_name = _container_name(container_name)
-    suffix = "" if container_name in (_DEFAULT_CONTAINER, _LEGACY_CONTAINER) else f"-{container_name}"
+    suffix = "" if container_name == _DEFAULT_CONTAINER else f"-{container_name}"
     return _runtime_dir() / f"cubelinux-vshell-slirp4netns{suffix}.sock"
 
 
 def _pid_path(container_name: str = _DEFAULT_CONTAINER) -> Path:
     container_name = _container_name(container_name)
-    suffix = "" if container_name in (_DEFAULT_CONTAINER, _LEGACY_CONTAINER) else f"-{container_name}"
+    suffix = "" if container_name == _DEFAULT_CONTAINER else f"-{container_name}"
     return _runtime_dir() / f"cubelinux-vshell-slirp4netns{suffix}.pid"
 
 
 @contextmanager
 def _network_lock(container_name: str = _DEFAULT_CONTAINER) -> Iterator[None]:
     container_name = _container_name(container_name)
-    suffix = "" if container_name in (_DEFAULT_CONTAINER, _LEGACY_CONTAINER) else f"-{container_name}"
+    suffix = "" if container_name == _DEFAULT_CONTAINER else f"-{container_name}"
     path = _runtime_dir() / f"cubelinux-vshell-slirp4netns{suffix}.lock"
     with path.open("a", encoding="ascii") as lock:
         path.chmod(0o600)

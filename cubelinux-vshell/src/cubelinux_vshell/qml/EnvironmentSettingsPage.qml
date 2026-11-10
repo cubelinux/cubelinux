@@ -68,7 +68,7 @@ Kirigami.ScrollablePage {
 
             Controls.Label {
                 Layout.fillWidth: true
-                text: qsTr("Choose which folders the Runtime can access.")
+                text: qsTr("Choose which folders %1 can access.").arg(controller.settingsContainerLabel)
                 opacity: 0.7
                 wrapMode: Text.Wrap
             }
@@ -95,7 +95,7 @@ Kirigami.ScrollablePage {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: qsTr("Shared automatically with the Runtime at %1.").arg(controller.sharedHomePath)
+                    text: qsTr("Shared automatically with %1 at %2.").arg(controller.settingsContainerLabel).arg(controller.sharedHomePath)
                     opacity: 0.7
                     wrapMode: Text.Wrap
                 }
@@ -192,7 +192,7 @@ Kirigami.ScrollablePage {
 
             Controls.Label {
                 Layout.fillWidth: true
-                text: qsTr("Runtime can read and modify shared folders. It restarts if folder access changes while it is running.")
+                text: qsTr("%1 can read and modify shared folders. It restarts if folder access changes while it is running.").arg(controller.settingsContainerLabel)
                 opacity: 0.7
                 wrapMode: Text.Wrap
             }

@@ -7,6 +7,8 @@ Kirigami.Card {
     id: card
 
     property var controller
+    signal settingsRequested(string containerName)
+    signal resetRequested()
     visible: controller.ready || controller.fedoraReady || controller.fedoraBusy
              || controller.fedoraSetupFailed
     Layout.fillWidth: true
@@ -41,7 +43,7 @@ Kirigami.Card {
                 }
 
                 Controls.Label {
-                    text: qsTr("Fedora Linux · read-only system · Flatpak")
+                    text: qsTr("Fedora Linux · mutable system · DNF")
                     opacity: 0.7
                 }
             }
@@ -94,6 +96,32 @@ Kirigami.Card {
                 onClicked: card.controller.fedoraReady
                            ? card.controller.openFedoraShell()
                            : card.controller.createFedoraContainer()
+            }
+
+            Controls.ToolButton {
+                visible: card.controller.fedoraReady
+                icon.name: "overflow-menu"
+                Accessible.name: qsTr("Fedora environment actions")
+                Controls.ToolTip.text: qsTr("Fedora environment actions")
+                enabled: !card.controller.busy && !card.controller.fedoraBusy
+                         && !card.controller.folderSharingBusy
+                onClicked: fedoraMenu.open()
+
+                Controls.Menu {
+                    id: fedoraMenu
+
+                    Controls.MenuItem {
+                        text: qsTr("Environment settings")
+                        icon.name: "configure"
+                        onTriggered: card.settingsRequested("fedora")
+                    }
+
+                    Controls.MenuItem {
+                        text: qsTr("Reset Fedora…")
+                        icon.name: "view-refresh"
+                        onTriggered: card.resetRequested()
+                    }
+                }
             }
         }
 

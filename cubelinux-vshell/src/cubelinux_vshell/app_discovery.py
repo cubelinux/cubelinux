@@ -15,13 +15,8 @@ from .lxc_backend import CONTAINER_NAMES, CONTAINER_NAME, _rootfs_path
 from .port_forwarding import PortForwardingMonitor
 
 
-_MARKER = "X-CubeLinux-VShell-HostLauncher=true"
 _EXTENSIONS = (".svg", ".png", ".xpm")
 _APP_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9][A-Za-z0-9_-]*)+")
-
-
-def _applications_dir() -> Path:
-    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "applications"
 
 
 def _parse_desktop(path: Path) -> dict[str, str]:
@@ -190,7 +185,6 @@ def _sync_system_launchers(launchers: list[dict[str, object]]) -> None:
 def discover_apps() -> None:
     """Refresh generated launchers from initialized container environments."""
     roots = {name: _rootfs_path(name) for name in CONTAINER_NAMES}
-    legacy_output = _applications_dir()
     icon_output = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons/hicolor"
     live: list[dict[str, object]] = []
     for container_name, rootfs in roots.items():
@@ -205,14 +199,6 @@ def discover_apps() -> None:
             launcher = _flatpak_launcher(source, icon_output)
             if launcher:
                 live.append(launcher)
-    if legacy_output.is_dir():
-        for launcher in legacy_output.glob("org.cubelinux.VShell.Fedora.*.desktop"):
-            try:
-                marked = _MARKER in launcher.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                marked = False
-            if marked:
-                launcher.unlink(missing_ok=True)
     live_ids = set()
     for item in live:
         if item["kind"] == "flatpak":

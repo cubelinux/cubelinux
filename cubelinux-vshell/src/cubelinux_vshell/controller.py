@@ -58,17 +58,28 @@ class SharedFolderWorker(QThread):
     succeeded = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, action: str, value: str, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        action: str,
+        value: str,
+        container_name: str,
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent)
         self.action = action
         self.value = value
+        self.container_name = container_name
 
     def run(self) -> None:
         try:
             if self.action == "add":
-                folders = add_shared_folder(self.value, self.progress.emit)
+                folders = add_shared_folder(
+                    self.value, self.progress.emit, self.container_name
+                )
             else:
-                folders = remove_shared_folder(self.value, self.progress.emit)
+                folders = remove_shared_folder(
+                    self.value, self.progress.emit, self.container_name
+                )
         except (VShellError, OSError) as error:
             self.failed.emit(str(error))
         except Exception as error:  # Keep a folder operation failure visible in the UI.
@@ -103,6 +114,7 @@ class SetupController(QObject):
         self._folder_sharing_busy = False
         self._folder_sharing_message = ""
         self._folder_sharing_error = False
+        self._settings_container_name = CONTAINER_NAME
         try:
             self._shared_folders = list_shared_folders()
         except VShellError as error:
@@ -161,6 +173,14 @@ class SetupController(QObject):
     @Property(list, notify=sharedFoldersChanged)
     def sharedFolders(self) -> list[dict[str, str]]:
         return self._shared_folders
+
+    @Property(str, notify=sharedFoldersChanged)
+    def settingsContainerLabel(self) -> str:
+        return (
+            "Fedora"
+            if self._settings_container_name == FEDORA_CONTAINER_NAME
+            else "Runtime"
+        )
 
     @Property(list, notify=forwardedPortsChanged)
     def forwardedPorts(self) -> list[dict[str, object]]:
@@ -233,6 +253,44 @@ class SetupController(QObject):
             return
         self._start_worker()
 
+    @Slot(str)
+    def selectSettingsContainer(self, container_name: str) -> None:
+        if container_name not in (CONTAINER_NAME, FEDORA_CONTAINER_NAME):
+            return
+        self._settings_container_name = container_name
+        try:
+            self._shared_folders = list_shared_folders(container_name)
+            self._folder_sharing_message = ""
+            self._folder_sharing_error = False
+        except VShellError as error:
+            self._shared_folders = []
+            self._folder_sharing_message = str(error)
+            self._folder_sharing_error = True
+        self.sharedFoldersChanged.emit()
+        self.folderSharingChanged.emit()
+
+    @Slot()
+    def resetFedoraContainer(self) -> None:
+        if self.busy or self.folderSharingBusy or not self.fedoraReady:
+            return
+        self._busy = True
+        self._fedora_busy = True
+        self._fedora_setup_failed = False
+        self._fedora_progress = "Resetting Fedora and downloading a fresh image…"
+        self.fedoraProgressChanged.emit()
+        self.stateChanged.emit()
+        self.fedoraStateChanged.emit()
+        self._fedora_worker = SetupWorker(
+            destroy=True,
+            container_name=FEDORA_CONTAINER_NAME,
+            parent=self,
+        )
+        self._fedora_worker.progress.connect(self._set_fedora_progress)
+        self._fedora_worker.succeeded.connect(self._fedora_setup_succeeded)
+        self._fedora_worker.failed.connect(self._fedora_setup_failed_signal)
+        self._fedora_worker.finished.connect(self._fedora_worker_finished)
+        self._fedora_worker.start()
+
     @Slot()
     def createFedoraContainer(self) -> None:
         if (
@@ -290,7 +348,7 @@ class SetupController(QObject):
 
     @Slot(str)
     def addSharedFolder(self, folder: str) -> None:
-        self._start_folder_worker("add", folder)
+        self._start_folder_worker("add", folder, self._settings_container_name)
 
     @Slot()
     def chooseSharedFolder(self) -> None:
@@ -298,16 +356,16 @@ class SetupController(QObject):
             return
         folder = QFileDialog.getExistingDirectory(
             None,
-            "Choose a folder to share with Runtime",
+            f"Choose a folder to share with {self.settingsContainerLabel}",
             str(Path.home()),
             QFileDialog.Option.ShowDirsOnly,
         )
         if folder:
-            self.addSharedFolder(folder)
+            self._start_folder_worker("add", folder, self._settings_container_name)
 
     @Slot(str)
     def removeSharedFolder(self, share_id: str) -> None:
-        self._start_folder_worker("remove", share_id)
+        self._start_folder_worker("remove", share_id, self._settings_container_name)
 
     @Slot(str, int, bool)
     def setPortPublicAccess(self, container_name: str, port: int, enabled: bool) -> None:
@@ -334,14 +392,20 @@ class SetupController(QObject):
             self._forwarded_ports = ports
             self.forwardedPortsChanged.emit()
 
-    def _start_folder_worker(self, action: str, value: str) -> None:
+    def _start_folder_worker(
+        self, action: str, value: str, container_name: str
+    ) -> None:
         if self.busy or self.folderSharingBusy or self.destroying or not self.ready:
             return
         self._folder_sharing_busy = True
         self._folder_sharing_error = False
-        self._folder_sharing_message = "Updating Runtime folder access…"
+        self._folder_sharing_message = (
+            f"Updating {self.settingsContainerLabel} folder access…"
+        )
         self.folderSharingChanged.emit()
-        self._folder_worker = SharedFolderWorker(action, value, parent=self)
+        self._folder_worker = SharedFolderWorker(
+            action, value, container_name, parent=self
+        )
         self._folder_worker.progress.connect(self._set_folder_progress)
         self._folder_worker.succeeded.connect(self._folder_share_succeeded)
         self._folder_worker.failed.connect(self._folder_share_failed)
@@ -428,7 +492,10 @@ class SetupController(QObject):
             ("checking your rootless container id mappings", "Preparing your account"),
             ("waiting for another runtime operation", "Waiting for Runtime setup"),
             ("pulling the runtime image from ghcr", "Downloading Runtime image"),
-            ("pulling the fedora image from ghcr", "Downloading Fedora environment"),
+            (
+                "downloading fedora 44 from the lxc image server",
+                "Downloading Fedora image",
+            ),
             ("unpacking tar rootfs", "Installing Runtime image"),
             ("starting runtime for first-time setup", "Starting Runtime"),
             ("connecting runtime to the network", "Connecting Runtime to the network"),

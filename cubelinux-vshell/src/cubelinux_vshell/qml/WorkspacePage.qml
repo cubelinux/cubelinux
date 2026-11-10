@@ -8,7 +8,8 @@ Controls.ScrollView {
 
     property var controller
     signal destroyRequested()
-    signal settingsRequested()
+    signal settingsRequested(string containerName)
+    signal fedoraResetRequested()
     contentWidth: availableWidth
     clip: true
 
@@ -135,7 +136,7 @@ Controls.ScrollView {
                     }
 
                     Controls.Label {
-                        text: qsTr("Fedora Linux · immutable system · Flatpak")
+                        text: qsTr("cubelinux Runtime · read-only system · Flatpak")
                         opacity: 0.7
                     }
                 }
@@ -199,7 +200,7 @@ Controls.ScrollView {
                         Controls.MenuItem {
                             text: qsTr("Environment settings")
                             icon.name: "configure"
-                            onTriggered: page.settingsRequested()
+                            onTriggered: page.settingsRequested("cubelinux-runtime")
                         }
 
                         Controls.MenuItem {
@@ -215,6 +216,8 @@ Controls.ScrollView {
 
         FedoraEnvironmentCard {
             controller: page.controller
+            onSettingsRequested: containerName => page.settingsRequested(containerName)
+            onResetRequested: page.fedoraResetRequested()
         }
 
         Item {

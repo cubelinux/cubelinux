@@ -17,7 +17,7 @@ APPLICATIONS_DIR = Path("/usr/local/share/applications/cubelinux")
 APPLICATIONS_BACKING_DIR = Path("/var/lib/cubelinux-vshell/applications")
 MARKER = "X-CubeLinux-VShell-HostLauncher=true"
 PREFIX = "org.cubelinux.VShell"
-CONTAINERS = {"cubelinux-runtime": "Runtime", "fedora-runtime": "Fedora"}
+CONTAINERS = {"cubelinux-runtime": "Runtime", "fedora": "Fedora"}
 MAX_INPUT_BYTES = 1_048_576
 MAX_LAUNCHERS = 2048
 MAX_DESKTOP_BYTES = 1_048_576
@@ -229,8 +229,7 @@ def _write_launcher(filename: str, contents: str) -> None:
 
 
 def _remove_stale_launchers(uid: int, live: set[str]) -> None:
-    patterns = (f"{PREFIX}.*.{uid}.*.desktop", f"{PREFIX}.Fedora.{uid}.*.desktop")
-    for path in (path for pattern in patterns for path in APPLICATIONS_DIR.glob(pattern)):
+    for path in APPLICATIONS_DIR.glob(f"{PREFIX}.*.{uid}.*.desktop"):
         if path.name in live:
             continue
         try:
