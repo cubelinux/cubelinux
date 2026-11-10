@@ -31,6 +31,11 @@ from .port_forwarding import clear_port_forwarding_settings
 
 Progress = Callable[[str], None]
 REMOTE_RUNTIME_OCI_IMAGE = "docker://ghcr.io/cubelinux/cubelinux-vshell-runtime:main"
+_NESTED_PROC_TARGET = "var/lib/cubelinux-vshell/proc"
+_NESTED_PROC_ENTRY = (
+    "lxc.mount.entry = proc "
+    f"{_NESTED_PROC_TARGET} proc ro,nosuid,nodev,noexec,relatime,create=dir 0 0"
+)
 
 
 @contextmanager
@@ -162,10 +167,45 @@ def _write_create_config(
         "lxc.net.0.type = empty",
         "lxc.mount.entry = tmpfs tmp tmpfs rw,create=dir,mode=1777 0 0",
         "lxc.mount.entry = tmpfs var tmpfs rw,create=dir,mode=0755 0 0",
+        # A separate, clean procfs lets Flatpak's bubblewrap mount its own proc
+        # without relaxing the outer LXC security policy.
+        _NESTED_PROC_ENTRY,
         *_mapping_lines(uid_start, gid_start, account.pw_uid, account.pw_gid),
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _ensure_nested_proc_mount(container_name: str = CONTAINER_NAME) -> bool:
+    """Expose a clean procfs mountpoint for nested Flatpak bubblewrap sandboxes."""
+    config = _config_path(container_name)
+    original = config.read_text(encoding="utf-8")
+    lines = original.splitlines()
+
+    for index, line in enumerate(lines):
+        fields = line.split()
+        if (
+            len(fields) >= 5
+            and fields[:2] == ["lxc.mount.entry", "="]
+            and fields[3] == _NESTED_PROC_TARGET
+        ):
+            if line == _NESTED_PROC_ENTRY:
+                return False
+            lines[index] = _NESTED_PROC_ENTRY
+            config.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return True
+
+    var_mount_index = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if line.split()[:5] == ["lxc.mount.entry", "=", "tmpfs", "var", "tmpfs"]
+        ),
+        len(lines) - 1,
+    )
+    lines.insert(var_mount_index + 1, _NESTED_PROC_ENTRY)
+    config.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return True
 
 
 def _set_rootfs_readonly(container_name: str = CONTAINER_NAME) -> bool:
@@ -389,6 +429,7 @@ def _initialize_unlocked(
     label = "Runtime" if container_name == CONTAINER_NAME else "Fedora"
     if is_initialized(container_name):
         changed = _ensure_slirp_config(container_name)
+        changed = _ensure_nested_proc_mount(container_name) or changed
         changed = _remove_legacy_flatpak_mount(container_name) or changed
         config_path = _config_path(container_name)
         config_before = config_path.read_text(encoding="utf-8")
@@ -397,7 +438,7 @@ def _initialize_unlocked(
         changed = _set_rootfs_readonly(container_name) or changed
         running = _container_running(progress, container_name)
         if changed and running:
-            _report(progress, f"Applying {label} storage and network settings…")
+            _report(progress, f"Applying {label} mount, storage, and network settings…")
             _stop_container(progress, container_name)
             running = False
         if not running:

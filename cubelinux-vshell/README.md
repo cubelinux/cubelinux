@@ -44,6 +44,9 @@ read-only. `/tmp` and `/var` are temporary writable filesystems. The shared
 `/home/<user>` is the only default persistent writable mount. VShell configures
 Flathub as a user-scoped remote, and Flatpak user installs persist in the shared
 home across Runtime resets; there is no persistent system Flatpak store.
+Runtime also mounts a separate read-only procfs at
+`/var/lib/cubelinux-vshell/proc`, allowing Flatpak's bubblewrap sandbox to
+create its own procfs without relaxing the outer LXC security policy.
 RPM/DNF changes to the guest system do not persist; use Flatpak for applications.
 Programs in the container can read and modify files in the shared home folder.
 The host user's runtime directory and X11 socket directory are also mounted so
