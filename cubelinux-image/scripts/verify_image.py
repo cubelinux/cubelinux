@@ -109,33 +109,6 @@ def verify_rootfs(rootfs: Path, distro_path: Path, component_root: Path) -> int:
     return len(staged_files)
 
 
-def verify_vshell_runtime(rootfs: Path) -> None:
-    """Check the host tools needed to pull and create VShell OCI containers."""
-    host_required = (
-        "usr/share/lxc/config/common.conf",
-        "usr/share/lxc/config/common.seccomp",
-        "usr/share/lxc/config/userns.conf",
-        "usr/share/lxc/config/oci.common.conf",
-        "usr/share/lxc/templates/lxc-oci",
-        "usr/bin/jq",
-        "usr/bin/skopeo",
-        "usr/bin/umoci",
-    )
-    for relative in host_required:
-        if not (rootfs / relative).is_file():
-            raise ValueError(f"host image is missing VShell OCI support file {relative}")
-
-    launcher_mount = "usr-local-share-applications-cubelinux.mount"
-    if not (rootfs / "usr/local/share/applications/cubelinux").is_dir():
-        raise ValueError("host image is missing the VShell launcher mount point")
-    if not (rootfs / f"usr/lib/systemd/system/{launcher_mount}").is_file():
-        raise ValueError("host image is missing the VShell launcher mount unit")
-    if not (
-        rootfs / f"etc/systemd/system/multi-user.target.wants/{launcher_mount}"
-    ).is_symlink():
-        raise ValueError("host image does not enable the VShell launcher mount unit")
-
-
 def verify_image(image: str) -> None:
     distro_path = BUILD / "distro.json"
     component_root = BUILD / "rootfs"
@@ -149,14 +122,6 @@ def verify_image(image: str) -> None:
     image_paths = {
         "/usr/lib/os-release",
         "/etc/xdg/kcm-about-distrorc",
-        "/usr/share/lxc/config/common.conf",
-        "/usr/share/lxc/config/common.seccomp",
-        "/usr/share/lxc/config/userns.conf",
-        "/usr/share/lxc/config/oci.common.conf",
-        "/usr/share/lxc/templates/lxc-oci",
-        "/usr/bin/jq",
-        "/usr/bin/skopeo",
-        "/usr/bin/umoci",
         *(
             "/usr/share/plasma/look-and-feel/org.kde.breeze.desktop/contents/"
             f"plasmoidsetupscripts/{script_name}"
@@ -179,7 +144,6 @@ def verify_image(image: str) -> None:
             rootfs = Path(temporary)
             for image_path in sorted(image_paths):
                 copy_from_image(container, image_path, rootfs / image_path.lstrip("/"))
-            verify_vshell_runtime(rootfs)
             count = verify_rootfs(rootfs, distro_path, component_root)
     finally:
         subprocess.run(
@@ -208,7 +172,6 @@ def main() -> None:
             raise RuntimeError("docker CLI is required to inspect the built image")
         verify_image(arguments.image)
     else:
-        verify_vshell_runtime(arguments.rootfs)
         count = verify_rootfs(
             arguments.rootfs, arguments.distro, arguments.expected_rootfs
         )

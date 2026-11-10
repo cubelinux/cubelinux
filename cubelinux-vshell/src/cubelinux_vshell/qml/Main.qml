@@ -34,7 +34,7 @@ Kirigami.ApplicationWindow {
         AboutApplicationPage {
             applicationName: qsTr("Linux Subsystem")
             productName: qsTr("Linux Subsystem")
-            description: qsTr("Manage your cubelinux Runtime environment.")
+            description: qsTr("Manage your Fedora® Linux environment.")
             version: softwareVersion
             homepage: "https://cubelinux.github.io"
             bugAddress: "https://github.com/cubelinux/cubelinux/issues"
@@ -53,9 +53,41 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    Component {
+        id: setupProgressPage
+
+        SetupProgressPage {
+            controller: setupController
+            onRetryRequested: setupController.setup()
+            onReturnToOverviewRequested: root.pageStack.layers.clear()
+            onAboutRequested: root.pageStack.layers.push(aboutPage)
+        }
+    }
+
+    Component {
+        id: setupConfirmPage
+
+        SetupConfirmPage {
+            controller: setupController
+            navigationBusy: root.pageStack.layers.busy
+            onSetupRequested: {
+                if (!root.pageStack.layers.busy
+                        && !setupController.busy
+                        && !setupController.ready) {
+                    root.pageStack.layers.push(setupProgressPage)
+                    setupController.setup()
+                }
+            }
+            onAboutRequested: root.pageStack.layers.push(aboutPage)
+        }
+    }
+
     Connections {
         target: setupController
         function onStateChanged() {
+            if (setupController.ready && setupController.setupComplete) {
+                root.pageStack.layers.clear()
+            }
             root.finishDeferredClose()
         }
         function onFolderSharingChanged() {
@@ -68,8 +100,7 @@ Kirigami.ApplicationWindow {
             return
         }
         closeAfterSetup = false
-        if (setupController.setupFailed || setupController.destroyFailed
-                || setupController.fedoraSetupFailed) {
+        if (setupController.setupFailed || setupController.destroyFailed) {
             root.showNormal()
             root.raise()
             root.requestActivate()
@@ -80,10 +111,22 @@ Kirigami.ApplicationWindow {
 
     pageStack.initialPage: Kirigami.Page {
         id: homePage
-        title: qsTr("Linux environments")
+        title: setupController.ready ? qsTr("Linux environments") : qsTr("Set up Linux")
         padding: 0
 
         actions: [
+            Kirigami.Action {
+                text: qsTr("Next")
+                icon.name: "go-next"
+                visible: !setupController.ready
+                enabled: !setupController.busy && !root.pageStack.layers.busy
+                onTriggered: {
+                    if (!setupController.ready
+                            && !root.pageStack.layers.busy) {
+                        root.pageStack.layers.push(setupConfirmPage)
+                    }
+                }
+            },
             Kirigami.Action {
                 text: qsTr("Menu")
                 icon.name: "application-menu"
@@ -100,25 +143,26 @@ Kirigami.ApplicationWindow {
         StackLayout {
             anchors.fill: parent
             anchors.margins: Kirigami.Units.largeSpacing
-            currentIndex: 0
+            currentIndex: setupController.ready ? 1 : 0
+
+            SetupWelcomePage {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
 
             WorkspacePage {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 controller: setupController
                 onDestroyRequested: destroyDialog.open()
-                onSettingsRequested: containerName => {
-                    setupController.selectSettingsContainer(containerName)
-                    root.pageStack.push(environmentSettingsPage)
-                }
-                onFedoraResetRequested: fedoraResetDialog.open()
+                onSettingsRequested: root.pageStack.push(environmentSettingsPage)
             }
         }
 
         Timer {
             interval: 2500
             repeat: true
-            running: true
+            running: setupController.ready
             onTriggered: setupController.refreshStatus()
         }
 
@@ -126,7 +170,7 @@ Kirigami.ApplicationWindow {
             id: destroyDialog
 
             modal: true
-            title: qsTr("Reset Runtime environment?")
+            title: qsTr("Destroy Fedora environment?")
             width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, 520)
             anchors.centerIn: parent
             padding: Kirigami.Units.largeSpacing
@@ -138,14 +182,14 @@ Kirigami.ApplicationWindow {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: qsTr("This resets the Runtime system filesystem and container settings. Your shared home folder and user-installed Flatpak apps will remain. Runtime will be recreated from the image included with cubelinux; no template download is needed.")
+                    text: qsTr("This permanently destroys the Fedora environment. It deletes installed apps, container settings, and files stored in the Fedora filesystem. Your shared cubelinux home folder will remain untouched. You can create a new Fedora environment later from this setup wizard. Linux Subsystem will reuse the cached Fedora image when available. This cannot be undone.")
                     wrapMode: Text.Wrap
                 }
 
                 Controls.CheckBox {
                     id: destroyAcknowledged
                     Layout.fillWidth: true
-                    text: qsTr("I understand this resets the Runtime system environment.")
+                    text: qsTr("I understand this permanently destroys the Fedora environment.")
                 }
             }
 
@@ -157,7 +201,7 @@ Kirigami.ApplicationWindow {
                 },
 
                 Kirigami.Action {
-                    text: qsTr("Reset Runtime")
+                    text: qsTr("Destroy environment")
                     icon.name: "edit-delete"
                     enabled: destroyAcknowledged.checked && !setupController.busy
                     onTriggered: {
@@ -169,57 +213,6 @@ Kirigami.ApplicationWindow {
             ]
 
             onClosed: destroyAcknowledged.checked = false
-        }
-
-        Kirigami.Dialog {
-            id: fedoraResetDialog
-
-            modal: true
-            title: qsTr("Reset Fedora environment?")
-            width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, 520)
-            anchors.centerIn: parent
-            padding: Kirigami.Units.largeSpacing
-            showCloseButton: true
-            standardButtons: Kirigami.Dialog.NoButton
-
-            ColumnLayout {
-                spacing: Kirigami.Units.mediumSpacing
-
-                Controls.Label {
-                    Layout.fillWidth: true
-                    text: qsTr("This removes Fedora's container and immediately downloads a fresh Fedora image from the LXC image server. DNF-installed packages, system changes, additional shared-folder settings, and public port choices will be cleared. Your host home folder and its files remain.")
-                    wrapMode: Text.Wrap
-                }
-
-                Controls.CheckBox {
-                    id: fedoraResetAcknowledged
-                    Layout.fillWidth: true
-                    text: qsTr("I understand Fedora's system changes and package installs will be removed.")
-                }
-            }
-
-            customFooterActions: [
-                Kirigami.Action {
-                    text: qsTr("Cancel")
-                    icon.name: "dialog-cancel"
-                    onTriggered: fedoraResetDialog.close()
-                },
-
-                Kirigami.Action {
-                    text: qsTr("Reset and download Fedora")
-                    icon.name: "view-refresh"
-                    enabled: fedoraResetAcknowledged.checked
-                             && !setupController.busy
-                             && !setupController.fedoraBusy
-                    onTriggered: {
-                        fedoraResetAcknowledged.checked = false
-                        setupController.resetFedoraContainer()
-                        fedoraResetDialog.close()
-                    }
-                }
-            ]
-
-            onClosed: fedoraResetAcknowledged.checked = false
         }
 
         Component.onCompleted: setupController.refreshStatus()

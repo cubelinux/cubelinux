@@ -1,75 +1,27 @@
-"""Create, configure, and reset the persistent cubelinux Runtime environment."""
+"""Create, configure, and destroy the persistent Fedora LXC environment."""
 
 from __future__ import annotations
 
-import fcntl
 import ipaddress
 import os
 import pwd
 import shutil
-import subprocess
 import tempfile
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable
 
 from .lxc_backend import (
-    CONTAINER_NAME, FEDORA_CONTAINER_NAME, FEDORA_RELEASE, GUEST_ID, ID_COUNT,
-    VShellError, _arch, _account, _attach, _container_running, _config_path,
+    CONTAINER_NAME, FEDORA_RELEASE, GUEST_ID, ID_COUNT, VShellError,
+    _account, _arch, _attach, _container_running, _config_path,
     _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
-    _ensure_slirp_network, _escape_mount_path, _home,
-    _lxc_path, _report, _rootfs_path, _rootless_scope, _run, _start_container,
+    _ensure_slirp_config, _ensure_slirp_network, _escape_mount_path, _home,
+    _lxc_path, _report, _rootless_scope, _run, _start_container,
     _stop_container, _wait_for_network, is_initialized,
 )
-from .shared_folders import (
-    clear_shared_folders,
-    sync_saved_shared_folders,
-)
+from .shared_folders import clear_shared_folders, sync_saved_shared_folders
 from .port_forwarding import clear_port_forwarding_settings
 
 Progress = Callable[[str], None]
-REMOTE_RUNTIME_OCI_IMAGE = "docker://ghcr.io/cubelinux/cubelinux-vshell-runtime:main"
-_NESTED_PROC_TARGET = "var/lib/cubelinux-vshell/proc"
-_NESTED_PROC_ENTRY = (
-    "lxc.mount.entry = proc "
-    f"{_NESTED_PROC_TARGET} proc ro,nosuid,nodev,noexec,relatime,create=dir 0 0"
-)
-
-
-@contextmanager
-def _runtime_operation_lock(progress: Progress) -> Iterator[None]:
-    """Serialize lifecycle operations for all VShell environments."""
-    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
-    lock_dir = Path(runtime_dir) if runtime_dir else Path.home() / ".local/state/cubelinux-vshell"
-    if (
-        not lock_dir.is_absolute()
-        or not lock_dir.is_dir()
-        or not _is_owned_by_current_user(lock_dir)
-    ):
-        lock_dir = Path.home() / ".local/state/cubelinux-vshell"
-    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    lock_path = lock_dir / "runtime-operation.lock"
-    try:
-        descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-    except OSError as error:
-        raise VShellError(f"Could not lock Runtime setup operations: {error}") from error
-    with os.fdopen(descriptor, "r+") as lock_file:
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            _report(progress, "Waiting for another Runtime operation to finish…")
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-
-
-def _is_owned_by_current_user(path: Path) -> bool:
-    try:
-        return path.stat().st_uid == os.getuid()
-    except OSError:
-        return False
 
 
 def _find_subid_range(
@@ -114,7 +66,7 @@ def _host_setup(progress: Progress) -> None:
     pkexec = shutil.which("pkexec")
     if not pkexec or not Path(helper).is_file():
         raise VShellError(
-            "The LXC host setup helper is missing. Install the current cubelinux image and try again."
+            "The LXC host setup helper is missing. Install the current Vireak OS image and try again."
         )
     _report(progress, "Requesting one-time permission to prepare rootless containers…")
     _run([pkexec, helper], progress, stream=True)
@@ -134,58 +86,46 @@ def _mapping_lines(uid_start: int, gid_start: int, uid: int, gid: int) -> list[s
     return lines
 
 
-def _remove_partial_container(root: Path, container_name: str = CONTAINER_NAME) -> None:
-    """Remove only the incomplete LXC directory left by a failed create."""
-    container_path = root / container_name
+def _expire_cached_template() -> Path | None:
+    """Make LXC check an existing Fedora cache against its current image index."""
+    cache_roots = (Path.home() / ".cache/lxc", Path("/var/cache/lxc"))
+    image_path = Path("download") / "fedora" / FEDORA_RELEASE / _arch() / "default"
+
+    for cache_base in cache_roots:
+        cache = cache_base / image_path
+        build_ids = list(cache.glob("build_id*"))
+        if not build_ids:
+            continue
+
+        try:
+            for build_id in build_ids:
+                expiry_name = build_id.name.replace("build_id", "expiry", 1)
+                (cache / expiry_name).write_text("0\n", encoding="utf-8")
+        except OSError:
+            continue
+        return cache_base
+    return None
+
+
+def _remove_partial_container(root: Path) -> None:
+    """Remove only the incomplete VShell directory left by a failed create."""
+    container_path = root / CONTAINER_NAME
     if not container_path.exists():
         if container_path.is_symlink():
             raise VShellError("Refusing to remove an unexpected LXC container path.")
         return
     resolved_root = root.resolve()
     resolved_container = container_path.resolve()
-    if resolved_container.parent != resolved_root or resolved_container.name != container_name:
+    if resolved_container.parent != resolved_root or resolved_container.name != CONTAINER_NAME:
         raise VShellError("Refusing to remove an unexpected LXC container path.")
     shutil.rmtree(resolved_container)
 
 
-def _write_create_config(
-    path: Path,
-    account: pwd.struct_passwd,
-    uid_range: tuple[int, int],
-    gid_range: tuple[int, int],
-    container_name: str = CONTAINER_NAME,
-) -> None:
-    uid_start, _ = uid_range
-    gid_start, _ = gid_range
-    lines = [
-        "# VShell runtime rootfs",
-        # The lxc-oci template adds the installed common, userns, and OCI
-        # configuration files after this initial config is written.
-        f"lxc.uts.name = {container_name}",
-        "lxc.net.0.type = empty",
-        "lxc.mount.entry = tmpfs tmp tmpfs rw,create=dir,mode=1777 0 0",
-        "lxc.mount.entry = tmpfs var tmpfs rw,create=dir,mode=0755 0 0",
-        # A separate, clean procfs lets Flatpak's bubblewrap mount its own proc
-        # without relaxing the outer LXC security policy.
-        _NESTED_PROC_ENTRY,
-        *_mapping_lines(uid_start, gid_start, account.pw_uid, account.pw_gid),
-    ]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _write_fedora_create_config(
-    path: Path,
-    account: pwd.struct_passwd,
-    uid_range: tuple[int, int],
-    gid_range: tuple[int, int],
-) -> None:
-    """Create a mutable Fedora container using LXC's upstream download template."""
+def _write_create_config(path: Path, account: pwd.struct_passwd, uid_range: tuple[int, int], gid_range: tuple[int, int]) -> None:
     uid_start, _ = uid_range
     gid_start, _ = gid_range
     lines = [
         "lxc.include = /usr/share/lxc/config/common.conf",
-        f"lxc.uts.name = {FEDORA_CONTAINER_NAME}",
         "lxc.net.0.type = empty",
         *_mapping_lines(uid_start, gid_start, account.pw_uid, account.pw_gid),
     ]
@@ -193,148 +133,29 @@ def _write_fedora_create_config(
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _ensure_nested_proc_mount(container_name: str = CONTAINER_NAME) -> bool:
-    """Expose a clean procfs mountpoint for nested Flatpak bubblewrap sandboxes."""
-    config = _config_path(container_name)
-    original = config.read_text(encoding="utf-8")
-    lines = original.splitlines()
-
-    for index, line in enumerate(lines):
-        fields = line.split()
-        if (
-            len(fields) >= 5
-            and fields[:2] == ["lxc.mount.entry", "="]
-            and fields[3] == _NESTED_PROC_TARGET
-        ):
-            if line == _NESTED_PROC_ENTRY:
-                return False
-            lines[index] = _NESTED_PROC_ENTRY
-            config.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            return True
-
-    var_mount_index = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if line.split()[:5] == ["lxc.mount.entry", "=", "tmpfs", "var", "tmpfs"]
-        ),
-        len(lines) - 1,
-    )
-    lines.insert(var_mount_index + 1, _NESTED_PROC_ENTRY)
-    config.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return True
-
-
-def _set_rootfs_readonly(container_name: str = CONTAINER_NAME) -> bool:
-    """Protect the guest OS after its account and host mounts are configured."""
-    config = _config_path(container_name)
-    original = config.read_text(encoding="utf-8")
-    lines = original.splitlines()
-    for index, line in enumerate(lines):
-        if line.strip().startswith("lxc.rootfs.options ="):
-            options = [part.strip() for part in line.split("=", 1)[1].split(",")]
-            options = [part for part in options if part and part != "rw"]
-            if "ro" not in options:
-                options.append("ro")
-            lines[index] = "lxc.rootfs.options = " + ",".join(options)
-            break
-    else:
-        lines.append("lxc.rootfs.options = ro")
-    updated = "\n".join(lines) + "\n"
-    if updated == original:
-        return False
-    config.write_text(updated, encoding="utf-8")
-    return True
-
-
-def _ensure_user_flathub(
-    account: pwd.struct_passwd,
-    progress: Progress,
-    container_name: str = CONTAINER_NAME,
-) -> None:
-    """Configure Flathub in the shared guest home; tolerate offline startup."""
-    attach = [
-        "lxc-attach", "--name", container_name, "--lxcpath", str(_lxc_path()),
-        "--clear-env", "--uid", str(GUEST_ID), "--gid", str(GUEST_ID),
-        "--set-var", f"HOME=/home/{account.pw_name}",
-        "--set-var", f"USER={account.pw_name}",
-        "--set-var", f"LOGNAME={account.pw_name}",
-        "--set-var", "PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/bin:/sbin",
-    ]
-    list_command = [
-        *attach, "--", "/usr/bin/flatpak", "remotes", "--user", "--columns=name",
-    ]
-    try:
-        listed = subprocess.run(
-            list_command, capture_output=True, text=True, errors="replace",
-        check=False, timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return
-    if listed.returncode != 0 or "flathub" in listed.stdout.splitlines():
-        return
-
-    _report(progress, "Setting up your Flathub app source?")
-    add_command = [
-        *attach, "--", "/usr/bin/flatpak", "remote-add", "--user",
-        "--if-not-exists", "flathub",
-        "https://dl.flathub.org/repo/flathub.flatpakrepo",
-    ]
-    try:
-        result = subprocess.run(
-            add_command, capture_output=True, text=True, errors="replace",
-            check=False, timeout=20,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _report(progress, "Flathub is unavailable; VShell will retry when opened again.")
-        return
-    if result.returncode:
-        _report(progress, "Flathub is unavailable; VShell will retry when opened again.")
-
-
-def _configure_guest(
-    account: pwd.struct_passwd,
-    progress: Progress,
-    container_name: str = CONTAINER_NAME,
-) -> None:
+def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
     username = account.pw_name
     script = (
         "set -eu; "
-        f"if ! getent group {GUEST_ID} >/dev/null; then "
-        f"groupadd --gid {GUEST_ID} {username}; fi; "
-        f"if getent passwd {GUEST_ID} >/dev/null; then "
-        f"test \"$(getent passwd {GUEST_ID} | cut -d: -f1)\" = {username}; "
-        "else "
-        f"useradd --uid {GUEST_ID} --gid {GUEST_ID} --create-home "
-        f"--home-dir /home/{username} --shell /bin/bash {username}; fi; "
-        f"usermod --append --groups wheel {username}; "
-        "install -d -m 0750 /etc/sudoers.d; "
-        "printf '%s\\n' '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/90-vshell; "
-        "chmod 0440 /etc/sudoers.d/90-vshell; "
-        # The resolver address belongs to this LXC network, so write it after
-        # LXC starts instead of changing BuildKit's mounted /etc/resolv.conf.
+        # slirp4netns configures a static guest address and route. Its built-in
+        # DNS proxy is at 10.0.2.3; the host's loopback resolver is not reachable.
+        "gateway=\"\"; "
+        "attempt=0; "
+        "while [ \"$attempt\" -lt 30 ]; do "
+        "gateway=\"$(ip -4 route show default | awk 'NR == 1 {print $3}')\"; "
+        "if [ -n \"$gateway\" ]; then break; fi; "
+        "attempt=$((attempt + 1)); sleep 1; done; "
+        "if [ -z \"$gateway\" ]; then "
+        "echo 'Fedora did not receive a network gateway after 30 seconds. Current routes and addresses:' >&2; "
+        "ip -4 route show >&2; ip -4 address show >&2; exit 1; fi; "
         "rm -f /etc/resolv.conf; "
-        "printf '%s\\n' 'nameserver 10.0.2.3' > /etc/resolv.conf; "
-        "systemd-machine-id-setup"
-    )
-    label = "Runtime" if container_name == CONTAINER_NAME else "Fedora"
-    _report(progress, f"Preparing your {label} user and shell…")
-    _attach("/usr/bin/bash", "-ceu", script, progress=progress, container_name=container_name)
-
-
-def _configure_fedora_guest(account: pwd.struct_passwd, progress: Progress) -> None:
-    """Prepare the mapped user in the mutable Fedora template container."""
-    username = account.pw_name
-    script = (
-        "set -eu; "
-        "rm -f /etc/resolv.conf; "
-        "printf '%s\\n' 'nameserver 10.0.2.3' > /etc/resolv.conf; "
+        "printf 'nameserver 10.0.2.3\\n' > /etc/resolv.conf; "
         "dns_ready=0; "
         "for attempt in 1 2 3 4 5; do "
         "if getent ahostsv4 mirrors.fedoraproject.org >/dev/null; then "
         "dns_ready=1; break; fi; sleep 2; done; "
         "if [ \"$dns_ready\" -ne 1 ]; then "
-        "echo 'Could not reach Fedora package servers through slirp4netns.' >&2; exit 1; fi; "
+        "echo \"Could not resolve Fedora package servers through $gateway.\" >&2; exit 1; fi; "
         f"if ! getent group {GUEST_ID} >/dev/null; then "
         f"groupadd --gid {GUEST_ID} {username}; fi; "
         f"if getent passwd {GUEST_ID} >/dev/null; then "
@@ -346,18 +167,14 @@ def _configure_fedora_guest(account: pwd.struct_passwd, progress: Progress) -> N
         "dnf -y install sudo; "
         "install -d -m 0750 /etc/sudoers.d; "
         "printf '%s\\n' '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/90-vshell; "
-        "chmod 0440 /etc/sudoers.d/90-vshell; "
-        "systemd-machine-id-setup"
+        "chmod 0440 /etc/sudoers.d/90-vshell"
     )
-    _report(progress, "Preparing your Fedora user and DNF shell…")
-    _attach(
-        "/usr/bin/bash", "-ceu", script,
-        progress=progress, container_name=FEDORA_CONTAINER_NAME,
-    )
+    _report(progress, "Preparing your Fedora user and shell…")
+    _attach("/usr/bin/bash", "-ceu", script, progress=progress)
 
 
-def _bind_home(account: pwd.struct_passwd, container_name: str = CONTAINER_NAME) -> None:
-    config = _config_path(container_name)
+def _bind_home(account: pwd.struct_passwd) -> None:
+    config = _config_path()
     contents = config.read_text(encoding="utf-8")
     marker = "# VShell home bind"
     mount_line = (
@@ -369,71 +186,32 @@ def _bind_home(account: pwd.struct_passwd, container_name: str = CONTAINER_NAME)
     config.write_text(contents.rstrip() + "\n" + mount_line + "\n", encoding="utf-8")
 
 
-def _mark_initialized(
-    container_name: str = CONTAINER_NAME,
-    *,
-    immutable: bool = True,
-) -> None:
+def _mark_initialized() -> None:
     """Record readiness only after all container and desktop setup succeeds."""
-    config = _config_path(container_name)
+    config = _config_path()
     contents = config.read_text(encoding="utf-8")
-    markers = ["# VShell home bind"]
-    markers.append(
-        "# VShell immutable Runtime rootfs"
-        if immutable
-        else "# VShell mutable Fedora rootfs"
-    )
-    for marker in markers:
-        if marker not in contents:
-            contents = contents.rstrip() + "\n" + marker + "\n"
-    config.write_text(contents, encoding="utf-8")
+    marker = "# VShell home bind"
+    if marker not in contents:
+        config.write_text(contents.rstrip() + "\n" + marker + "\n", encoding="utf-8")
 
 
-def initialize(
-    progress: Progress = print,
-    *,
-    container_name: str = CONTAINER_NAME,
-) -> None:
-    """Create or start Runtime or the optional mutable Fedora environment."""
-    with _runtime_operation_lock(progress):
-        if container_name == CONTAINER_NAME:
-            _initialize_unlocked(progress, container_name=container_name)
-        elif container_name == FEDORA_CONTAINER_NAME:
-            _initialize_fedora_unlocked(progress)
-        else:
-            raise VShellError("Only Runtime and Fedora can be initialized.")
-
-
-def _initialize_unlocked(
-    progress: Progress,
-    *,
-    container_name: str = CONTAINER_NAME,
-) -> None:
-    label = "Runtime" if container_name == CONTAINER_NAME else "Fedora"
-    if is_initialized(container_name):
-        changed = _ensure_nested_proc_mount(container_name)
-        config_path = _config_path(container_name)
-        config_before = config_path.read_text(encoding="utf-8")
-        sync_saved_shared_folders(container_name)
-        changed = config_path.read_text(encoding="utf-8") != config_before or changed
-        changed = _set_rootfs_readonly(container_name) or changed
-        running = _container_running(progress, container_name)
-        if changed and running:
-            _report(progress, f"Applying {label} mount and storage settings…")
-            _stop_container(progress, container_name)
-            running = False
-        if not running:
-            _start_container(progress, container_name)
-        else:
-            _ensure_slirp_network(progress, container_name)
-        _ensure_guest_x11_socket_path(progress, container_name)
-        _ensure_user_flathub(_account(), progress, container_name)
-        _report(progress, f"{label} is already set up.")
+def initialize(progress: Progress = print, *, refresh_template: bool = False) -> None:
+    """Prepare the host and create a rootless Fedora shell with home shared."""
+    if is_initialized():
+        changed = _ensure_slirp_config()
+        if changed and _container_running(progress):
+            _report(progress, "Updating Fedora's user-mode network…")
+            _stop_container(progress)
+            _start_container(progress)
+        elif _container_running(progress):
+            _ensure_slirp_network(progress)
+        _report(progress, "Fedora Virtual Shell is already set up.")
         return
     account = _account()
+    network_config_changed = _ensure_slirp_config()
     lxc_create = shutil.which("lxc-create")
     if not lxc_create:
-        raise VShellError("LXC is not installed. Update to the current cubelinux image and reboot.")
+        raise VShellError("LXC is not installed. Update to the current Vireak OS image and reboot.")
 
     if _host_setup_ready(account):
         _report(progress, "Rootless container ID mappings are ready.")
@@ -442,271 +220,121 @@ def _initialize_unlocked(
     _report(progress, "Checking your rootless container ID mappings…")
     uid_range, gid_range = _id_ranges(account)
     root = _lxc_path()
-    config_path = _config_path(container_name)
-    rootfs = _rootfs_path(container_name)
+    config_path = _config_path()
     root.mkdir(parents=True, exist_ok=True)
 
     if not config_path.exists():
-        _report(progress, f"Pulling the {label} image from GHCR…")
+        cache_base = _expire_cached_template() if refresh_template else None
+        if refresh_template and cache_base:
+            _report(progress, "Checking for Fedora template updates…")
+        else:
+            _report(progress, "Downloading the Fedora environment…")
         with tempfile.TemporaryDirectory(prefix="cubelinux-vshell-") as temporary:
             create_config = Path(temporary) / "lxc.conf"
-            _write_create_config(
-                create_config,
-                account,
-                uid_range,
-                gid_range,
-                container_name,
-            )
-            try:
-                _run(
-                    _rootless_scope(
-                        [
-                            lxc_create,
-                            "--name", container_name,
-                            "--lxcpath", str(root),
-                            "--config", str(create_config),
-                            "--template", "oci",
-                            "--", "--url", REMOTE_RUNTIME_OCI_IMAGE,
-                        ]
-                    ),
-                    progress,
-                    stream=True,
-                )
-            except VShellError as error:
-                _remove_partial_container(root, container_name)
-                raise VShellError(
-                    f"Could not download or unpack the {label} image from GHCR. "
-                    "Check your internet connection and try again. "
-                    f"Details: {error}"
-                ) from error
-        if not (rootfs / "usr/lib/systemd/systemd").is_file():
-            _remove_partial_container(root, container_name)
-            raise VShellError(
-                f"The {label} image did not contain systemd. "
-                "The container was cleaned up; try again or report the image build issue."
-            )
-    elif "# VShell runtime rootfs" not in config_path.read_text(encoding="utf-8"):
-        raise VShellError(
-            "The existing container is incomplete or is not the cubelinux Runtime image. "
-            "Reset it before creating Runtime."
-        )
+            _write_create_config(create_config, account, uid_range, gid_range)
 
-    container_running = _container_running(progress, container_name)
-    if not container_running:
-        _report(progress, f"Starting {label} for first-time setup…")
-        _start_container(progress, container_name)
-    else:
-        _ensure_slirp_network(progress, container_name)
-
-    _wait_for_network(progress, container_name)
-    _configure_guest(account, progress, container_name)
-    _report(progress, f"Sharing your home folder with {label}…")
-    _bind_home(account, container_name)
-    sync_saved_shared_folders(container_name)
-    _report(progress, f"Connecting {label} to your desktop session...")
-    _ensure_host_desktop_mounts(account, container_name)
-
-    # Add the host-specific account and sudo policy before locking the rootfs.
-    # Then restart with only the shared home retained as persistent writable data.
-    _set_rootfs_readonly(container_name)
-    _report(progress, f"Restarting {label} with its read-only system…")
-    _stop_container(progress, container_name)
-    _start_container(progress, container_name)
-    _ensure_guest_x11_socket_path(progress, container_name)
-    _ensure_user_flathub(account, progress, container_name)
-    _mark_initialized(container_name)
-    _report(progress, f"{label} is ready.")
-
-
-def destroy_container(
-    progress: Progress = print,
-    *,
-    container_name: str = CONTAINER_NAME,
-) -> None:
-    """Remove the guest rootfs without recreating it."""
-    with _runtime_operation_lock(progress):
-        _destroy_container_unlocked(progress, container_name)
-
-
-def reset_runtime(progress: Progress = print) -> None:
-    """Recreate Runtime from the latest registry image as one locked operation."""
-    reset_environment(CONTAINER_NAME, progress)
-
-
-def _set_rootfs_writable(container_name: str) -> bool:
-    """Remove a read-only rootfs option from the mutable Fedora guest."""
-    config = _config_path(container_name)
-    original = config.read_text(encoding="utf-8")
-    lines = original.splitlines()
-    changed = False
-    for index, line in enumerate(lines):
-        if not line.strip().startswith("lxc.rootfs.options ="):
-            continue
-        options = [part.strip() for part in line.split("=", 1)[1].split(",")]
-        writable_options = [option for option in options if option and option != "ro"]
-        updated_line = "lxc.rootfs.options = " + ",".join(writable_options or ["rw"])
-        if updated_line != line:
-            lines[index] = updated_line
-            changed = True
-        break
-    if changed:
-        config.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return changed
-
-
-def _initialize_fedora_unlocked(progress: Progress) -> None:
-    """Create Fedora from LXC's download template with persistent system files."""
-    container_name = FEDORA_CONTAINER_NAME
-    account = _account()
-    config_path = _config_path(container_name)
-    root = _lxc_path()
-
-    if is_initialized(container_name):
-        changed = False
-        config_before = config_path.read_text(encoding="utf-8")
-        sync_saved_shared_folders(container_name)
-        changed = config_path.read_text(encoding="utf-8") != config_before or changed
-        changed = _ensure_host_desktop_mounts(account, container_name) or changed
-        changed = _set_rootfs_writable(container_name) or changed
-        running = _container_running(progress, container_name)
-        if changed and running:
-            _report(progress, "Applying Fedora mount and desktop settings…")
-            _stop_container(progress, container_name)
-            running = False
-        if not running:
-            _start_container(progress, container_name)
-        else:
-            _ensure_slirp_network(progress, container_name)
-        _ensure_guest_x11_socket_path(progress, container_name)
-        _report(progress, "Fedora is already set up.")
-        return
-
-    container_path = root / container_name
-    if container_path.exists() or container_path.is_symlink():
-        _report(progress, "Cleaning up an incomplete Fedora container…")
-        _destroy_container_unlocked(progress, container_name)
-
-    lxc_create = shutil.which("lxc-create")
-    if not lxc_create:
-        raise VShellError("LXC is not installed. Update the cubelinux image and reboot.")
-
-    if _host_setup_ready(account):
-        _report(progress, "Rootless container ID mappings are ready.")
-    else:
-        _host_setup(progress)
-    _report(progress, "Checking your rootless container ID mappings…")
-    uid_range, gid_range = _id_ranges(account)
-    root.mkdir(parents=True, exist_ok=True)
-
-    _report(progress, f"Downloading Fedora {FEDORA_RELEASE} from the LXC image server…")
-    with tempfile.TemporaryDirectory(prefix="cubelinux-fedora-") as temporary:
-        create_config = Path(temporary) / "lxc.conf"
-        _write_fedora_create_config(create_config, account, uid_range, gid_range)
-        try:
-            _run(
-                _rootless_scope(
+            def create_command(*, force_cache: bool = False) -> list[str]:
+                template_arguments = [
+                    "--",
+                    "--dist",
+                    "fedora",
+                    "--release",
+                    FEDORA_RELEASE,
+                    "--arch",
+                    _arch(),
+                ]
+                if force_cache:
+                    template_arguments.append("--force-cache")
+                return _rootless_scope(
                     [
                         lxc_create,
-                        "--name", container_name,
-                        "--lxcpath", str(root),
-                        "--config", str(create_config),
-                        "--template", "download",
-                        "--", "--dist", "fedora",
-                        "--release", FEDORA_RELEASE,
-                        "--arch", _arch(),
-                        "--flush-cache",
-                    ]
-                ),
-                progress,
-                stream=True,
-            )
-        except VShellError as error:
-            _remove_partial_container(root, container_name)
-            raise VShellError(
-                "Could not download Fedora from the LXC image server. "
-                "Check your internet connection and try again. "
-                f"Details: {error}"
-            ) from error
+                        "--name",
+                        CONTAINER_NAME,
+                        "--lxcpath",
+                        str(root),
+                        "--config",
+                        str(create_config),
+                        "--template",
+                        "download",
+                        *template_arguments,
+                    ],
+                    cache_base=cache_base,
+                )
 
-    rootfs = _rootfs_path(container_name)
-    if not (rootfs / "usr/lib/systemd/systemd").is_file():
-        _remove_partial_container(root, container_name)
-        raise VShellError(
-            "The Fedora image did not contain systemd. The container was removed; try again."
-        )
+            try:
+                _run(create_command(), progress, stream=True)
+            except VShellError as update_error:
+                if not refresh_template or not cache_base:
+                    raise
+                _report(progress, "Template update check failed; reusing the cached Fedora image…")
+                _remove_partial_container(root)
+                try:
+                    _run(create_command(force_cache=True), progress, stream=True)
+                except VShellError as cache_error:
+                    raise VShellError(
+                        "Could not refresh Fedora's template, and the cached image could not be reused. "
+                        f"Update error: {update_error}; cached image error: {cache_error}"
+                    ) from cache_error
 
-    _report(progress, "Starting Fedora for first-time setup…")
-    _start_container(progress, container_name)
-    _wait_for_network(progress, container_name)
-    _configure_fedora_guest(account, progress)
-    _report(progress, "Sharing your home folder with Fedora…")
-    _bind_home(account, container_name)
-    sync_saved_shared_folders(container_name)
-    _report(progress, "Connecting Fedora to your desktop session…")
-    _ensure_host_desktop_mounts(account, container_name)
+    container_running = _container_running(progress)
+    if container_running and network_config_changed:
+        _report(progress, "Updating Fedora's user-mode network…")
+        _stop_container(progress)
+        container_running = False
+    if not container_running:
+        _report(progress, "Starting Fedora for first-time setup…")
+        _start_container(progress)
+    else:
+        _ensure_slirp_network(progress)
 
-    _report(progress, "Restarting Fedora to apply your shared folders…")
-    _stop_container(progress, container_name)
-    _start_container(progress, container_name)
-    _ensure_guest_x11_socket_path(progress, container_name)
-    _mark_initialized(container_name, immutable=False)
-    _report(progress, "Fedora is ready.")
+    _wait_for_network(progress)
+    _configure_guest(account, progress)
+    _report(progress, "Sharing your home folder…")
+    _bind_home(account)
+    sync_saved_shared_folders()
+    _report(progress, "Connecting Fedora to your desktop session...")
+    _ensure_host_desktop_mounts(account)
 
-
-def create_fedora_environment(progress: Progress = print) -> None:
-    """Create or start the Fedora environment."""
-    with _runtime_operation_lock(progress):
-        _initialize_fedora_unlocked(progress)
-
-
-def reset_environment(container_name: str, progress: Progress = print) -> None:
-    """Recreate Runtime or Fedora from its configured image source."""
-    with _runtime_operation_lock(progress):
-        if container_name == CONTAINER_NAME:
-            _destroy_container_unlocked(progress, container_name)
-            _initialize_unlocked(progress, container_name=container_name)
-        elif container_name == FEDORA_CONTAINER_NAME:
-            _destroy_container_unlocked(progress, container_name)
-            _initialize_fedora_unlocked(progress)
-        else:
-            raise VShellError("Only Runtime and Fedora can be reset.")
+    # Restart so LXC applies the home and desktop socket mounts.
+    _report(progress, "Restarting Fedora to apply your shared home folder…")
+    _stop_container(progress)
+    _start_container(progress)
+    _ensure_guest_x11_socket_path(progress)
+    _mark_initialized()
+    _report(progress, "Fedora Virtual Shell is ready.")
 
 
-def _destroy_container_unlocked(
-    progress: Progress,
-    container_name: str = CONTAINER_NAME,
-) -> None:
-    """Remove one guest rootfs while the lifecycle lock is held."""
-    label = "Runtime" if container_name == CONTAINER_NAME else "Fedora"
+def destroy_container(progress: Progress = print) -> None:
+    """Stop and delete the Fedora container without recreating it."""
     root = _lxc_path()
-    if not is_initialized(container_name):
-        container_path = root / container_name
+    if not is_initialized():
+        container_path = root / CONTAINER_NAME
         if not container_path.exists() and not container_path.is_symlink():
-            _stop_container(progress, container_name)
-            clear_shared_folders(container_name)
-            clear_port_forwarding_settings(container_name)
-            _report(progress, f"The {label} environment is already reset.")
+            _stop_container(progress)
+            clear_shared_folders()
+            clear_port_forwarding_settings()
+            _report(progress, "The Fedora environment is already destroyed.")
             return
-        if _container_running(progress, container_name):
-            _report(progress, f"Stopping the incomplete {label} container…")
-        _stop_container(progress, container_name)
-        _report(progress, f"Cleaning up the incomplete {label} container…")
-        _remove_partial_container(root, container_name)
-        clear_shared_folders(container_name)
-        clear_port_forwarding_settings(container_name)
+        if _container_running(progress):
+            _report(progress, "Stopping the incomplete Fedora container…")
+        _stop_container(progress)
+        _report(progress, "Cleaning up the incomplete Fedora container…")
+        _remove_partial_container(root)
+        clear_shared_folders()
+        clear_port_forwarding_settings()
         return
 
-    if _container_running(progress, container_name):
-        _report(progress, f"Stopping {label} before reset…")
-    _stop_container(progress, container_name)
+    if _container_running(progress):
+        _report(progress, "Stopping Fedora before destruction…")
+    _stop_container(progress)
 
-    _report(progress, f"Resetting {label}'s system filesystem…")
+    _report(progress, "Destroying the Fedora container and its installed data…")
     _run(
         _rootless_scope(
             [
                 "lxc-destroy",
                 "--name",
-                container_name,
+                CONTAINER_NAME,
                 "--lxcpath",
                 str(root),
                 "--force",
@@ -715,5 +343,5 @@ def _destroy_container_unlocked(
         progress,
         stream=True,
     )
-    clear_shared_folders(container_name)
-    clear_port_forwarding_settings(container_name)
+    clear_shared_folders()
+    clear_port_forwarding_settings()

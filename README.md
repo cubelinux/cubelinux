@@ -47,16 +47,7 @@ The system includes an updater for checking and downloading cubelinux image
 updates. When an update is ready, restart to complete the installation.
 
 Virtual Shell provides a separate Fedora environment for running command-line
-tools and graphical applications. At the first KDE login after Plasma Setup,
-VShell pulls `ghcr.io/cubelinux/cubelinux-vshell-runtime:main` and creates the
-`cubelinux-runtime` LXC container. The host image does not include a copy of
-that OCI image, so first setup requires internet access. Later logins start the
-existing container. Choosing **Reset Runtime** pulls the current `:main` image
-again. After first-time account setup, the guest system is mounted read-only.
-`/tmp` and `/var` are temporary writable filesystems, and the shared
-`/home/<user>` is the only default persistent writable mount. User-scoped
-Flatpak configuration and installs in that home persist across environment
-resets; no separate system Flatpak store is retained.
+tools and graphical applications.
 
 ## Published system image
 
@@ -81,9 +72,7 @@ The image workflow publishes these tags:
 ## Monorepo layout
 
 The cubelinux monorepo contains the bootc image builder, updater, and VShell.
-The VShell runtime image is built in a separate repository and published to
-GHCR. VShell pulls the current `:main` image on first KDE login and when Runtime
-is reset; the host image does not bundle the runtime OCI image.
+Each project keeps its own source and component manifest in a top-level folder.
 
 ```text
 cubelinux/
@@ -94,9 +83,8 @@ cubelinux/
 
 The GitHub Actions image workflow runs when any of these project folders
 changes. It stages updater and VShell files from the local component folders,
-builds and verifies the host image, rechunks it by RPM content, and publishes
-the final OCI image to GHCR. Runtime image updates are delivered independently
-through the runtime repository's GHCR tags.
+builds and verifies the image, rechunks it by RPM content, and publishes the
+final OCI image to GHCR.
 
 See [the image-builder README](cubelinux-image/README.md),
 [the updater README](cubelinux-updater/README.md), and

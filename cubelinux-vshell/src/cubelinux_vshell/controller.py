@@ -6,14 +6,8 @@ from pathlib import Path
 from PySide6.QtCore import Property, QObject, QProcess, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import QFileDialog
 
-from .lxc_backend import (
-    CONTAINER_NAME,
-    FEDORA_CONTAINER_NAME,
-    VShellError,
-    is_initialized,
-    status,
-)
-from .lxc_setup import create_fedora_environment, initialize, reset_environment, reset_runtime
+from .lxc_backend import VShellError, is_initialized, status
+from .lxc_setup import destroy_container, initialize
 from .port_forwarding import list_forwarded_ports, set_public_access
 from .shared_folders import add_shared_folder, list_shared_folders, remove_shared_folder
 
@@ -23,28 +17,16 @@ class SetupWorker(QThread):
     succeeded = Signal()
     failed = Signal(str)
 
-    def __init__(
-        self,
-        *,
-        destroy: bool = False,
-        container_name: str = CONTAINER_NAME,
-        parent: QObject | None = None,
-    ) -> None:
+    def __init__(self, *, destroy: bool = False, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.destroy = destroy
-        self.container_name = container_name
 
     def run(self) -> None:
         try:
             if self.destroy:
-                if self.container_name == CONTAINER_NAME:
-                    reset_runtime(self.progress.emit)
-                else:
-                    reset_environment(self.container_name, self.progress.emit)
-            elif self.container_name == FEDORA_CONTAINER_NAME:
-                create_fedora_environment(self.progress.emit)
+                destroy_container(self.progress.emit)
             else:
-                initialize(self.progress.emit, container_name=self.container_name)
+                initialize(self.progress.emit)
         except (VShellError, OSError) as error:
             self.failed.emit(str(error))
         except Exception as error:  # Present unexpected failures instead of leaving the UI stuck.
@@ -58,28 +40,17 @@ class SharedFolderWorker(QThread):
     succeeded = Signal(object)
     failed = Signal(str)
 
-    def __init__(
-        self,
-        action: str,
-        value: str,
-        container_name: str,
-        parent: QObject | None = None,
-    ) -> None:
+    def __init__(self, action: str, value: str, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.action = action
         self.value = value
-        self.container_name = container_name
 
     def run(self) -> None:
         try:
             if self.action == "add":
-                folders = add_shared_folder(
-                    self.value, self.progress.emit, self.container_name
-                )
+                folders = add_shared_folder(self.value, self.progress.emit)
             else:
-                folders = remove_shared_folder(
-                    self.value, self.progress.emit, self.container_name
-                )
+                folders = remove_shared_folder(self.value, self.progress.emit)
         except (VShellError, OSError) as error:
             self.failed.emit(str(error))
         except Exception as error:  # Keep a folder operation failure visible in the UI.
@@ -91,8 +62,6 @@ class SharedFolderWorker(QThread):
 class SetupController(QObject):
     progressChanged = Signal()
     stateChanged = Signal()
-    fedoraProgressChanged = Signal()
-    fedoraStateChanged = Signal()
     containerStatusChanged = Signal()
     sharedFoldersChanged = Signal()
     folderSharingChanged = Signal()
@@ -105,16 +74,10 @@ class SetupController(QObject):
         self._progress_title = ""
         self._progress_percent = -1
         self._worker: SetupWorker | None = None
-        self._fedora_worker: SetupWorker | None = None
-        self._fedora_busy = False
-        self._fedora_progress = ""
-        self._fedora_setup_failed = False
-        self._fedora_container_status = "not-set-up"
         self._folder_worker: SharedFolderWorker | None = None
         self._folder_sharing_busy = False
         self._folder_sharing_message = ""
         self._folder_sharing_error = False
-        self._settings_container_name = CONTAINER_NAME
         try:
             self._shared_folders = list_shared_folders()
         except VShellError as error:
@@ -131,8 +94,6 @@ class SetupController(QObject):
         self._port_timer.timeout.connect(self._refresh_forwarded_ports)
         self._port_timer.start()
         self.refreshStatus()
-        if not is_initialized():
-            self._start_worker()
 
     @Property(str, notify=progressChanged)
     def progress(self) -> str:
@@ -140,7 +101,7 @@ class SetupController(QObject):
 
     @Property(str, notify=progressChanged)
     def progressTitle(self) -> str:
-        return self._progress_title or "Preparing Runtime"
+        return self._progress_title or "Setting up Fedora"
 
     @Property(bool, notify=progressChanged)
     def setupFailed(self) -> bool:
@@ -152,7 +113,7 @@ class SetupController(QObject):
 
     @Property(bool, notify=progressChanged)
     def destroyFailed(self) -> bool:
-        return self._progress_title == "Reset failed"
+        return self._progress_title == "Destroy failed"
 
     @Property(int, notify=progressChanged)
     def progressPercent(self) -> int:
@@ -173,14 +134,6 @@ class SetupController(QObject):
     @Property(list, notify=sharedFoldersChanged)
     def sharedFolders(self) -> list[dict[str, str]]:
         return self._shared_folders
-
-    @Property(str, notify=sharedFoldersChanged)
-    def settingsContainerLabel(self) -> str:
-        return (
-            "Fedora"
-            if self._settings_container_name == FEDORA_CONTAINER_NAME
-            else "Runtime"
-        )
 
     @Property(list, notify=forwardedPortsChanged)
     def forwardedPorts(self) -> list[dict[str, object]]:
@@ -210,26 +163,6 @@ class SetupController(QObject):
     def containerStatus(self) -> str:
         return self._container_status
 
-    @Property(bool, notify=fedoraStateChanged)
-    def fedoraReady(self) -> bool:
-        return is_initialized(FEDORA_CONTAINER_NAME)
-
-    @Property(bool, notify=fedoraStateChanged)
-    def fedoraBusy(self) -> bool:
-        return self._fedora_busy
-
-    @Property(bool, notify=fedoraProgressChanged)
-    def fedoraSetupFailed(self) -> bool:
-        return self._fedora_setup_failed
-
-    @Property(str, notify=fedoraProgressChanged)
-    def fedoraProgress(self) -> str:
-        return self._fedora_progress
-
-    @Property(str, notify=fedoraStateChanged)
-    def fedoraContainerStatus(self) -> str:
-        return self._fedora_container_status
-
     @Slot()
     def refreshStatus(self) -> None:
         try:
@@ -239,99 +172,24 @@ class SetupController(QObject):
         if current != self._container_status:
             self._container_status = current
             self.containerStatusChanged.emit()
-        try:
-            fedora_current = status(FEDORA_CONTAINER_NAME)
-        except (VShellError, OSError):
-            fedora_current = "unknown"
-        if fedora_current != self._fedora_container_status:
-            self._fedora_container_status = fedora_current
-            self.fedoraStateChanged.emit()
 
     @Slot()
     def setup(self) -> None:
-        if self.busy or self.fedoraBusy or self.folderSharingBusy or self.ready:
+        if self.busy or self.folderSharingBusy or self.ready:
             return
         self._start_worker()
 
-    @Slot(str)
-    def selectSettingsContainer(self, container_name: str) -> None:
-        if container_name not in (CONTAINER_NAME, FEDORA_CONTAINER_NAME):
-            return
-        self._settings_container_name = container_name
-        try:
-            self._shared_folders = list_shared_folders(container_name)
-            self._folder_sharing_message = ""
-            self._folder_sharing_error = False
-        except VShellError as error:
-            self._shared_folders = []
-            self._folder_sharing_message = str(error)
-            self._folder_sharing_error = True
-        self.sharedFoldersChanged.emit()
-        self.folderSharingChanged.emit()
-
-    @Slot()
-    def resetFedoraContainer(self) -> None:
-        if self.busy or self.folderSharingBusy or not self.fedoraReady:
-            return
-        self._busy = True
-        self._fedora_busy = True
-        self._fedora_setup_failed = False
-        self._fedora_progress = "Resetting Fedora and downloading a fresh image…"
-        self.fedoraProgressChanged.emit()
-        self.stateChanged.emit()
-        self.fedoraStateChanged.emit()
-        self._fedora_worker = SetupWorker(
-            destroy=True,
-            container_name=FEDORA_CONTAINER_NAME,
-            parent=self,
-        )
-        self._fedora_worker.progress.connect(self._set_fedora_progress)
-        self._fedora_worker.succeeded.connect(self._fedora_setup_succeeded)
-        self._fedora_worker.failed.connect(self._fedora_setup_failed_signal)
-        self._fedora_worker.finished.connect(self._fedora_worker_finished)
-        self._fedora_worker.start()
-
-    @Slot()
-    def createFedoraContainer(self) -> None:
-        if (
-            self.busy
-            or self.fedoraBusy
-            or self.folderSharingBusy
-            or self.destroying
-            or not self.ready
-            or self.fedoraReady
-        ):
-            return
-        self._busy = True
-        self._fedora_busy = True
-        self._fedora_setup_failed = False
-        self._fedora_progress = "Getting ready…"
-        self.fedoraProgressChanged.emit()
-        self.stateChanged.emit()
-        self.fedoraStateChanged.emit()
-        self._fedora_worker = SetupWorker(
-            container_name=FEDORA_CONTAINER_NAME,
-            parent=self,
-        )
-        self._fedora_worker.progress.connect(self._set_fedora_progress)
-        self._fedora_worker.succeeded.connect(self._fedora_setup_succeeded)
-        self._fedora_worker.failed.connect(self._fedora_setup_failed_signal)
-        self._fedora_worker.finished.connect(self._fedora_worker_finished)
-        self._fedora_worker.start()
-
     @Slot()
     def destroyContainer(self) -> None:
-        if self.busy or self.folderSharingBusy or (
-            not self.ready and not (self.setupFailed or self.destroyFailed)
-        ):
+        if self.busy or self.folderSharingBusy or (not self.ready and self._progress_title != "Destroy failed"):
             return
         self._destroying = True
         self._start_worker(destroy=True)
 
     def _start_worker(self, *, destroy: bool = False) -> None:
         self._busy = True
-        self._progress = "Resetting the Runtime environment…" if destroy else "Getting ready…"
-        self._progress_title = "Resetting Runtime" if destroy else "Getting ready"
+        self._progress = "Destroying the Fedora environment…" if destroy else "Getting ready…"
+        self._progress_title = "Destroying Fedora" if destroy else "Getting ready"
         self._progress_percent = -1
         self.progressChanged.emit()
         self._worker = SetupWorker(destroy=destroy, parent=self)
@@ -348,7 +206,7 @@ class SetupController(QObject):
 
     @Slot(str)
     def addSharedFolder(self, folder: str) -> None:
-        self._start_folder_worker("add", folder, self._settings_container_name)
+        self._start_folder_worker("add", folder)
 
     @Slot()
     def chooseSharedFolder(self) -> None:
@@ -356,30 +214,28 @@ class SetupController(QObject):
             return
         folder = QFileDialog.getExistingDirectory(
             None,
-            f"Choose a folder to share with {self.settingsContainerLabel}",
+            "Choose a folder to share with Fedora",
             str(Path.home()),
             QFileDialog.Option.ShowDirsOnly,
         )
         if folder:
-            self._start_folder_worker("add", folder, self._settings_container_name)
+            self.addSharedFolder(folder)
 
     @Slot(str)
     def removeSharedFolder(self, share_id: str) -> None:
-        self._start_folder_worker("remove", share_id, self._settings_container_name)
+        self._start_folder_worker("remove", share_id)
 
-    @Slot(str, int, bool)
-    def setPortPublicAccess(self, container_name: str, port: int, enabled: bool) -> None:
+    @Slot(int, bool)
+    def setPortPublicAccess(self, port: int, enabled: bool) -> None:
         try:
-            set_public_access(port, enabled, container_name)
+            set_public_access(port, enabled)
         except VShellError as error:
             self._port_forwarding_message = str(error)
             self.portForwardingChanged.emit()
             return
         self._port_forwarding_message = ""
         self._forwarded_ports = [
-            {**entry, "publicAccess": enabled}
-            if entry.get("container") == container_name and entry.get("port") == port
-            else entry
+            {**entry, "publicAccess": enabled} if entry.get("port") == port else entry
             for entry in self._forwarded_ports
         ]
         self.forwardedPortsChanged.emit()
@@ -392,20 +248,14 @@ class SetupController(QObject):
             self._forwarded_ports = ports
             self.forwardedPortsChanged.emit()
 
-    def _start_folder_worker(
-        self, action: str, value: str, container_name: str
-    ) -> None:
+    def _start_folder_worker(self, action: str, value: str) -> None:
         if self.busy or self.folderSharingBusy or self.destroying or not self.ready:
             return
         self._folder_sharing_busy = True
         self._folder_sharing_error = False
-        self._folder_sharing_message = (
-            f"Updating {self.settingsContainerLabel} folder access…"
-        )
+        self._folder_sharing_message = "Updating Fedora folder access…"
         self.folderSharingChanged.emit()
-        self._folder_worker = SharedFolderWorker(
-            action, value, container_name, parent=self
-        )
+        self._folder_worker = SharedFolderWorker(action, value, parent=self)
         self._folder_worker.progress.connect(self._set_folder_progress)
         self._folder_worker.succeeded.connect(self._folder_share_succeeded)
         self._folder_worker.failed.connect(self._folder_share_failed)
@@ -445,34 +295,6 @@ class SetupController(QObject):
         self.stateChanged.emit()
 
     @Slot(str)
-    def _set_fedora_progress(self, message: str) -> None:
-        self._fedora_progress = message
-        self.fedoraProgressChanged.emit()
-
-    @Slot()
-    def _fedora_setup_succeeded(self) -> None:
-        self._fedora_setup_failed = False
-        self._fedora_progress = "Fedora environment is ready."
-        self.fedoraProgressChanged.emit()
-        self.refreshStatus()
-        self.fedoraStateChanged.emit()
-
-    @Slot(str)
-    def _fedora_setup_failed_signal(self, message: str) -> None:
-        self._fedora_setup_failed = True
-        self._fedora_progress = message
-        self.fedoraProgressChanged.emit()
-        self.fedoraStateChanged.emit()
-
-    @Slot()
-    def _fedora_worker_finished(self) -> None:
-        self._fedora_busy = False
-        self._busy = False
-        self._fedora_worker = None
-        self.stateChanged.emit()
-        self.fedoraStateChanged.emit()
-
-    @Slot(str)
     def _set_progress(self, message: str) -> None:
         self._progress = message
         title = self._title_for_progress(message.lower())
@@ -490,21 +312,20 @@ class SetupController(QObject):
         steps = (
             ("requesting one-time permission", "Preparing rootless containers"),
             ("checking your rootless container id mappings", "Preparing your account"),
-            ("waiting for another runtime operation", "Waiting for Runtime setup"),
-            ("pulling the runtime image from ghcr", "Downloading Runtime image"),
-            (
-                "downloading fedora 44 from the lxc image server",
-                "Downloading Fedora image",
-            ),
-            ("unpacking tar rootfs", "Installing Runtime image"),
-            ("starting runtime for first-time setup", "Starting Runtime"),
-            ("connecting runtime to the network", "Connecting Runtime to the network"),
-            ("preparing your runtime user and shell", "Preparing your Runtime account"),
+            ("downloading the fedora environment", "Downloading Fedora image"),
+            ("checking for fedora template updates", "Checking for Fedora image updates"),
+            ("template update check failed", "Using cached Fedora image"),
+            ("downloading the image index", "Checking the Fedora image"),
+            ("downloading the rootfs", "Downloading Fedora filesystem"),
+            ("downloading the metadata", "Downloading image metadata"),
+            ("unpacking the rootfs", "Extracting Fedora filesystem"),
+            ("starting fedora for first-time setup", "Starting Fedora"),
+            ("connecting fedora to the network", "Connecting Fedora to the network"),
+            ("preparing your fedora user and shell", "Preparing your Fedora account"),
             ("sharing your home folder", "Sharing your home folder"),
-            ("restarting runtime", "Restarting Runtime"),
-            ("read-only system", "Protecting Runtime system files"),
-            ("resetting runtime's system filesystem", "Resetting Runtime"),
-            ("cubelinux runtime is ready", "Runtime is ready"),
+            ("restarting fedora", "Restarting Fedora"),
+            ("destroying the fedora container", "Destroying Fedora"),
+            ("fedora virtual shell is ready", "Setup complete"),
         )
         for marker, title in steps:
             if marker in message:
@@ -532,7 +353,7 @@ class SetupController(QObject):
     def _destroy_succeeded(self) -> None:
         self._destroying = False
         self._progress = ""
-        self._progress_title = "Environment reset"
+        self._progress_title = "Environment destroyed"
         self._progress_percent = -1
         self.progressChanged.emit()
         self.refreshStatus()
@@ -542,7 +363,7 @@ class SetupController(QObject):
     def _destroy_failed(self, message: str) -> None:
         self._destroying = False
         self._progress = message
-        self._progress_title = "Reset failed"
+        self._progress_title = "Destroy failed"
         self._progress_percent = -1
         self.progressChanged.emit()
         self.refreshStatus()
@@ -552,17 +373,3 @@ class SetupController(QObject):
     def openShell(self) -> None:
         if not self.busy and not self.folderSharingBusy and not self.destroying:
             QProcess.startDetached("konsole", ["--profile", "VShell"])
-
-    @Slot()
-    def openFedoraShell(self) -> None:
-        if (
-            self.fedoraReady
-            and not self.busy
-            and not self.fedoraBusy
-            and not self.folderSharingBusy
-            and not self.destroying
-        ):
-            QProcess.startDetached(
-                "cubelinux-vshell",
-                ["open-terminal", "--container", FEDORA_CONTAINER_NAME],
-            )

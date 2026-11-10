@@ -1,16 +1,6 @@
 id = "vshell"
-packages = [
-  "jq",
-  "konsole",
-  "lxc",
-  "lxc-templates",
-  "qt6-qtsvg",
-  "shadow-utils",
-  "slirp4netns",
-  "skopeo",
-  "umoci",
-]
-services = ["usr-local-share-applications-cubelinux.mount"]
+packages = ["konsole", "lxc", "lxc-templates", "qt6-qtsvg", "shadow-utils", "slirp4netns"]
+services = []
 
 [[files]]
 source = "src/cubelinux_vshell"
@@ -18,7 +8,6 @@ destination = "/usr/lib/cubelinux-vshell/cubelinux_vshell"
 mode = "0644"
 
 [[downloads]]
-# Keep the Fedora mark available for a separate Fedora environment card.
 url = "https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/third-party/fedora-icon.svg"
 destination = "/usr/lib/cubelinux-vshell/cubelinux_vshell/qml/fedora-icon.svg"
 mode = "0644"
@@ -39,14 +28,6 @@ destination = "/usr/libexec/cubelinux-vshell-launcher-sync"
 mode = "0755"
 
 [[files]]
-source = "data/usr-local-share-applications-cubelinux.mount"
-destination = "/usr/lib/systemd/system/usr-local-share-applications-cubelinux.mount"
-
-[[files]]
-source = "data/cubelinux-vshell-launchers.tmpfiles.conf"
-destination = "/usr/lib/tmpfiles.d/cubelinux-vshell-launchers.conf"
-
-[[files]]
 source = "bin/cubelinux-vshell-useradd-hook"
 destination = "/etc/shadow-maint/useradd-post.d/80-cubelinux-vshell"
 mode = "0755"
@@ -64,10 +45,6 @@ source = "data/org.cubelinux.VShellAppDiscovery.desktop"
 destination = "/etc/xdg/autostart/org.cubelinux.VShellAppDiscovery.desktop"
 
 [[files]]
-source = "data/org.cubelinux.VShellInit.desktop"
-destination = "/etc/xdg/autostart/org.cubelinux.VShellInit.desktop"
-
-[[files]]
 source = "data/lxc-net-disabled.conf"
 destination = "/usr/lib/systemd/system/lxc-net.service.d/90-cubelinux-vshell.conf"
 mode = "0644"
@@ -75,10 +52,6 @@ mode = "0644"
 [[files]]
 source = "data/VShell.profile"
 destination = "/usr/share/konsole/VShell.profile"
-
-[[files]]
-source = "data/Fedora.profile"
-destination = "/usr/share/konsole/Fedora.profile"
 
 [[files]]
 source = "data/konsolerc"

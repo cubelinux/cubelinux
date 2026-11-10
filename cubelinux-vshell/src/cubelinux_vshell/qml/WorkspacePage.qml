@@ -8,25 +8,19 @@ Controls.ScrollView {
 
     property var controller
     signal destroyRequested()
-    signal settingsRequested(string containerName)
-    signal fedoraResetRequested()
+    signal settingsRequested()
     contentWidth: availableWidth
     clip: true
 
     readonly property string containerStatusLabel: controller.destroying
-        ? qsTr("Resetting Runtime")
-        : controller.busy && !controller.ready
-          ? qsTr("Preparing Runtime")
+        ? qsTr("Destroying Fedora")
         : controller.folderSharingBusy
           ? qsTr("Updating folder access")
-          : controller.setupFailed ? qsTr("Setup failed")
           : controller.containerStatus === "running" ? qsTr("Running") : qsTr("Stopped")
     readonly property string containerStatusIcon: controller.destroying || controller.folderSharingBusy
-        || (controller.busy && !controller.ready)
         ? "view-refresh"
         : controller.containerStatus === "running" ? "media-playback-start" : "media-playback-stop"
     readonly property color containerStatusColor: controller.destroying || controller.folderSharingBusy
-        || (controller.busy && !controller.ready)
         ? Kirigami.Theme.neutralTextColor
         : controller.containerStatus === "running"
           ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
@@ -58,14 +52,6 @@ Controls.ScrollView {
             text: controller.progress
             type: controller.setupFailed || controller.destroyFailed
                   ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
-        }
-
-        Controls.Button {
-            Layout.alignment: Qt.AlignLeft
-            visible: controller.setupFailed
-            text: qsTr("Try again")
-            icon.name: "view-refresh"
-            onClicked: controller.setup()
         }
 
         Kirigami.InlineMessage {
@@ -100,9 +86,9 @@ Controls.ScrollView {
                 columnSpacing: Kirigami.Units.mediumSpacing
 
                 Image {
-                    source: "file:///usr/share/icons/hicolor/256x256/apps/cubelinux-logo.png"
-                    sourceSize.width: 256
-                    sourceSize.height: 256
+                    source: "fedora-icon.svg"
+                    sourceSize.width: 128
+                    sourceSize.height: 128
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     Layout.preferredWidth: 64
@@ -123,7 +109,7 @@ Controls.ScrollView {
                         spacing: Kirigami.Units.mediumSpacing
 
                         Kirigami.Heading {
-                            text: qsTr("cubelinux Runtime")
+                            text: qsTr("Fedora® 44")
                             level: 2
                         }
 
@@ -136,7 +122,7 @@ Controls.ScrollView {
                     }
 
                     Controls.Label {
-                        text: qsTr("cubelinux Runtime · read-only system · Flatpak")
+                        text: qsTr("Fedora Linux · x86_64")
                         opacity: 0.7
                     }
                 }
@@ -163,7 +149,6 @@ Controls.ScrollView {
                             duration: 1000
                             loops: Animation.Infinite
                             running: controller.destroying || controller.folderSharingBusy
-                                     || (controller.busy && !controller.ready)
                             onRunningChanged: if (!running) statusIcon.rotation = 0
                         }
                     }
@@ -175,7 +160,7 @@ Controls.ScrollView {
                     Layout.column: page.availableWidth < 560 ? 0 : 3
                     Layout.columnSpan: page.availableWidth < 560 ? 2 : 1
                     Layout.fillWidth: page.availableWidth < 560
-                    text: qsTr("Open Runtime terminal")
+                    text: qsTr("Open terminal")
                     icon.name: "utilities-terminal"
                     highlighted: true
                     enabled: !controller.busy && !controller.destroying
@@ -189,8 +174,8 @@ Controls.ScrollView {
                     Layout.row: page.availableWidth < 560 ? 1 : 0
                     Layout.column: page.availableWidth < 560 ? 2 : 4
                     icon.name: "overflow-menu"
-                    Accessible.name: qsTr("Runtime actions")
-                    Controls.ToolTip.text: qsTr("Runtime actions")
+                    Accessible.name: qsTr("Environment actions")
+                    Controls.ToolTip.text: qsTr("Environment actions")
                     enabled: !controller.busy && !controller.destroying && !controller.folderSharingBusy
                     onClicked: environmentMenu.open()
 
@@ -200,24 +185,17 @@ Controls.ScrollView {
                         Controls.MenuItem {
                             text: qsTr("Environment settings")
                             icon.name: "configure"
-                            onTriggered: page.settingsRequested("cubelinux-runtime")
+                            onTriggered: page.settingsRequested()
                         }
 
                         Controls.MenuItem {
-                            text: qsTr("Reset Runtime…")
-                            icon.name: "view-refresh"
-                            enabled: controller.ready || controller.setupFailed || controller.destroyFailed
+                            text: qsTr("Destroy Fedora environment…")
+                            icon.name: "edit-delete"
                             onTriggered: page.destroyRequested()
                         }
                     }
                 }
             }
-        }
-
-        FedoraEnvironmentCard {
-            controller: page.controller
-            onSettingsRequested: containerName => page.settingsRequested(containerName)
-            onResetRequested: page.fedoraResetRequested()
         }
 
         Item {

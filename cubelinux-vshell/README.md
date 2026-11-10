@@ -1,7 +1,7 @@
 # cubelinux-vshell
 
 `cubelinux-vshell` is the command and application ID for Linux Subsystem and its
-container environments on the cubelinux Fedora bootc desktop host.
+persistent Fedora® LXC environment on the cubelinux Fedora bootc desktop host.
 
 ## Python and KDE stack
 
@@ -27,76 +27,49 @@ layouts to the window instead of relying on fixed positioning. Use cubelinux
 names and visual assets; do not imply that Linux Subsystem is an official KDE
 product.
 
-After Plasma Setup, VShell automatically prepares the Runtime on the user's
-first KDE login and starts it on later logins. See **Image source** for image
-pull and reset behavior.
-slirp4netns gives the container outbound
-connectivity without a host bridge, DHCP server, or veth permission. When Plasma
-Setup creates the desktop account, a system hook
+The wizard downloads a Fedora 44 LXC image, creates an unprivileged container,
+and shares the signed-in user's home folder automatically. slirp4netns gives the
+container outbound connectivity without a host bridge, DHCP server, or veth
+permission. When Plasma Setup creates the desktop account, a system hook
 allocates that account's subordinate IDs, so a fresh installation does not
 need another administrator password prompt in Linux Subsystem. Existing accounts
 without this provisioning can use the one-time administrator setup for those IDs.
-The `lxc-net` bridge service is disabled. Networking uses slirp4netns.
-After initial account setup, the LXC instance's system files are mounted
-read-only. `/tmp` and `/var` are temporary writable filesystems. The shared
-`/home/<user>` is the only default persistent writable mount. VShell configures
-Flathub as a user-scoped remote, and Flatpak user installs persist in the shared
-home across Runtime resets; there is no persistent system Flatpak store.
-Runtime also mounts a separate read-only procfs at
-`/var/lib/cubelinux-vshell/proc`, allowing Flatpak's bubblewrap sandbox to
-create its own procfs without relaxing the outer LXC security policy.
-RPM/DNF changes to the guest system do not persist; use Flatpak for applications.
+The old `lxc-net` bridge service is not used and is gated off, including when an
+older image left it enabled. Existing Fedora environments switch from their old
+veth configuration the next time VShell starts them.
 Programs in the container can read and modify files in the shared home folder.
 The host user's runtime directory and X11 socket directory are also mounted so
 terminal-launched applications can connect to the host's Wayland/XWayland,
 D-Bus, and PipeWire/PulseAudio session. The host X11 directory is mounted outside
-the guest's `/tmp` and linked back after Runtime mounts its temporary
+the guest's `/tmp` and linked back after the Fedora guest mounts its temporary
 filesystem there. The container user is mapped to the desktop user's host ID,
 so those sockets accept connections as that user.
 
-The optional Fedora environment is pulled from LXC's Fedora 44 image server when
-the user selects **Create Fedora container**. It uses the LXC name `fedora` and
-is stored under `~/.local/share/vshell/containers/fedora/`. Fedora's root
-filesystem remains writable and persistent between starts, so DNF-installed
-packages and system changes remain available until reset. It uses slirp4netns
-for networking and shares the signed-in user's home, host desktop sockets, and
-any additional folders selected in Fedora's environment settings. Fedora apps
-are discovered for KDE launchers, and its TCP services use the same automatic
-port forwarding and optional public exposure controls as Runtime.
-
-**Reset Fedora** removes that container and immediately downloads a fresh Fedora
-image from the LXC image server. DNF packages, system changes, additional
-shared-folder settings, and public port choices are cleared; the host home and
-its files remain.
-
-Open an environment card's menu and choose **Environment settings** to view the
-home folder share, add other host folders, and manage forwarded ports.
+Open the Fedora environment card's menu and choose **Environment settings** to
+view the home folder share, add other host folders, and manage forwarded ports.
 Additional folders are mounted read-write under
-`/var/lib/vshell-shares/` inside that environment, subject to the host folder's
-permissions. Changing folder shares restarts the selected environment when it
-is running so LXC can apply the updated mounts. Resetting Runtime or Fedora
-also removes that environment's additional folder-share settings.
+`/mnt/vshell-shares/` inside Fedora, subject to the host folder's permissions.
+Changing folder shares restarts Fedora when it is running so LXC can apply the
+updated mounts. Destroying Fedora also removes its additional folder-share
+settings.
 
-Install graphical applications in Runtime with Discover's Flatpak backend. User
-Flatpak installs live in the shared home, so they remain available when Runtime
-is reset. Discover is available inside Runtime, and its Flatpak backend does not
-change the read-only system image. VShell watches the Flatpak export directory
-in the shared home and publishes root-owned KDE launcher wrappers alongside
-the installed RPM application wrappers. A narrowly scoped Polkit helper
-publishes these entries under `/usr/local/share/applications/cubelinux` so KDE
-Kiosk can keep user-created application entries out of Kickoff while VShell
-entries remain available. The host image bind-mounts that directory from
-`/var/lib/cubelinux-vshell/applications`, since the bootc root filesystem is
-read-only. Each launcher starts its app inside the environment that owns it, with the host
-display/audio sockets and session environment. Flatpak launchers run the
-selected app from the user's Flatpak installation; native launchers run the
-matching desktop entry in that environment. Terminal-launched programs continue to work
-as before.
+Install graphical applications inside Fedora with DNF. VShell discovers their
+system desktop entries and adds matching launchers to the host application menu
+with “(Fedora)” in the name. A narrowly scoped Polkit helper publishes
+root-owned wrapper entries in `/usr/local/share/applications`, so KDE Kiosk can
+keep user-created application entries out of Kickoff while these VShell entries
+remain available. The helper creates a fixed `cubelinux-vshell launch-app`
+command for each validated Fedora desktop-entry path; it never copies the guest
+entry's `Exec` command onto the host. The KDE session watcher refreshes those
+entries after packages are installed or removed, and each launcher starts the
+app inside the Fedora container with the host display/audio sockets and session
+environment. For example, install `vlc`; the Fedora launcher will appear in the
+host menu. Terminal-launched programs continue to work as before.
 
-While the KDE desktop session is running, its VShell watcher discovers Runtime
-and Fedora TCP services listening on their container network interfaces at ports 1024 and
+While the KDE desktop session is running, its VShell watcher discovers Fedora
+TCP services listening on the container network interface at ports 1024 and
 above and forwards them to the host at `localhost:<port>` through slirp4netns.
-Services bound only to an environment's loopback address are not forwarded. Each
+Services bound only to Fedora's loopback address are not forwarded. Each
 forwarded port has its own **Expose to public** option, off by default. slirp4netns
 keeps these host-forwarding rules itself; VShell does not run a separate host TCP
 proxy. The guest cannot connect to services bound only to the host's loopback.
@@ -105,57 +78,48 @@ still controls incoming connections, and VShell does not change firewall
 rules. Ports below 1024 are not forwarded automatically, and manual forwarding
 rules are not implemented yet.
 
-The cubelinux Runtime card uses the same cubelinux logo as the desktop start
-menu, rendered from the 256-pixel icon generated by the host image build. The
-optional Fedora environment uses the Fedora icon. The About page includes
-Fedora trademark attribution and states that VShell and cubelinux are not
-affiliated with or endorsed by the Fedora Project or Red Hat.
+VShell displays the icon-only Fedora symbol beside the Fedora Linux guest
+environment. The [icon file](https://commons.wikimedia.org/wiki/File:Fedora_icon_(2021).svg)
+is bundled with VShell. The About page includes Fedora trademark attribution
+and states that VShell and cubelinux are not affiliated with or endorsed by the
+Fedora Project or Red Hat.
 Fedora® and the Fedora logo are trademarks or registered trademarks of Red Hat,
 Inc., or its subsidiaries in the United States and other countries.
 
 The container runs as an unprivileged user namespace. Container root maps to
-subordinate host IDs; the Runtime user maps to the desktop user's own ID
-so the shared home folder remains writable. The default LXC instance is named
-`cubelinux-runtime` and is created under
-`~/.local/share/vshell/containers/cubelinux-runtime`; its system files are read-only after setup. `/tmp` and
-`/var` are ephemeral writable mounts; the shared home is the only default
-persistent writable mount. User-scoped Flatpak metadata and app data therefore
-remain available after a Runtime reset.
+subordinate host IDs; the Fedora login user maps to the desktop user's own ID
+so the shared home folder remains writable. The container has a persistent
+root filesystem under `~/.local/share/vshell/containers`. That existing data
+location and LXC container name stay unchanged so configured environments are
+preserved when the command is renamed.
 
 VShell is a tightly integrated workspace, not a desktop-app sandbox. Programs
-inside Runtime can access the shared home folder and the host user's display,
+inside Fedora can access the shared home folder and the host user's display,
 audio, and session-bus sockets.
 
-## Image source
+## Image sources
 
-The host image does not bundle the Runtime OCI image or a user-specific LXC
-instance. At the first KDE login after Plasma Setup, VShell uses LXC's OCI
-template to pull `ghcr.io/cubelinux/cubelinux-vshell-runtime:main` and create
-the `cubelinux-runtime` instance. On first login, its setup window waits until
-KDE Welcome Center closes before it starts preparing Runtime. This first setup
-needs internet access. The
-`:main` tag is mutable; **Reset Runtime** pulls the version currently published
-under that tag without requiring a host image update. LXC uses a local layer
-cache when available to reduce repeated downloads. When the new Runtime path
-is incomplete, reset it from Linux Subsystem before creating Runtime again.
+The Fedora 44 system image is downloaded from the Linux Containers image
+server using LXC's `download` template. OCI application images are not used as
+system images.
 
 ## Use
 
-Open **Linux Subsystem** from the application menu to view or manage Runtime.
-Choose **Open Runtime terminal** to open the bundled
-Konsole in the Linux environment. Konsole's system default is locked to VShell,
-its settings menu is disabled, and no separate host-shell profile is added. The
-application menu provides a dedicated **Konsole (Runtime)** entry that opens
-the same profile. If Runtime is not set up yet, this entry opens Linux
-Subsystem to initialize it automatically without briefly opening an empty
-Konsole. If the environment exists but is stopped, Konsole starts it when
-opening the profile. KDE Kiosk hides Konsole's stock launcher, which requests
-general shell access.
+Open **Linux Subsystem** from the application menu and follow the short wizard.
+Once setup completes, choose **Open terminal** to open the bundled Konsole in
+the Fedora Virtual Shell. Konsole's system default is locked to VShell, its
+settings menu is disabled, and no separate host-shell profile is added. The
+application menu provides a dedicated **Konsole (Fedora Virtual Shell)** entry
+that opens the same profile. If the environment is not set up yet, this entry
+opens the setup window directly without briefly opening an empty Konsole. If
+the environment exists but is stopped, Konsole starts it when opening the
+profile. KDE Kiosk hides Konsole's stock launcher, which requests general shell
+access.
 
-Closing Linux Subsystem while setup or destruction is running hides its window
-while the operation continues. Open **Linux Subsystem** to bring the progress
-window back. If the operation finishes successfully while hidden, the app exits;
-if it fails, the window reopens with the error.
+Closing Linux Subsystem while setup or destruction is running hides its window while
+the operation continues. Open **Linux Subsystem** to bring the progress window
+back. If the operation finishes successfully while hidden,
+the app exits; if it fails, the window reopens with the error.
 
 The installed `cubelinux-vshell` command also supports these operations:
 
@@ -166,13 +130,14 @@ cubelinux-vshell stop
 ```
 
 `cubelinux-vshell enter` starts the container if needed and opens a login shell
-as the mapped Runtime user. The container user has passwordless `sudo` inside
-the unprivileged container only; the read-only root prevents system changes
-from persisting. `cubelinux-vshell stop` shuts down the container. Use **Reset
-Runtime** in Linux Subsystem to recreate the LXC instance by pulling the
-current `:main` runtime image from GHCR. Reset needs internet access. The shared
-host home and user-installed Flatpak apps remain; guest-side RPM/DNF changes
-and container settings are cleared.
+as the mapped Fedora user. The container user has passwordless `sudo` inside
+the unprivileged container only. `cubelinux-vshell stop` shuts down the
+persistent container. Use **Destroy Fedora environment** in Linux Subsystem to
+permanently delete the container, including installed packages, container
+settings, and files stored in its filesystem. The shared host home folder and
+the cached Fedora template remain untouched. After destruction, Linux
+Subsystem returns to its setup wizard; use it to create a new environment when
+you are ready. LXC reuses the cached template when one is available.
 Open **About Linux Subsystem** from the right-side application menu to see the
 app version, project links, Qt build and runtime versions, PySide6, KDE
 Frameworks/Kirigami, Plasma, Python, distribution, kernel, and architecture

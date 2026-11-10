@@ -68,7 +68,7 @@ Kirigami.ScrollablePage {
 
             Controls.Label {
                 Layout.fillWidth: true
-                text: qsTr("Choose which folders %1 can access.").arg(controller.settingsContainerLabel)
+                text: qsTr("Choose which cubelinux folders Fedora can access.")
                 opacity: 0.7
                 wrapMode: Text.Wrap
             }
@@ -95,7 +95,7 @@ Kirigami.ScrollablePage {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: qsTr("Shared automatically with %1 at %2.").arg(controller.settingsContainerLabel).arg(controller.sharedHomePath)
+                    text: qsTr("Shared automatically with Fedora at %1.").arg(controller.sharedHomePath)
                     opacity: 0.7
                     wrapMode: Text.Wrap
                 }
@@ -192,7 +192,7 @@ Kirigami.ScrollablePage {
 
             Controls.Label {
                 Layout.fillWidth: true
-                text: qsTr("%1 can read and modify shared folders. It restarts if folder access changes while it is running.").arg(controller.settingsContainerLabel)
+                text: qsTr("Fedora can read and modify shared folders. Fedora restarts if folder access changes while it is running.")
                 opacity: 0.7
                 wrapMode: Text.Wrap
             }
@@ -215,7 +215,7 @@ Kirigami.ScrollablePage {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: qsTr("TCP services on ports 1024 and above are forwarded from each running environment automatically.")
+                    text: qsTr("Fedora TCP services on ports 1024 and above are forwarded to this host automatically.")
                     opacity: 0.7
                     wrapMode: Text.Wrap
                 }
@@ -223,7 +223,7 @@ Kirigami.ScrollablePage {
                 Controls.Label {
                     Layout.fillWidth: true
                     visible: controller.forwardedPorts.length === 0
-                    text: qsTr("No forwarded ports detected. Start a network service in an environment to see it here.")
+                    text: qsTr("No forwarded ports detected. Start a network service in Fedora to see it here.")
                     opacity: 0.7
                     wrapMode: Text.Wrap
                 }
@@ -249,7 +249,7 @@ Kirigami.ScrollablePage {
                         spacing: 0
 
                         Controls.Label {
-                            text: qsTr("TCP port %1 in %2").arg(modelData.port).arg(modelData.containerLabel)
+                            text: qsTr("TCP port %1 in Fedora").arg(modelData.port)
                             font.bold: true
                         }
 
@@ -275,10 +275,8 @@ Kirigami.ScrollablePage {
 
                         Controls.Switch {
                             checked: modelData.publicAccess
-                            Accessible.name: qsTr("Expose %1 port %2 to public networks")
-                                .arg(modelData.containerLabel).arg(modelData.port)
-                            onToggled: controller.setPortPublicAccess(
-                                modelData.container, modelData.port, checked)
+                            Accessible.name: qsTr("Expose port %1 to public networks").arg(modelData.port)
+                            onToggled: controller.setPortPublicAccess(modelData.port, checked)
                         }
                     }
                 }

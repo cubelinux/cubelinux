@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Prepare cubelinux Runtime
-Comment=Open Runtime setup after KDE Welcome Center on first login
-Exec=/usr/bin/cubelinux-vshell welcome
-OnlyShowIn=KDE;
-NoDisplay=true
-X-KDE-autostart-after=panel

@@ -1,6 +1,5 @@
 # syntax=docker/dockerfile:1
 ARG BASE_IMAGE=quay.io/fedora/fedora-bootc:44
-
 FROM ${BASE_IMAGE} AS packages
 
 ARG PACKAGES
@@ -42,9 +41,6 @@ RUN set -eux; \
     bootc container lint
 
 COPY .image-build/rootfs/ /
-
-# Reserve a trusted KDE applications subdirectory for writable VShell launchers.
-RUN install -d -o root -g root -m 0755 /usr/local/share/applications/cubelinux
 
 # Add the cubelinux widget defaults to the Breeze theme package in the image.
 COPY config/plasma/plasmoidsetupscripts/ \

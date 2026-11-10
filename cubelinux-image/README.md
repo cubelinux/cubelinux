@@ -66,10 +66,10 @@ cubelinux/
   About page icon. It downloads `distro.plymouth_logo.url` and converts that
   SVG into the PNG watermark included in the initramfs.
 - **`cubelinux-image/config/plasma/`** holds shared Plasma defaults. The Breeze
-  applet setup defaults brand Kickoff and pin Dolphin as Plasma creates the
-  initial panel for a new profile. It leaves Discover launchers to Plasma's
-  packaged defaults and does not rewrite existing user profiles. Keep the
-  selected global theme in `kdeglobals`.
+  applet setup defaults brand Kickoff and remove the Discover taskbar pin while
+  pinning Dolphin as Plasma creates the initial panel for a new profile. They
+  do not rewrite existing user profiles. Keep the selected global theme in
+  `kdeglobals`.
 - **`cubelinux-updater/component.toml`** and
   **`cubelinux-vshell/component.toml`** describe each app's image contribution:
   packages it needs, systemd services to enable, and files to install with
@@ -77,10 +77,11 @@ cubelinux/
   HTTPS downloads for assets that should only enter the image during builds.
   Keep each app's code and local assets in its own top-level folder.
 - **`cubelinux-image/Containerfile`** contains shared image build operations.
-  Declare component packages and local files in the component manifest. The
-  Containerfile also builds patched KF6 KIO subpackages in an intermediate
-  stage. VShell downloads its separately published runtime image from GHCR on
-  first KDE login and when Runtime is reset; the host image does not bundle it.
+  Do not add component-specific `COPY` statements or package lists here;
+  declare those in the component manifest. It builds the installed KF6 KIO
+  subpackages from the matching Fedora source RPM with the cubelinux kiosk
+  launch policy patch in an intermediate stage, then installs those patched
+  RPMs into the image.
 - **`cubelinux-image/scripts/prepare_image.py`** validates configuration and
   manifests and creates `.image-build/`. That directory is generated and ignored
   by Git; do not edit or commit it.
@@ -107,11 +108,6 @@ to the image configuration.
 1. Update the app and its `component.toml` in `cubelinux-updater/` or
    `cubelinux-vshell/`.
 2. The image workflow runs automatically when either component folder changes.
-   The VShell runtime image is built separately and published to GHCR. On the
-   first KDE login after Plasma Setup, VShell pulls the current `:main` image
-   and creates the per-user LXC instance. The host image does not bundle the
-   runtime OCI image. Reset Runtime pulls the current `:main` image again, so
-   runtime releases do not require rebuilding the host image.
 3. `cubelinux-image/config/image.toml` selects components by local path. Remove
    its `[[components]]` entry to exclude a component from the image.
 

@@ -1,4 +1,4 @@
-"""Rootless LXC setup and shell entry for cubelinux Runtime."""
+"""Rootless Fedora LXC setup and shell entry for Virtual Shell."""
 
 from __future__ import annotations
 
@@ -15,9 +15,7 @@ from typing import Callable, Sequence
 
 from . import slirp_network
 
-CONTAINER_NAME = "cubelinux-runtime"
-FEDORA_CONTAINER_NAME = "fedora"
-CONTAINER_NAMES = (CONTAINER_NAME, FEDORA_CONTAINER_NAME)
+CONTAINER_NAME = "vshell"
 FEDORA_RELEASE = "44"
 GUEST_ID = 50000
 ID_COUNT = 65536
@@ -25,9 +23,8 @@ CONTAINER_RUNTIME_DIR = "/mnt/vshell-host-runtime"
 CONTAINER_X11_DIR = "/mnt/vshell-host-x11"
 CONTAINER_X11_TMPFILES = "/etc/tmpfiles.d/cubelinux-vshell-x11.conf"
 SHUTDOWN_HOOK = """#!/bin/sh
-# Stop cubelinux containers before the Plasma user manager exits.
+# Stop the cubelinux Fedora container before the Plasma user manager exits.
 /usr/bin/cubelinux-vshell stop >/dev/null 2>&1 || true
-/usr/bin/cubelinux-vshell stop --container fedora >/dev/null 2>&1 || true
 """
 Progress = Callable[[str], None]
 
@@ -40,32 +37,17 @@ def _home() -> Path:
     return Path.home().resolve()
 
 
-def _arch() -> str:
-    machine = platform.machine().lower()
-    if machine in ("x86_64", "amd64"):
-        return "amd64"
-    if machine in ("aarch64", "arm64"):
-        return "arm64"
-    raise VShellError(f"Fedora LXC images are not available for this architecture: {machine}.")
-
-
 def _lxc_path() -> Path:
     data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
     return data_home / "vshell" / "containers"
 
 
-def _container_name(container_name: str = CONTAINER_NAME) -> str:
-    if container_name not in CONTAINER_NAMES:
-        raise VShellError("Unknown Linux environment.")
-    return container_name
+def _config_path() -> Path:
+    return _lxc_path() / CONTAINER_NAME / "config"
 
 
-def _config_path(container_name: str = CONTAINER_NAME) -> Path:
-    return _lxc_path() / _container_name(container_name) / "config"
-
-
-def _rootfs_path(container_name: str = CONTAINER_NAME) -> Path:
-    return _lxc_path() / _container_name(container_name) / "rootfs"
+def _rootfs_path() -> Path:
+    return _lxc_path() / CONTAINER_NAME / "rootfs"
 
 
 def install_shutdown_hook() -> None:
@@ -73,23 +55,22 @@ def install_shutdown_hook() -> None:
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     hook = config_home / "plasma-workspace" / "shutdown" / "cubelinux-vshell-stop"
     try:
+        if hook.is_file() and hook.read_text(encoding="utf-8") == SHUTDOWN_HOOK:
+            hook.chmod(0o755)
+            return
         if hook.exists():
-            existing = hook.read_text(encoding="utf-8") if hook.is_file() else ""
-            if existing == SHUTDOWN_HOOK:
-                hook.chmod(0o755)
-                return
+            return
         hook.parent.mkdir(parents=True, exist_ok=True)
         hook.write_text(SHUTDOWN_HOOK, encoding="utf-8")
         hook.chmod(0o755)
     except OSError as error:
         raise VShellError(
-            f"Could not install the Runtime shutdown hook at {hook}: {error}"
+            f"Could not install the Fedora shutdown hook at {hook}: {error}"
         ) from error
 
 
-def is_initialized(container_name: str = CONTAINER_NAME) -> bool:
-    container_name = _container_name(container_name)
-    config = _config_path(container_name)
+def is_initialized() -> bool:
+    config = _config_path()
     if not config.is_file() or not (config.parent / "rootfs").is_dir():
         return False
     try:
@@ -104,7 +85,7 @@ def _account() -> pwd.struct_passwd:
     if account.pw_uid == 0:
         raise VShellError("Run Virtual Shell from your normal desktop account, not as root.")
     if not re.fullmatch(r"[a-z_][a-z0-9_-]*", account.pw_name):
-        raise VShellError("Your account name contains characters VShell cannot use in Runtime.")
+        raise VShellError("Your account name contains characters VShell cannot use in Fedora.")
     home = _home()
     if not home.is_dir():
         raise VShellError("Your home folder could not be found.")
@@ -180,13 +161,21 @@ def _rootless_scope(
     return [*scope, "--", *command]
 
 
-def _container_running(progress: Progress, container_name: str = CONTAINER_NAME) -> bool:
-    container_name = _container_name(container_name)
+def _arch() -> str:
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        return "amd64"
+    if machine in ("aarch64", "arm64"):
+        return "arm64"
+    raise VShellError(f"Fedora LXC images are not available for this architecture: {machine}.")
+
+
+def _container_running(progress: Progress) -> bool:
     result = subprocess.run(
         [
             "lxc-info",
             "--name",
-            container_name,
+            CONTAINER_NAME,
             "--lxcpath",
             str(_lxc_path()),
         ],
@@ -198,27 +187,17 @@ def _container_running(progress: Progress, container_name: str = CONTAINER_NAME)
     return result.returncode == 0 and "RUNNING" in result.stdout
 
 
-def _wait_until_running(progress: Progress, container_name: str = CONTAINER_NAME) -> None:
+def _wait_until_running(progress: Progress) -> None:
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
-        if _container_running(progress, container_name):
+        if _container_running(progress):
             return
         time.sleep(1)
-    label = (
-        "Fedora"
-        if container_name == FEDORA_CONTAINER_NAME
-        else "Runtime"
-    )
-    raise VShellError(f"{label} did not finish starting. Check the LXC log and try again.")
+    raise VShellError("Fedora did not finish starting. Check the LXC log and try setup again.")
 
 
-def _wait_for_network(progress: Progress, container_name: str = CONTAINER_NAME) -> None:
-    label = (
-        "Fedora"
-        if container_name == FEDORA_CONTAINER_NAME
-        else "Runtime"
-    )
-    _report(progress, f"Connecting {label} to the network…")
+def _wait_for_network(progress: Progress) -> None:
+    _report(progress, "Connecting Fedora to the network…")
     deadline = time.monotonic() + 30
     reported_ips = ""
     while time.monotonic() < deadline:
@@ -226,7 +205,7 @@ def _wait_for_network(progress: Progress, container_name: str = CONTAINER_NAME) 
             [
                 "lxc-info",
                 "--name",
-                _container_name(container_name),
+                CONTAINER_NAME,
                 "--lxcpath",
                 str(_lxc_path()),
                 "--ips",
@@ -253,22 +232,16 @@ def _wait_for_network(progress: Progress, container_name: str = CONTAINER_NAME) 
     else:
         detail = " LXC reported no IP addresses."
     raise VShellError(
-        f"{label} did not receive the slirp4netns network configuration within 30 seconds. "
+        "Fedora did not receive the slirp4netns network configuration within 30 seconds. "
         "Check that the container network namespace is available and slirp4netns is running."
         + detail
     )
 
 
-def _ensure_slirp_network(progress: Progress, container_name: str = CONTAINER_NAME) -> None:
-    container_name = _container_name(container_name)
-    label = (
-        "Fedora"
-        if container_name == FEDORA_CONTAINER_NAME
-        else "Runtime"
-    )
+def _ensure_slirp_network(progress: Progress) -> None:
     try:
         result = subprocess.run(
-            ["lxc-info", "--name", container_name, "--lxcpath", str(_lxc_path()), "--pid"],
+            ["lxc-info", "--name", CONTAINER_NAME, "--lxcpath", str(_lxc_path()), "--pid"],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
@@ -276,27 +249,47 @@ def _ensure_slirp_network(progress: Progress, container_name: str = CONTAINER_NA
             timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        raise VShellError(f"Could not inspect the running {label} container: {error}") from error
+        raise VShellError(f"Could not inspect the running Fedora container: {error}") from error
     match = re.search(r"PID:\s*(\d+)", result.stdout) if result.returncode == 0 else None
     if not match:
-        raise VShellError(f"LXC did not report the running {label} container process ID.")
+        raise VShellError("LXC did not report the running Fedora container process ID.")
     try:
-        slirp_network.ensure_running(int(match.group(1)), container_name)
+        network_started = slirp_network.ensure_running(int(match.group(1)))
+        if network_started:
+            _attach(
+                "/usr/bin/bash",
+                "-ceu",
+                "rm -f /etc/resolv.conf; printf 'nameserver 10.0.2.3\\n' > /etc/resolv.conf",
+                progress=progress,
+            )
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
-        raise VShellError(f"Could not connect {label} to the network: {error}") from error
+        raise VShellError(f"Could not connect Fedora to the network: {error}") from error
 
 
-def _stop_slirp_network(container_name: str = CONTAINER_NAME) -> None:
-    container_name = _container_name(container_name)
-    label = (
-        "Fedora"
-        if container_name == FEDORA_CONTAINER_NAME
-        else "Runtime"
-    )
+def _stop_slirp_network() -> None:
     try:
-        slirp_network.stop(container_name)
+        slirp_network.stop()
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
-        raise VShellError(f"Could not stop {label}'s user-mode network: {error}") from error
+        raise VShellError(f"Could not stop Fedora's user-mode network: {error}") from error
+
+
+def _ensure_slirp_config() -> bool:
+    """Migrate existing VShell containers from the host bridge to slirp4netns."""
+    config = _config_path()
+    if not config.is_file():
+        return False
+    contents = config.read_text(encoding="utf-8")
+    lines = contents.splitlines()
+    network_lines = [line for line in lines if line.startswith("lxc.net.")]
+    if network_lines == ["lxc.net.0.type = empty"]:
+        return False
+    updated = [line for line in lines if not line.startswith("lxc.net.")]
+    updated.insert(1 if updated and updated[0].startswith("lxc.include") else 0, "lxc.net.0.type = empty")
+    temporary = config.with_name(f".{config.name}.tmp")
+    temporary.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    temporary.chmod(config.stat().st_mode & 0o777)
+    temporary.replace(config)
+    return True
 
 
 def _host_runtime_dir(account: pwd.struct_passwd) -> Path | None:
@@ -345,11 +338,9 @@ def _escape_mount_path(value: str) -> str:
     return value.replace("\\", "\\\\").replace(" ", "\\040")
 
 
-def _ensure_host_desktop_mounts(
-    account: pwd.struct_passwd, container_name: str = CONTAINER_NAME
-) -> bool:
-    """Expose the signed-in user's display and audio sockets to Runtime."""
-    config = _config_path(container_name)
+def _ensure_host_desktop_mounts(account: pwd.struct_passwd) -> bool:
+    """Expose the signed-in user's display and audio sockets to Fedora."""
+    config = _config_path()
     contents = config.read_text(encoding="utf-8")
     section = _host_desktop_mount_lines(account)
     marker = "# VShell host desktop sockets"
@@ -382,16 +373,11 @@ def _ensure_host_desktop_mounts(
     return True
 
 
-def _attach(
-    *arguments: str,
-    progress: Progress | None = None,
-    container_name: str = CONTAINER_NAME,
-) -> str:
-    container_name = _container_name(container_name)
+def _attach(*arguments: str, progress: Progress | None = None) -> str:
     command = [
         "lxc-attach",
         "--name",
-        container_name,
+        CONTAINER_NAME,
         "--lxcpath",
         str(_lxc_path()),
         "--clear-env",
@@ -412,32 +398,37 @@ def _attach(
             check=False,
         )
         if completed.returncode:
-            raise VShellError(completed.stdout.strip()[-4000:] or "Could not configure the Runtime container.")
+            raise VShellError(completed.stdout.strip()[-4000:] or "Could not configure the Fedora container.")
         return completed.stdout
     return _run(command, progress, stream=True)
 
 
-def _ensure_guest_x11_socket_path(
-    progress: Progress | None = None, container_name: str = CONTAINER_NAME
-) -> None:
-    """Restore the X11 path after the Runtime guest mounts tmpfs on /tmp."""
+def _ensure_guest_x11_socket_path(progress: Progress | None = None) -> None:
+    """Restore the X11 path after the Fedora LXC guest mounts tmpfs on /tmp."""
     if not Path("/tmp/.X11-unix").is_dir():
         return
-    _attach(
-        "/usr/bin/systemd-tmpfiles", "--create", CONTAINER_X11_TMPFILES,
-        progress=progress, container_name=container_name,
+    script = (
+        "set -eu; "
+        f"if [ -d {CONTAINER_X11_DIR} ]; then "
+        "install -d -m 0755 /etc/tmpfiles.d; "
+        f"printf '%s\\n' 'L+ /tmp/.X11-unix - - - - {CONTAINER_X11_DIR}' "
+        f"> {CONTAINER_X11_TMPFILES}; "
+        f"if [ ! -L /tmp/.X11-unix ] || "
+        f"[ \"$(readlink /tmp/.X11-unix)\" != {CONTAINER_X11_DIR} ]; then "
+        f"systemd-tmpfiles --create {CONTAINER_X11_TMPFILES}; "
+        "fi; fi"
     )
+    _attach("/usr/bin/bash", "-ceu", script, progress=progress)
 
 
-def _stop_container(progress: Progress, container_name: str = CONTAINER_NAME) -> None:
-    container_name = _container_name(container_name)
-    if _container_running(progress, container_name):
+def _stop_container(progress: Progress) -> None:
+    if _container_running(progress):
         _run(
             _rootless_scope(
                 [
                     "lxc-stop",
                     "--name",
-                    container_name,
+                    CONTAINER_NAME,
                     "--lxcpath",
                     str(_lxc_path()),
                     "--timeout",
@@ -447,17 +438,17 @@ def _stop_container(progress: Progress, container_name: str = CONTAINER_NAME) ->
             progress,
             stream=True,
         )
-    _stop_slirp_network(container_name)
+    _stop_slirp_network()
 
 
-def _start_container(progress: Progress, container_name: str = CONTAINER_NAME) -> None:
-    container_name = _container_name(container_name)
+def _start_container(progress: Progress) -> None:
+    _ensure_slirp_config()
     _run(
         _rootless_scope(
             [
                 "lxc-start",
                 "--name",
-                container_name,
+                CONTAINER_NAME,
                 "--lxcpath",
                 str(_lxc_path()),
                 "--daemon",
@@ -466,16 +457,13 @@ def _start_container(progress: Progress, container_name: str = CONTAINER_NAME) -
         progress,
         stream=True,
     )
-    _wait_until_running(progress, container_name)
-    _ensure_slirp_network(progress, container_name)
+    _wait_until_running(progress)
+    _ensure_slirp_network(progress)
 
 
-def enter(container_name: str = CONTAINER_NAME) -> int:
-    """Start the persistent container and attach the mapped Runtime user."""
-    container_name = _container_name(container_name)
-    if not is_initialized(container_name):
-        if container_name == FEDORA_CONTAINER_NAME:
-            raise VShellError("The Fedora environment has not been created yet.")
+def enter() -> int:
+    """Start the persistent container and attach the mapped Fedora user."""
+    if not is_initialized():
         if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
             executable = shutil.which("cubelinux-vshell") or "/usr/bin/cubelinux-vshell"
             subprocess.Popen(
@@ -490,22 +478,22 @@ def enter(container_name: str = CONTAINER_NAME) -> int:
 
     account = _account()
     root = _lxc_path()
-    mounts_changed = _ensure_host_desktop_mounts(account, container_name)
-    if mounts_changed and _container_running(print, container_name):
-        label = "Fedora" if container_name == FEDORA_CONTAINER_NAME else "Runtime"
-        print(f"Restarting {label} to apply its desktop settings...")
-        _stop_container(print, container_name)
-    if not _container_running(print, container_name):
-        _start_container(print, container_name)
+    network_config_changed = _ensure_slirp_config()
+    mounts_changed = _ensure_host_desktop_mounts(account)
+    if (mounts_changed or network_config_changed) and _container_running(print):
+        print("Restarting Fedora to apply its network and desktop settings...")
+        _stop_container(print)
+    if not _container_running(print):
+        _start_container(print)
     else:
-        _ensure_slirp_network(print, container_name)
-    _ensure_guest_x11_socket_path(container_name=container_name)
+        _ensure_slirp_network(print)
+    _ensure_guest_x11_socket_path()
 
     term = os.environ.get("TERM", "xterm-256color")
     command = [
         "lxc-attach",
         "--name",
-        container_name,
+        CONTAINER_NAME,
         "--lxcpath",
         str(root),
         "--clear-env",
@@ -553,15 +541,13 @@ def enter(container_name: str = CONTAINER_NAME) -> int:
     return subprocess.run(command, check=False).returncode
 
 
-def stop(container_name: str = CONTAINER_NAME) -> None:
-    container_name = _container_name(container_name)
-    if not is_initialized(container_name):
+def stop() -> None:
+    if not is_initialized():
         raise VShellError("Virtual Shell is not set up yet.")
-    _stop_container(print, container_name)
+    _stop_container(print)
 
 
-def status(container_name: str = CONTAINER_NAME) -> str:
-    container_name = _container_name(container_name)
-    if not is_initialized(container_name):
+def status() -> str:
+    if not is_initialized():
         return "not-set-up"
-    return "running" if _container_running(print, container_name) else "stopped"
+    return "running" if _container_running(print) else "stopped"
