@@ -5,8 +5,8 @@
 <policyconfig>
   <vendor>cubelinux</vendor>
   <action id="org.cubelinux.VShell.LauncherSync">
-    <description>Update Fedora application menu entries</description>
-    <message>Authentication is required to update Fedora application menu entries</message>
+    <description>Update cubelinux application menu entries</description>
+    <message>Authentication is required to update cubelinux application menu entries</message>
     <defaults>
       <allow_any>no</allow_any>
       <allow_inactive>no</allow_inactive>

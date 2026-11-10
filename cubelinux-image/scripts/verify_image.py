@@ -125,6 +125,16 @@ def verify_vshell_runtime(rootfs: Path) -> None:
         if not (rootfs / relative).is_file():
             raise ValueError(f"host image is missing VShell OCI support file {relative}")
 
+    launcher_mount = "usr-local-share-applications-cubelinux.mount"
+    if not (rootfs / "usr/local/share/applications/cubelinux").is_dir():
+        raise ValueError("host image is missing the VShell launcher mount point")
+    if not (rootfs / f"usr/lib/systemd/system/{launcher_mount}").is_file():
+        raise ValueError("host image is missing the VShell launcher mount unit")
+    if not (
+        rootfs / f"etc/systemd/system/multi-user.target.wants/{launcher_mount}"
+    ).is_symlink():
+        raise ValueError("host image does not enable the VShell launcher mount unit")
+
 
 def verify_image(image: str) -> None:
     distro_path = BUILD / "distro.json"

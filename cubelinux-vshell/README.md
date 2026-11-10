@@ -75,13 +75,15 @@ reset. Discover is available inside Runtime, and its Flatpak backend does not
 change the read-only system image. VShell watches the Flatpak export directory
 in the shared home and publishes root-owned KDE launcher wrappers alongside
 the installed RPM application wrappers. A narrowly scoped Polkit helper
-publishes these entries in
-`/usr/local/share/applications`, so KDE Kiosk can keep user-created application
-entries out of Kickoff while VShell entries remain available. Each launcher
-starts its app inside Runtime with the host display/audio sockets and session
-environment. Flatpak launchers run the selected app from the user's Flatpak
-installation; native launchers run the matching desktop entry in Runtime.
-Terminal-launched programs continue to work as before.
+publishes these entries under `/usr/local/share/applications/cubelinux` so KDE
+Kiosk can keep user-created application entries out of Kickoff while VShell
+entries remain available. The host image bind-mounts that directory from
+`/var/lib/cubelinux-vshell/applications`, since the bootc root filesystem is
+read-only. Each launcher starts its app inside Runtime with the host
+display/audio sockets and session environment. Flatpak launchers run the
+selected app from the user's Flatpak installation; native launchers run the
+matching desktop entry in Runtime. Terminal-launched programs continue to work
+as before.
 
 While the KDE desktop session is running, its VShell watcher discovers Runtime
 TCP services listening on the container network interface at ports 1024 and
@@ -121,7 +123,9 @@ audio, and session-bus sockets.
 The host image does not bundle the Runtime OCI image or a user-specific LXC
 instance. At the first KDE login after Plasma Setup, VShell uses LXC's OCI
 template to pull `ghcr.io/cubelinux/cubelinux-vshell-runtime:main` and create
-the `cubelinux-runtime` instance. This first setup needs internet access. The
+the `cubelinux-runtime` instance. On first login, its setup window waits until
+KDE Welcome Center closes before it starts preparing Runtime. This first setup
+needs internet access. The
 `:main` tag is mutable; **Reset Runtime** pulls the version currently published
 under that tag without requiring a host image update. LXC uses a local layer
 cache when available to reduce repeated downloads. When the new Runtime path

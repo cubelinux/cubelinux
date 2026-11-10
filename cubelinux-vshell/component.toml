@@ -10,7 +10,7 @@ packages = [
   "skopeo",
   "umoci",
 ]
-services = []
+services = ["usr-local-share-applications-cubelinux.mount"]
 
 [[files]]
 source = "src/cubelinux_vshell"
@@ -37,6 +37,14 @@ mode = "0755"
 source = "bin/cubelinux-vshell-launcher-sync"
 destination = "/usr/libexec/cubelinux-vshell-launcher-sync"
 mode = "0755"
+
+[[files]]
+source = "data/usr-local-share-applications-cubelinux.mount"
+destination = "/usr/lib/systemd/system/usr-local-share-applications-cubelinux.mount"
+
+[[files]]
+source = "data/cubelinux-vshell-launchers.tmpfiles.conf"
+destination = "/usr/lib/tmpfiles.d/cubelinux-vshell-launchers.conf"
 
 [[files]]
 source = "bin/cubelinux-vshell-useradd-hook"

@@ -8,6 +8,7 @@ import pwd
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import PySide6
@@ -43,6 +44,8 @@ from .version import __version__
 
 _USER_ID = os.getuid() if hasattr(os, "getuid") else os.getpid()
 _SERVER_NAME = f"cubelinux-vshell-setup-{_USER_ID}"
+_PLASMA_WELCOME_STARTUP_GRACE_SECONDS = 10
+_PLASMA_WELCOME_POLL_INTERVAL_SECONDS = 0.25
 
 
 def _is_plasma_setup_account() -> bool:
@@ -172,6 +175,93 @@ def _launch_detached(command: list[str]) -> None:
         raise VShellError(f"Could not start {command[0]}: {error}") from error
 
 
+def _plasma_welcome_is_running() -> bool:
+    """Return whether this login session currently has KDE Welcome Center open."""
+    try:
+        processes = os.scandir("/proc")
+    except OSError:
+        return False
+
+    with processes:
+        for process in processes:
+            if not process.name.isdigit():
+                continue
+            try:
+                if process.stat().st_uid != os.getuid():
+                    continue
+                command_name = Path(process.path, "comm").read_text(
+                    encoding="utf-8", errors="replace"
+                ).strip()
+                if command_name == "plasma-welcome":
+                    return True
+
+                arguments = Path(process.path, "cmdline").read_bytes().split(b"\0")
+                if arguments and arguments[0]:
+                    executable = os.fsdecode(arguments[0])
+                    if Path(executable).name == "plasma-welcome":
+                        return True
+            except OSError:
+                # Processes can exit while /proc is being scanned.
+                continue
+    return False
+
+
+def _plasma_welcome_has_been_seen() -> bool:
+    """Check KDE Welcome Center's launch marker to avoid delaying later logins."""
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    config_path = config_home / "plasma-welcomerc"
+    try:
+        lines = config_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return False
+
+    in_general_group = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", ";")):
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_general_group = stripped[1:-1].strip() == "General"
+        elif in_general_group and stripped.startswith("LastSeenVersion="):
+            return bool(stripped.partition("=")[2].strip())
+    return False
+
+
+def _wait_for_plasma_welcome_to_close() -> None:
+    """Wait for Welcome Center if it is opening or already visible this login."""
+    startup_grace = (
+        2
+        if _plasma_welcome_has_been_seen()
+        else _PLASMA_WELCOME_STARTUP_GRACE_SECONDS
+    )
+    deadline = time.monotonic() + startup_grace
+
+    while True:
+        if _plasma_welcome_is_running():
+            while _plasma_welcome_is_running():
+                time.sleep(_PLASMA_WELCOME_POLL_INTERVAL_SECONDS)
+            return
+        if time.monotonic() >= deadline:
+            return
+        time.sleep(_PLASMA_WELCOME_POLL_INTERVAL_SECONDS)
+
+
+def _start_first_run_setup() -> None:
+    """Open VShell setup after KDE Welcome Center, if it is part of this login."""
+    if is_initialized():
+        initialize()
+        return
+
+    _wait_for_plasma_welcome_to_close()
+    executable = shutil.which("cubelinux-vshell")
+    command = (
+        [executable]
+        if executable
+        else [sys.executable, "-m", "cubelinux_vshell.main"]
+    )
+    _launch_detached(command)
+
+
 def _open_terminal(container_name: str = CONTAINER_NAME) -> None:
     if container_name == LEGACY_CONTAINER_NAME:
         raise VShellError(
@@ -203,6 +293,7 @@ def _run_command(arguments: list[str]) -> int:
         "command",
         choices=(
             "init",
+            "welcome",
             "enter",
             "open-terminal",
             "stop",
@@ -221,6 +312,11 @@ def _run_command(arguments: list[str]) -> int:
             if parsed.container != CONTAINER_NAME:
                 raise VShellError("Only cubelinux Runtime initialization is available right now.")
             initialize()
+            return 0
+        if parsed.command == "welcome":
+            if parsed.container != CONTAINER_NAME:
+                raise VShellError("Only cubelinux Runtime initialization is available right now.")
+            _start_first_run_setup()
             return 0
         if parsed.command == "enter":
             return enter(parsed.container)
@@ -248,7 +344,7 @@ def _run_command(arguments: list[str]) -> int:
 
 def main() -> int:
     if len(sys.argv) > 1:
-        if sys.argv[1] in ("init", "watch-apps") and _is_plasma_setup_account():
+        if sys.argv[1] in ("init", "welcome", "watch-apps") and _is_plasma_setup_account():
             return 0
         if sys.argv[1] not in ("watch-apps", "launch-app"):
             try:
