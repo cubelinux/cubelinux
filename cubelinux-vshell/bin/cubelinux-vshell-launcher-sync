@@ -13,7 +13,8 @@ import unicodedata
 from pathlib import Path
 
 
-APPLICATIONS_DIR = Path("/usr/local/share/applications")
+APPLICATIONS_DIR = Path("/usr/local/share/applications/cubelinux")
+APPLICATIONS_BACKING_DIR = Path("/var/lib/cubelinux-vshell/applications")
 MARKER = "X-CubeLinux-VShell-HostLauncher=true"
 PREFIX = "org.cubelinux.VShell.Fedora"
 MAX_INPUT_BYTES = 1_048_576
@@ -32,13 +33,31 @@ class SyncError(Exception):
 
 
 def _secure_applications_dir() -> None:
-    for directory in (Path("/usr/local"), Path("/usr/local/share"), APPLICATIONS_DIR):
+    directories = (
+        Path("/usr/local"),
+        Path("/usr/local/share"),
+        Path("/usr/local/share/applications"),
+        APPLICATIONS_DIR,
+        Path("/var"),
+        Path("/var/lib"),
+        Path("/var/lib/cubelinux-vshell"),
+        APPLICATIONS_BACKING_DIR,
+    )
+    for directory in directories:
         if directory.is_symlink():
             raise SyncError(f"Refusing to use a symlink at {directory}.")
-        directory.mkdir(mode=0o755, exist_ok=True)
+        if not directory.is_dir():
+            raise SyncError(f"The application directory is missing: {directory}.")
         info = directory.stat(follow_symlinks=False)
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
             raise SyncError(f"The application directory is not safely owned: {directory}.")
+
+    try:
+        mounted_from_backing_store = os.path.samefile(APPLICATIONS_DIR, APPLICATIONS_BACKING_DIR)
+    except OSError:
+        mounted_from_backing_store = False
+    if not mounted_from_backing_store:
+        raise SyncError("The writable VShell application directory mount is not active.")
 
 
 def _rootfs_path(value, user) -> Path:

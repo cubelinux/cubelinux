@@ -1,0 +1,17 @@
+[Unit]
+Description=Writable cubelinux VShell application launchers
+DefaultDependencies=no
+After=local-fs.target systemd-tmpfiles-setup.service
+Before=display-manager.service plasma-setup.service multi-user.target graphical.target
+Conflicts=umount.target
+Before=umount.target
+RequiresMountsFor=/var/lib/cubelinux-vshell/applications
+
+[Mount]
+What=/var/lib/cubelinux-vshell/applications
+Where=/usr/local/share/applications/cubelinux
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target

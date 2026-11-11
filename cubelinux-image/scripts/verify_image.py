@@ -141,6 +141,18 @@ def verify_rootfs(rootfs: Path, distro_path: Path, component_root: Path) -> int:
     return len(staged_files)
 
 
+def verify_vshell_launchers(rootfs: Path, *, require_enabled: bool = True) -> None:
+    """Check the writable host application directory VShell uses for launchers."""
+    launcher_mount = "usr-local-share-applications-cubelinux.mount"
+    if not (rootfs / "usr/local/share/applications/cubelinux").is_dir():
+        raise ValueError("host image is missing the VShell launcher mount point")
+    if not (rootfs / f"usr/lib/systemd/system/{launcher_mount}").is_file():
+        raise ValueError("host image is missing the VShell launcher mount unit")
+    enabled_path = rootfs / f"etc/systemd/system/multi-user.target.wants/{launcher_mount}"
+    if require_enabled and not enabled_path.is_symlink():
+        raise ValueError("host image does not enable the VShell launcher mount unit")
+
+
 def verify_image(image: str) -> None:
     distro_path = BUILD / "distro.json"
     component_root = BUILD / "rootfs"
@@ -178,6 +190,7 @@ def verify_image(image: str) -> None:
             rootfs = Path(temporary)
             for image_path in sorted(image_paths):
                 copy_from_image(container, image_path, rootfs / image_path.lstrip("/"))
+            verify_vshell_launchers(rootfs, require_enabled=False)
             count = verify_rootfs(rootfs, distro_path, component_root)
     finally:
         subprocess.run(
@@ -206,6 +219,7 @@ def main() -> None:
             raise RuntimeError("docker CLI is required to inspect the built image")
         verify_image(arguments.image)
     else:
+        verify_vshell_launchers(arguments.rootfs)
         count = verify_rootfs(
             arguments.rootfs, arguments.distro, arguments.expected_rootfs
         )
