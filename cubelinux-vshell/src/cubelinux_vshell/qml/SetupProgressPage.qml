@@ -50,7 +50,7 @@ Kirigami.ScrollablePage {
 
     readonly property var setupStages: [
         qsTr("Preparing your account"),
-        qsTr("Downloading Fedora"),
+        qsTr("Downloading cubelinux Runtime"),
         qsTr("Creating your environment"),
         qsTr("Connecting Linux to your desktop")
     ]
@@ -60,10 +60,9 @@ Kirigami.ScrollablePage {
         if (title.indexOf("preparing your account") >= 0
                 || title.indexOf("container networking") >= 0) return 0
         if (title.indexOf("download") >= 0
-                || title.indexOf("checking for fedora") >= 0
-                || title.indexOf("checking the fedora image") >= 0
-                || title.indexOf("extracting fedora") >= 0
-                || title.indexOf("cached fedora image") >= 0) return 1
+                || title.indexOf("checking for cubelinux runtime") >= 0
+                || title.indexOf("checking cubelinux runtime") >= 0
+                || title.indexOf("extracting cubelinux runtime") >= 0) return 1
         if (title.indexOf("desktop session") >= 0
                 || title.indexOf("restarting fedora") >= 0) return 3
         return 2

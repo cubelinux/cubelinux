@@ -182,7 +182,7 @@ Kirigami.ApplicationWindow {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: qsTr("This permanently destroys the Fedora environment. It deletes installed apps, container settings, and files stored in the Fedora filesystem. Your shared cubelinux home folder will remain untouched. You can create a new Fedora environment later from this setup wizard. Linux Subsystem will reuse the cached Fedora image when available. This cannot be undone.")
+                    text: qsTr("This permanently destroys the Fedora environment. It deletes installed apps, container settings, and files stored in the Fedora filesystem. Your shared cubelinux home folder will remain untouched. You can create a new Fedora environment later from this setup wizard. Creating it again downloads the current cubelinux Runtime image from GHCR and requires an internet connection. This cannot be undone.")
                     wrapMode: Text.Wrap
                 }
 

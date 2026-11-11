@@ -1,5 +1,15 @@
 id = "vshell"
-packages = ["konsole", "lxc", "lxc-templates", "qt6-qtsvg", "shadow-utils", "slirp4netns"]
+packages = [
+  "jq",
+  "konsole",
+  "lxc",
+  "lxc-templates",
+  "qt6-qtsvg",
+  "shadow-utils",
+  "slirp4netns",
+  "skopeo",
+  "umoci",
+]
 services = ["usr-local-share-applications-cubelinux.mount"]
 
 [[files]]

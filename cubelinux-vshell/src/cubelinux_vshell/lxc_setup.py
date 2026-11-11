@@ -12,8 +12,8 @@ from typing import Callable
 
 from .app_discovery import clear_apps
 from .lxc_backend import (
-    CONTAINER_NAME, FEDORA_RELEASE, GUEST_ID, ID_COUNT, VShellError,
-    _account, _arch, _attach, _container_running, _config_path,
+    CONTAINER_NAME, GUEST_ID, ID_COUNT, VShellError,
+    _account, _attach, _container_running, _config_path,
     _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
     _ensure_slirp_config, _ensure_slirp_network, _escape_mount_path, _home,
     _lxc_path, _report, _rootless_scope, _run, _start_container,
@@ -23,6 +23,7 @@ from .shared_folders import clear_shared_folders, sync_saved_shared_folders
 from .port_forwarding import clear_port_forwarding_settings
 
 Progress = Callable[[str], None]
+RUNTIME_OCI_IMAGE = "docker://ghcr.io/cubelinux/cubelinux-vshell-runtime:main"
 
 
 def _find_subid_range(
@@ -87,27 +88,6 @@ def _mapping_lines(uid_start: int, gid_start: int, uid: int, gid: int) -> list[s
     return lines
 
 
-def _expire_cached_template() -> Path | None:
-    """Make LXC check an existing Fedora cache against its current image index."""
-    cache_roots = (Path.home() / ".cache/lxc", Path("/var/cache/lxc"))
-    image_path = Path("download") / "fedora" / FEDORA_RELEASE / _arch() / "default"
-
-    for cache_base in cache_roots:
-        cache = cache_base / image_path
-        build_ids = list(cache.glob("build_id*"))
-        if not build_ids:
-            continue
-
-        try:
-            for build_id in build_ids:
-                expiry_name = build_id.name.replace("build_id", "expiry", 1)
-                (cache / expiry_name).write_text("0\n", encoding="utf-8")
-        except OSError:
-            continue
-        return cache_base
-    return None
-
-
 def _remove_partial_container(root: Path) -> None:
     """Remove only the incomplete VShell directory left by a failed create."""
     container_path = root / CONTAINER_NAME
@@ -122,11 +102,18 @@ def _remove_partial_container(root: Path) -> None:
     shutil.rmtree(resolved_container)
 
 
-def _write_create_config(path: Path, account: pwd.struct_passwd, uid_range: tuple[int, int], gid_range: tuple[int, int]) -> None:
+def _write_create_config(
+    path: Path,
+    account: pwd.struct_passwd,
+    uid_range: tuple[int, int],
+    gid_range: tuple[int, int],
+) -> None:
     uid_start, _ = uid_range
     gid_start, _ = gid_range
     lines = [
-        "lxc.include = /usr/share/lxc/config/common.conf",
+        "# VShell cubelinux Runtime OCI rootfs",
+        # The OCI template supplies the image command, environment, and
+        # common LXC settings.
         "lxc.net.0.type = empty",
         *_mapping_lines(uid_start, gid_start, account.pw_uid, account.pw_gid),
     ]
@@ -140,6 +127,17 @@ def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
         "set -eu; "
         # slirp4netns configures a static guest address and route. Its built-in
         # DNS proxy is at 10.0.2.3; the host's loopback resolver is not reachable.
+        "rm -f /etc/resolv.conf; "
+        "printf 'nameserver 10.0.2.3\\n' > /etc/resolv.conf; "
+        "dns_ready=0; "
+        "for attempt in 1 2 3 4 5; do "
+        "if getent ahostsv4 mirrors.fedoraproject.org >/dev/null; then "
+        "dns_ready=1; break; fi; sleep 2; done; "
+        "if [ \"$dns_ready\" -ne 1 ]; then "
+        "echo 'Could not resolve package servers through slirp4netns.' >&2; exit 1; fi; "
+        # The Runtime image supplies systemd, D-Bus, sudo, and account tools.
+        # Install iproute only if the image does not already include it.
+        "if ! rpm -q --quiet iproute; then dnf -y install iproute; fi; "
         "gateway=\"\"; "
         "attempt=0; "
         "while [ \"$attempt\" -lt 30 ]; do "
@@ -149,14 +147,6 @@ def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
         "if [ -z \"$gateway\" ]; then "
         "echo 'Fedora did not receive a network gateway after 30 seconds. Current routes and addresses:' >&2; "
         "ip -4 route show >&2; ip -4 address show >&2; exit 1; fi; "
-        "rm -f /etc/resolv.conf; "
-        "printf 'nameserver 10.0.2.3\\n' > /etc/resolv.conf; "
-        "dns_ready=0; "
-        "for attempt in 1 2 3 4 5; do "
-        "if getent ahostsv4 mirrors.fedoraproject.org >/dev/null; then "
-        "dns_ready=1; break; fi; sleep 2; done; "
-        "if [ \"$dns_ready\" -ne 1 ]; then "
-        "echo \"Could not resolve Fedora package servers through $gateway.\" >&2; exit 1; fi; "
         f"if ! getent group {GUEST_ID} >/dev/null; then "
         f"groupadd --gid {GUEST_ID} {username}; fi; "
         f"if getent passwd {GUEST_ID} >/dev/null; then "
@@ -165,12 +155,11 @@ def _configure_guest(account: pwd.struct_passwd, progress: Progress) -> None:
         f"useradd --uid {GUEST_ID} --gid {GUEST_ID} --create-home "
         f"--home-dir /home/{username} --shell /bin/bash {username}; fi; "
         f"usermod --append --groups wheel {username}; "
-        "dnf -y install sudo; "
         "install -d -m 0750 /etc/sudoers.d; "
         "printf '%s\\n' '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/90-vshell; "
         "chmod 0440 /etc/sudoers.d/90-vshell"
     )
-    _report(progress, "Preparing your Fedora user and shell…")
+    _report(progress, "Preparing your Fedora user and network…")
     _attach("/usr/bin/bash", "-ceu", script, progress=progress)
 
 
@@ -196,8 +185,8 @@ def _mark_initialized() -> None:
         config.write_text(contents.rstrip() + "\n" + marker + "\n", encoding="utf-8")
 
 
-def initialize(progress: Progress = print, *, refresh_template: bool = False) -> None:
-    """Prepare the host and create a rootless Fedora shell with home shared."""
+def initialize(progress: Progress = print) -> None:
+    """Prepare the host and create a rootless Fedora OCI environment."""
     if is_initialized():
         changed = _ensure_slirp_config()
         if changed and _container_running(progress):
@@ -225,57 +214,51 @@ def initialize(progress: Progress = print, *, refresh_template: bool = False) ->
     root.mkdir(parents=True, exist_ok=True)
 
     if not config_path.exists():
-        cache_base = _expire_cached_template() if refresh_template else None
-        if refresh_template and cache_base:
-            _report(progress, "Checking for Fedora template updates…")
-        else:
-            _report(progress, "Downloading the Fedora environment…")
+        _report(progress, "Downloading the cubelinux Runtime image from GHCR…")
         with tempfile.TemporaryDirectory(prefix="cubelinux-vshell-") as temporary:
             create_config = Path(temporary) / "lxc.conf"
             _write_create_config(create_config, account, uid_range, gid_range)
-
-            def create_command(*, force_cache: bool = False) -> list[str]:
-                template_arguments = [
-                    "--",
-                    "--dist",
-                    "fedora",
-                    "--release",
-                    FEDORA_RELEASE,
-                    "--arch",
-                    _arch(),
-                ]
-                if force_cache:
-                    template_arguments.append("--force-cache")
-                return _rootless_scope(
-                    [
-                        lxc_create,
-                        "--name",
-                        CONTAINER_NAME,
-                        "--lxcpath",
-                        str(root),
-                        "--config",
-                        str(create_config),
-                        "--template",
-                        "download",
-                        *template_arguments,
-                    ],
-                    cache_base=cache_base,
-                )
-
             try:
-                _run(create_command(), progress, stream=True)
-            except VShellError as update_error:
-                if not refresh_template or not cache_base:
-                    raise
-                _report(progress, "Template update check failed; reusing the cached Fedora image…")
+                _run(
+                    _rootless_scope(
+                        [
+                            lxc_create,
+                            "--name",
+                            CONTAINER_NAME,
+                            "--lxcpath",
+                            str(root),
+                            "--config",
+                            str(create_config),
+                            "--template",
+                            "oci",
+                            "--",
+                            "--url",
+                            RUNTIME_OCI_IMAGE,
+                        ]
+                    ),
+                    progress,
+                    stream=True,
+                )
+            except VShellError as error:
                 _remove_partial_container(root)
-                try:
-                    _run(create_command(force_cache=True), progress, stream=True)
-                except VShellError as cache_error:
-                    raise VShellError(
-                        "Could not refresh Fedora's template, and the cached image could not be reused. "
-                        f"Update error: {update_error}; cached image error: {cache_error}"
-                    ) from cache_error
+                raise VShellError(
+                    "Could not download or unpack the cubelinux Runtime image from GHCR. "
+                    "Check your internet connection and try again. "
+                    f"Details: {error}"
+                ) from error
+        runtime_rootfs = root / CONTAINER_NAME / "rootfs"
+        if not (runtime_rootfs / "usr/sbin/init").exists():
+            _remove_partial_container(root)
+            raise VShellError(
+                "The cubelinux Runtime image does not contain systemd. "
+                "The incomplete container was removed; try again or report the image build issue."
+            )
+        if not (runtime_rootfs / "usr/bin/dnf").is_file():
+            _remove_partial_container(root)
+            raise VShellError(
+                "The cubelinux Runtime image does not contain DNF. "
+                "The incomplete container was removed; try again or report the image build issue."
+            )
 
     container_running = _container_running(progress)
     if container_running and network_config_changed:
