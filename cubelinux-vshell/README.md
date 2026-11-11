@@ -144,8 +144,7 @@ the unprivileged container only. `cubelinux-vshell stop` shuts down the
 persistent container. Use **Destroy Fedora environment** in Linux Subsystem to
 permanently delete the container, including installed packages, container
 settings, and files stored in its filesystem. The shared host home folder
-remains untouched. VShell also removes the old Fedora 44 LXC template cache
-from the user's `~/.cache/lxc` directory. After destruction, Linux
+remains untouched. After destruction, Linux
 Subsystem returns to its setup wizard; use it to create a new environment when
 you are ready. Creating a new environment pulls the current `main` Runtime image
 from GHCR, so setup after destroying the environment requires an internet

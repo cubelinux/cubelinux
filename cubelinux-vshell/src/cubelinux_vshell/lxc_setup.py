@@ -102,32 +102,6 @@ def _remove_partial_container(root: Path) -> None:
     shutil.rmtree(resolved_container)
 
 
-def _remove_legacy_fedora_template_cache(progress: Progress) -> None:
-    """Remove the Fedora 44 LXC download cache left by older VShell setups."""
-    cache = Path.home() / ".cache" / "lxc" / "download" / "fedora" / "44"
-    if not cache.exists() and not cache.is_symlink():
-        return
-
-    home = Path.home().resolve()
-    resolved_cache = cache.resolve()
-    if resolved_cache == home or not resolved_cache.is_relative_to(home):
-        raise VShellError("Refusing to remove a Fedora cache outside your home folder.")
-
-    _report(progress, "Removing the old Fedora LXC image cache…")
-    try:
-        if cache.is_symlink():
-            cache.unlink()
-        elif cache.is_dir():
-            shutil.rmtree(cache)
-        else:
-            cache.unlink()
-    except OSError as error:
-        raise VShellError(
-            "The Fedora container was removed, but its old LXC image cache could not be deleted. "
-            f"Remove {cache} and try again: {error}"
-        ) from error
-
-
 def _write_create_config(
     path: Path,
     account: pwd.struct_passwd,
@@ -321,7 +295,6 @@ def destroy_container(progress: Progress = print) -> None:
         container_path = root / CONTAINER_NAME
         if not container_path.exists() and not container_path.is_symlink():
             _stop_container(progress)
-            _remove_legacy_fedora_template_cache(progress)
             clear_shared_folders()
             clear_port_forwarding_settings()
             clear_apps()
@@ -332,7 +305,6 @@ def destroy_container(progress: Progress = print) -> None:
         _stop_container(progress)
         _report(progress, "Cleaning up the incomplete Fedora container…")
         _remove_partial_container(root)
-        _remove_legacy_fedora_template_cache(progress)
         clear_shared_folders()
         clear_port_forwarding_settings()
         clear_apps()
@@ -357,7 +329,6 @@ def destroy_container(progress: Progress = print) -> None:
         progress,
         stream=True,
     )
-    _remove_legacy_fedora_template_cache(progress)
     clear_shared_folders()
     clear_port_forwarding_settings()
     clear_apps()
