@@ -22,10 +22,17 @@ MAX_LAUNCHERS = 2048
 MAX_DESKTOP_BYTES = 1_048_576
 MAX_MIME_TYPES = 128
 MAX_MIME_FIELD_BYTES = 32_768
+MAX_CATEGORIES = 128
+MAX_CATEGORIES_FIELD_BYTES = 32_768
 _MIME_TYPE_RE = re.compile(
     r"[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\Z",
     re.ASCII,
 )
+_CATEGORY_RE = re.compile(r"[A-Za-z0-9-]{1,64}\Z", re.ASCII)
+_MAIN_CATEGORIES = {
+    "AudioVideo", "Development", "Education", "Game", "Graphics", "HealthFitness",
+    "Network", "Office", "Science", "Settings", "System", "Utility",
+}
 
 
 class SyncError(Exception):
@@ -135,6 +142,25 @@ def _safe_mime_types(value: str) -> list[str]:
     return mime_types
 
 
+def _safe_categories(value: str) -> list[str]:
+    """Preserve valid menu categories and supply one when the guest omits them."""
+    categories = []
+    seen = set()
+    if len(value) <= MAX_CATEGORIES_FIELD_BYTES:
+        for item in value.split(";"):
+            category = item.strip()
+            if (not category or not _CATEGORY_RE.fullmatch(category)
+                    or category in seen):
+                continue
+            categories.append(category)
+            seen.add(category)
+            if len(categories) >= MAX_CATEGORIES:
+                break
+    if not any(category in _MAIN_CATEGORIES for category in categories):
+        categories.insert(0, "Utility")
+    return categories
+
+
 def _desktop_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n")
 
@@ -176,12 +202,14 @@ def _launcher_contents(uid: int, rootfs: Path, entry: dict) -> tuple[str, str] |
     filename = f"{PREFIX}.{uid}.{app_id}.desktop"
     icon = f"cubelinux-vshell-fedora-{app_id}" if entry["has_icon"] else "applications-other"
     mime_types = _safe_mime_types(values.get("MimeType", ""))
+    categories = _safe_categories(values.get("Categories", ""))
     contents = "\n".join((
         "[Desktop Entry]",
         "Type=Application",
         f"Name={_desktop_escape(name)} (Fedora)",
         f'Exec=/usr/bin/cubelinux-vshell launch-app "{_exec_path(relative)}" %U',
         f"Icon={icon}",
+        f"Categories={';'.join(categories)};",
         *([f"MimeType={';'.join(mime_types)};"] if mime_types else []),
         "Terminal=false",
         "DBusActivatable=false",
