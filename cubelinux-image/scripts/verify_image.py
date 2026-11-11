@@ -26,6 +26,20 @@ REQUIRED_PLASMA_SETUP_SCRIPTS = (
     "org.kde.plasma.kickoff.js",
     "org.kde.plasma.icontasks.js",
 )
+PLASMA_SETUP_SESSION_FILES = {
+    "/usr/libexec/cubelinux-plasma-setup-hide-edit-mode": (
+        ROOT / "config" / "plasma" / "plasma-setup-hide-edit-mode",
+        0o755,
+    ),
+    "/usr/lib/systemd/user/cubelinux-plasma-setup-hide-edit-mode.service": (
+        ROOT / "config" / "plasma" / "plasma-setup-hide-edit-mode.service",
+        0o644,
+    ),
+}
+PLASMA_SETUP_SESSION_WANTS = (
+    "/usr/lib/systemd/user/default.target.wants/"
+    "cubelinux-plasma-setup-hide-edit-mode.service"
+)
 
 
 def copy_from_image(container: str, image_path: str, destination: Path) -> bytes:
@@ -90,6 +104,24 @@ def verify_rootfs(rootfs: Path, distro_path: Path, component_root: Path) -> int:
                 f"image Plasma widget defaults differ from the source file at {image_path}"
             )
 
+    for image_path, (source, expected_mode) in PLASMA_SETUP_SESSION_FILES.items():
+        actual_path = rootfs / image_path.lstrip("/")
+        if not source.is_file() or not actual_path.is_file():
+            raise ValueError(f"image is missing Plasma Setup session file: {image_path}")
+        if actual_path.read_bytes() != source.read_bytes():
+            raise ValueError(f"image Plasma Setup session file differs from source: {image_path}")
+        if os.name != "nt" and stat.S_IMODE(actual_path.stat().st_mode) != expected_mode:
+            raise ValueError(f"image Plasma Setup session file has wrong mode: {image_path}")
+
+    wants_path = rootfs / PLASMA_SETUP_SESSION_WANTS.lstrip("/")
+    if wants_path.is_symlink():
+        if os.readlink(wants_path) != "../cubelinux-plasma-setup-hide-edit-mode.service":
+            raise ValueError("Plasma Setup session service has an unexpected enablement link")
+    elif not wants_path.is_file() or wants_path.read_bytes() != (
+        rootfs / "usr/lib/systemd/user/cubelinux-plasma-setup-hide-edit-mode.service"
+    ).read_bytes():
+        raise ValueError("Plasma Setup session service is not enabled for user sessions")
+
     staged_files = sorted(path for path in component_root.rglob("*") if path.is_file())
     for expected_path in staged_files:
         relative = expected_path.relative_to(component_root)
@@ -127,6 +159,8 @@ def verify_image(image: str) -> None:
             f"plasmoidsetupscripts/{script_name}"
             for script_name in REQUIRED_PLASMA_SETUP_SCRIPTS
         ),
+        *PLASMA_SETUP_SESSION_FILES,
+        PLASMA_SETUP_SESSION_WANTS,
         *logo_paths,
         *(f"/{path.relative_to(component_root).as_posix()}" for path in staged_files),
     }

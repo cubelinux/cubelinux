@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# Only the temporary first-boot account uses this desktop adjustment.
+[ "$(id -un)" = "plasma-setup" ] || exit 0
+
+while [ ! -e /etc/plasma-setup-done ]; do
+    mode=$(busctl --user get-property \
+        org.kde.plasmashell \
+        /PlasmaShell \
+        org.kde.PlasmaShell \
+        editMode 2>/dev/null || true)
+
+    if [ "$mode" = "b true" ]; then
+        busctl --user set-property \
+            org.kde.plasmashell \
+            /PlasmaShell \
+            org.kde.PlasmaShell \
+            editMode b false >/dev/null 2>&1 || true
+    fi
+
+    sleep 1
+done

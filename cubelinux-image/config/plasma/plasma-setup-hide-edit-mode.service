@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep the Plasma Setup desktop out of edit mode
+ConditionUser=plasma-setup
+ConditionPathExists=!/etc/plasma-setup-done
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/cubelinux-plasma-setup-hide-edit-mode
+
+[Install]
+WantedBy=default.target

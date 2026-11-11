@@ -51,6 +51,13 @@ RUN python3 /tmp/configure_plasma.py && \
     rm -f /tmp/cubelinux-kdeglobals /tmp/configure_plasma.py
 
 COPY config/sddm-theme.conf /etc/sddm.conf.d/10-theme.conf
+COPY --chmod=0755 config/plasma/plasma-setup-hide-edit-mode \
+    /usr/libexec/cubelinux-plasma-setup-hide-edit-mode
+COPY config/plasma/plasma-setup-hide-edit-mode.service \
+    /usr/lib/systemd/user/cubelinux-plasma-setup-hide-edit-mode.service
+RUN mkdir -p /usr/lib/systemd/user/default.target.wants && \
+    ln -s ../cubelinux-plasma-setup-hide-edit-mode.service \
+        /usr/lib/systemd/user/default.target.wants/cubelinux-plasma-setup-hide-edit-mode.service
 COPY bootc/kargs.d/10-quiet-boot.toml /usr/lib/bootc/kargs.d/10-quiet-boot.toml
 COPY .image-build/services.txt /tmp/component-services.txt
 RUN systemctl --root=/ enable NetworkManager.service firewalld.service && \
