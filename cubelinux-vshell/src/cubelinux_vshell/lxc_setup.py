@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
+from .app_discovery import clear_apps
 from .lxc_backend import (
     CONTAINER_NAME, FEDORA_RELEASE, GUEST_ID, ID_COUNT, VShellError,
     _account, _arch, _attach, _container_running, _config_path,
@@ -313,6 +314,7 @@ def destroy_container(progress: Progress = print) -> None:
             _stop_container(progress)
             clear_shared_folders()
             clear_port_forwarding_settings()
+            clear_apps()
             _report(progress, "The Fedora environment is already destroyed.")
             return
         if _container_running(progress):
@@ -322,6 +324,7 @@ def destroy_container(progress: Progress = print) -> None:
         _remove_partial_container(root)
         clear_shared_folders()
         clear_port_forwarding_settings()
+        clear_apps()
         return
 
     if _container_running(progress):
@@ -345,3 +348,4 @@ def destroy_container(progress: Progress = print) -> None:
     )
     clear_shared_folders()
     clear_port_forwarding_settings()
+    clear_apps()

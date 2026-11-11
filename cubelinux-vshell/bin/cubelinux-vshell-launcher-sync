@@ -14,6 +14,7 @@ from pathlib import Path
 
 
 APPLICATIONS_DIR = Path("/usr/local/share/applications/cubelinux")
+LEGACY_APPLICATIONS_DIR = Path("/usr/local/share/applications")
 APPLICATIONS_BACKING_DIR = Path("/var/lib/cubelinux-vshell/applications")
 MARKER = "X-CubeLinux-VShell-HostLauncher=true"
 PREFIX = "org.cubelinux.VShell.Fedora"
@@ -222,6 +223,11 @@ def _launcher_contents(uid: int, rootfs: Path, entry: dict) -> tuple[str, str] |
 
 def _write_launcher(filename: str, contents: str) -> None:
     destination = APPLICATIONS_DIR / filename
+    try:
+        if destination.is_file() and destination.read_text(encoding="utf-8") == contents:
+            return
+    except OSError:
+        pass
     descriptor, temporary = tempfile.mkstemp(prefix=".cubelinux-vshell-", dir=APPLICATIONS_DIR)
     try:
         os.fchown(descriptor, 0, 0)
@@ -243,17 +249,20 @@ def _write_launcher(filename: str, contents: str) -> None:
 
 def _remove_stale_launchers(uid: int, live: set[str]) -> None:
     pattern = f"{PREFIX}.{uid}.*.desktop"
-    for path in APPLICATIONS_DIR.glob(pattern):
-        if path.name in live:
-            continue
-        try:
-            info = path.lstat()
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != 0:
+    # Older builds placed wrappers directly in the shared applications folder.
+    # Remove those too so they cannot linger after an upgrade or container reset.
+    for directory in (APPLICATIONS_DIR, LEGACY_APPLICATIONS_DIR):
+        for path in directory.glob(pattern):
+            if directory == APPLICATIONS_DIR and path.name in live:
                 continue
-            if MARKER in path.read_text(encoding="utf-8", errors="replace"):
-                path.unlink()
-        except OSError:
-            continue
+            try:
+                info = path.lstat()
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != 0:
+                    continue
+                if MARKER in path.read_text(encoding="utf-8", errors="replace"):
+                    path.unlink()
+            except OSError:
+                continue
 
 
 def main() -> int:

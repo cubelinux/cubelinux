@@ -127,6 +127,22 @@ def _sync_system_launchers(rootfs: Path | None, launchers: list[dict[str, object
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip() or f"exit status {result.returncode}"
         print(f"VShell: could not synchronize Fedora application menu entries: {detail}")
+        return
+
+    # The launchers live in a mounted subdirectory, so explicitly refresh the
+    # KDE service cache after their files change instead of waiting for a watcher.
+    cache_builder = shutil.which("kbuildsycoca6")
+    if cache_builder:
+        try:
+            cache_result = subprocess.run(
+                [cache_builder], capture_output=True, text=True, check=False, timeout=30
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print(f"VShell: could not refresh the KDE application menu cache: {error}")
+        else:
+            if cache_result.returncode:
+                detail = cache_result.stderr.strip() or cache_result.stdout.strip()
+                print(f"VShell: could not refresh the KDE application menu cache: {detail}")
 
 
 def discover_apps() -> None:
@@ -157,6 +173,29 @@ def discover_apps() -> None:
             if app_id not in live_ids:
                 icon_file.unlink(missing_ok=True)
     _sync_system_launchers(rootfs if rootfs.is_dir() else None, live)
+
+
+def clear_apps() -> None:
+    """Remove generated host launchers and icons after Fedora is destroyed."""
+    legacy_output = _applications_dir()
+    if legacy_output.is_dir():
+        for launcher in legacy_output.glob("org.cubelinux.VShell.Fedora.*.desktop"):
+            try:
+                if _MARKER in launcher.read_text(encoding="utf-8", errors="replace"):
+                    launcher.unlink(missing_ok=True)
+            except OSError as error:
+                print(f"VShell: could not remove Fedora launcher {launcher}: {error}")
+
+    icon_output = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons/hicolor/scalable/apps"
+    if icon_output.is_dir():
+        for icon_file in icon_output.glob("cubelinux-vshell-fedora-*"):
+            try:
+                icon_file.unlink(missing_ok=True)
+            except OSError as error:
+                print(f"VShell: could not remove Fedora launcher icon {icon_file}: {error}")
+
+    # The constrained helper removes only VShell launchers owned by this user.
+    _sync_system_launchers(None, [])
 
 
 def watch_apps(interval: float = 4.0) -> None:
