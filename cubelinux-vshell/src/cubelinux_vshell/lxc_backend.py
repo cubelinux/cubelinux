@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ipaddress
 import os
-import platform
 import pwd
 import re
 import shutil
@@ -16,7 +15,6 @@ from typing import Callable, Sequence
 from . import slirp_network
 
 CONTAINER_NAME = "vshell"
-FEDORA_RELEASE = "44"
 GUEST_ID = 50000
 ID_COUNT = 65536
 CONTAINER_RUNTIME_DIR = "/mnt/vshell-host-runtime"
@@ -143,9 +141,7 @@ def _run(
     return output
 
 
-def _rootless_scope(
-    command: Sequence[str], *, cache_base: Path | None = None
-) -> list[str]:
+def _rootless_scope(command: Sequence[str]) -> list[str]:
     systemd_run = shutil.which("systemd-run")
     if not systemd_run:
         raise VShellError("systemd-run is required to start an unprivileged LXC container.")
@@ -156,18 +152,7 @@ def _rootless_scope(
         "--quiet",
         "--property=Delegate=yes",
     ]
-    if cache_base:
-        scope.append(f"--setenv=LXC_CACHE_PATH={cache_base}")
     return [*scope, "--", *command]
-
-
-def _arch() -> str:
-    machine = platform.machine().lower()
-    if machine in ("x86_64", "amd64"):
-        return "amd64"
-    if machine in ("aarch64", "arm64"):
-        return "arm64"
-    raise VShellError(f"Fedora LXC images are not available for this architecture: {machine}.")
 
 
 def _container_running(progress: Progress) -> bool:

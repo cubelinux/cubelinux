@@ -27,10 +27,10 @@ layouts to the window instead of relying on fixed positioning. Use cubelinux
 names and visual assets; do not imply that Linux Subsystem is an official KDE
 product.
 
-The wizard downloads a Fedora 44 LXC image, creates an unprivileged container,
-and shares the signed-in user's home folder automatically. slirp4netns gives the
-container outbound connectivity without a host bridge, DHCP server, or veth
-permission. When Plasma Setup creates the desktop account, a system hook
+The wizard downloads the cubelinux Runtime OCI image, creates an unprivileged
+container, and shares the signed-in user's home folder automatically.
+slirp4netns gives the container outbound connectivity without a host bridge,
+DHCP server, or veth permission. When Plasma Setup creates the desktop account, a system hook
 allocates that account's subordinate IDs, so a fresh installation does not
 need another administrator password prompt in Linux Subsystem. Existing accounts
 without this provisioning can use the one-time administrator setup for those IDs.
@@ -100,11 +100,17 @@ VShell is a tightly integrated workspace, not a desktop-app sandbox. Programs
 inside Fedora can access the shared home folder and the host user's display,
 audio, and session-bus sockets.
 
-## Image sources
+## Image source
 
-The Fedora 44 system image is downloaded from the Linux Containers image
-server using LXC's `download` template. OCI application images are not used as
-system images.
+New environments use the cubelinux Runtime OCI image from
+[`ghcr.io/cubelinux/cubelinux-vshell-runtime:main`](https://github.com/orgs/cubelinux/packages/container/package/cubelinux-vshell-runtime).
+It is based on Fedora 44 and includes Flatpak, KDE Discover, systemd, D-Bus,
+and account tools. LXC imports the image into the existing `vshell` container
+location. The resulting filesystem stays mutable; VShell does not mount it
+read-only. It keeps the same guest user, shared home, network, desktop sockets,
+application launchers, and port forwarding setup. The image includes Flatpak and
+Discover's Flatpak backend. Flatpak sandbox behavior inside rootless LXC may be
+limited; DNF remains available in Fedora.
 
 ## Use
 
@@ -137,10 +143,12 @@ as the mapped Fedora user. The container user has passwordless `sudo` inside
 the unprivileged container only. `cubelinux-vshell stop` shuts down the
 persistent container. Use **Destroy Fedora environment** in Linux Subsystem to
 permanently delete the container, including installed packages, container
-settings, and files stored in its filesystem. The shared host home folder and
-the cached Fedora template remain untouched. After destruction, Linux
+settings, and files stored in its filesystem. The shared host home folder
+remains untouched. After destruction, Linux
 Subsystem returns to its setup wizard; use it to create a new environment when
-you are ready. LXC reuses the cached template when one is available.
+you are ready. Creating a new environment pulls the current `main` Runtime image
+from GHCR, so setup after destroying the environment requires an internet
+connection.
 Open **About Linux Subsystem** from the right-side application menu to see the
 app version, project links, Qt build and runtime versions, PySide6, KDE
 Frameworks/Kirigami, Plasma, Python, distribution, kernel, and architecture
