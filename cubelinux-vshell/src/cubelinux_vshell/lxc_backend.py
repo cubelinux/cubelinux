@@ -259,17 +259,40 @@ def _stop_slirp_network() -> None:
 
 
 def _ensure_slirp_config() -> bool:
-    """Migrate existing VShell containers from the host bridge to slirp4netns."""
+    """Migrate VShell containers to slirp4netns and Flatpak-compatible proc mounts."""
     config = _config_path()
     if not config.is_file():
         return False
     contents = config.read_text(encoding="utf-8")
     lines = contents.splitlines()
+    changed = False
     network_lines = [line for line in lines if line.startswith("lxc.net.")]
-    if network_lines == ["lxc.net.0.type = empty"]:
+    updated = lines
+    if network_lines != ["lxc.net.0.type = empty"]:
+        updated = [line for line in updated if not line.startswith("lxc.net.")]
+        updated.insert(
+            1 if updated and updated[0].startswith("lxc.include") else 0,
+            "lxc.net.0.type = empty",
+        )
+        changed = True
+
+    mount_auto_indexes = [
+        index for index, line in enumerate(updated)
+        if line.partition("=")[0].strip() == "lxc.mount.auto" and "=" in line
+    ]
+    if mount_auto_indexes:
+        index = mount_auto_indexes[-1]
+        key, _, value = updated[index].partition("=")
+        mounts = value.split()
+        proc_entries = [item for item in mounts if item == "proc" or item.startswith("proc:")]
+        if proc_entries != ["proc:rw"]:
+            mounts = [item for item in mounts if item != "proc" and not item.startswith("proc:")]
+            mounts.insert(0, "proc:rw")
+            updated[index] = f"{key.rstrip()} = {' '.join(mounts)}"
+            changed = True
+
+    if not changed:
         return False
-    updated = [line for line in lines if not line.startswith("lxc.net.")]
-    updated.insert(1 if updated and updated[0].startswith("lxc.include") else 0, "lxc.net.0.type = empty")
     temporary = config.with_name(f".{config.name}.tmp")
     temporary.write_text("\n".join(updated) + "\n", encoding="utf-8")
     temporary.chmod(config.stat().st_mode & 0o777)
@@ -444,6 +467,66 @@ def _start_container(progress: Progress) -> None:
     )
     _wait_until_running(progress)
     _ensure_slirp_network(progress)
+    _ensure_flathub_remote(progress)
+
+
+def _ensure_flathub_remote(progress: Progress = print) -> bool:
+    """Ensure Flathub exists in the mapped guest user's Flatpak configuration."""
+    if not is_initialized():
+        return False
+
+    account = _account()
+    command = [
+        "lxc-attach",
+        "--name",
+        CONTAINER_NAME,
+        "--lxcpath",
+        str(_lxc_path()),
+        "--clear-env",
+        "--uid",
+        str(GUEST_ID),
+        "--gid",
+        str(GUEST_ID),
+        "--set-var",
+        f"HOME=/home/{account.pw_name}",
+        "--set-var",
+        f"USER={account.pw_name}",
+        "--set-var",
+        f"LOGNAME={account.pw_name}",
+        "--set-var",
+        "PATH=/usr/local/bin:/usr/bin:/bin",
+        "--",
+        "/usr/bin/flatpak",
+        "remote-add",
+        "--user",
+        "--if-not-exists",
+        "flathub",
+        "https://dl.flathub.org/repo/flathub.flatpakrepo",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        _report(progress, f"Could not configure the user Flathub remote; VShell will retry: {error}")
+        return False
+
+    if result.returncode:
+        detail = result.stdout.strip()[-1500:]
+        _report(
+            progress,
+            "Could not configure the user Flathub remote; VShell will retry"
+            + (f": {detail}" if detail else "."),
+        )
+        return False
+    return True
+
 
 
 def enter() -> int:
@@ -466,7 +549,7 @@ def enter() -> int:
     network_config_changed = _ensure_slirp_config()
     mounts_changed = _ensure_host_desktop_mounts(account)
     if (mounts_changed or network_config_changed) and _container_running(print):
-        print("Restarting Fedora to apply its network and desktop settings...")
+        print("Restarting Fedora to apply its container and desktop settings...")
         _stop_container(print)
     if not _container_running(print):
         _start_container(print)

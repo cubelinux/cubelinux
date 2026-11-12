@@ -1,5 +1,6 @@
 """Update state, bootc operations, progress, and automatic scheduling."""
 
+import getpass
 import json
 import os
 import re
@@ -321,6 +322,10 @@ class UpdateController(QObject):
     def startAutomaticChecks(self) -> None:
         """Schedule a quiet update check after the desktop session settles."""
         if self._preview_mode:
+            return
+
+        if getpass.getuser() == "plasma-setup" and not os.path.exists("/etc/plasma-setup-done"):
+            LOGGER.info("Skipping automatic update checks during Plasma Setup")
             return
 
         now = int(time.time())

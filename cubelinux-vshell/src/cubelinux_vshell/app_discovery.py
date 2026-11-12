@@ -123,6 +123,68 @@ def _desktop_launcher(rootfs: Path, source: Path, icons: Path) -> dict[str, obje
     return {"path": relative, "has_icon": bool(icon), "name": name}
 
 
+def _pin_discover_launcher(launchers: list[dict[str, object]]) -> None:
+    """Append the Fedora Discover launcher to the user's Plasma task manager."""
+    discover = next(
+        (
+            item for item in launchers
+            if str(item.get("name", "")).strip().casefold() == "discover"
+            or Path(str(item.get("path", ""))).name == "org.kde.discover.desktop"
+        ),
+        None,
+    )
+    if not discover:
+        return
+
+    app_id = hashlib.sha256(str(discover["path"]).encode()).hexdigest()[:20]
+    desktop_id = f"org.cubelinux.VShell.Fedora.{os.getuid()}.{app_id}.desktop"
+    qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
+    if not qdbus:
+        print("VShell: cannot pin Fedora Discover; the qdbus utility is unavailable.")
+        return
+
+    script = f"""
+const launcher = "applications:{desktop_id}";
+panelIds.forEach(function (panelId) {{
+    const panel = panelById(panelId);
+    if (!panel) return;
+    panel.widgetIds.forEach(function (widgetId) {{
+        const widget = panel.widgetById(widgetId);
+        if (!widget || (widget.type !== "org.kde.plasma.taskmanager"
+                && widget.type !== "org.kde.plasma.icontasks")) return;
+        widget.currentConfigGroup = ["General"];
+        const entries = String(widget.readConfig("launchers") || "")
+            .split(",").map(function (entry) {{ return entry.trim(); }}).filter(Boolean);
+        if (entries.indexOf(launcher) === -1) {{
+            entries.push(launcher);
+            widget.writeConfig("launchers", entries.join(","));
+            widget.reloadConfig();
+        }}
+    }});
+}});
+"""
+    try:
+        result = subprocess.run(
+            [
+                qdbus,
+                "org.kde.plasmashell",
+                "/PlasmaShell",
+                "org.kde.PlasmaShell.evaluateScript",
+                script,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"VShell: could not pin Fedora Discover to the taskbar: {error}")
+        return
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit status {result.returncode}"
+        print(f"VShell: could not pin Fedora Discover to the taskbar: {detail}")
+
+
 def _sync_system_launchers(rootfs: Path | None, launchers: list[dict[str, object]]) -> None:
     """Ask the constrained Polkit helper to publish root-owned menu wrappers."""
     pkexec = shutil.which("pkexec")
@@ -162,7 +224,7 @@ def _sync_system_launchers(rootfs: Path | None, launchers: list[dict[str, object
     if cache_builder:
         try:
             cache_result = subprocess.run(
-                [cache_builder], capture_output=True, text=True, check=False, timeout=30
+                [cache_builder, "--noincremental"], capture_output=True, text=True, check=False, timeout=30
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             print(f"VShell: could not refresh the KDE application menu cache: {error}")
@@ -170,6 +232,8 @@ def _sync_system_launchers(rootfs: Path | None, launchers: list[dict[str, object
             if cache_result.returncode:
                 detail = cache_result.stderr.strip() or cache_result.stdout.strip()
                 print(f"VShell: could not refresh the KDE application menu cache: {detail}")
+
+    _pin_discover_launcher(launchers)
 
 
 def discover_apps() -> None:

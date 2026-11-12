@@ -71,6 +71,8 @@ the Fedora launcher will appear in the host menu. Terminal-launched programs
 continue to work as before. Current-user Flatpak launchers are read from the
 shared home folder; VShell publishes a root-owned host wrapper, so KDE Kiosk
 does not need to permit launchers from the user's writable applications folder.
+When Fedora Discover is available, VShell also adds its launcher to the host
+Plasma taskbar's pinned applications.
 
 While the KDE desktop session is running, its VShell watcher discovers Fedora
 TCP services listening on the container network interface at ports 1024 and

@@ -14,7 +14,7 @@ from .app_discovery import clear_apps
 from .lxc_backend import (
     CONTAINER_NAME, GUEST_ID, ID_COUNT, VShellError,
     _account, _attach, _container_running, _config_path,
-    _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
+    _ensure_flathub_remote, _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
     _ensure_slirp_config, _ensure_slirp_network, _escape_mount_path, _home,
     _lxc_path, _report, _rootless_scope, _run, _start_container,
     _stop_container, _wait_for_network, is_initialized,
@@ -190,11 +190,12 @@ def initialize(progress: Progress = print) -> None:
     if is_initialized():
         changed = _ensure_slirp_config()
         if changed and _container_running(progress):
-            _report(progress, "Updating Fedora's user-mode network…")
+            _report(progress, "Updating Fedora's container settings…")
             _stop_container(progress)
             _start_container(progress)
         elif _container_running(progress):
             _ensure_slirp_network(progress)
+            _ensure_flathub_remote(progress)
         _report(progress, "Fedora Virtual Shell is already set up.")
         return
     account = _account()
@@ -285,6 +286,7 @@ def initialize(progress: Progress = print) -> None:
     _start_container(progress)
     _ensure_guest_x11_socket_path(progress)
     _mark_initialized()
+    _ensure_flathub_remote(progress)
     _report(progress, "Fedora Virtual Shell is ready.")
 
 

@@ -31,7 +31,7 @@ names and visual assets; do not imply that the app is an official KDE product.
 
 The updater starts in the background with the KDE session. After the desktop
 has settled, it checks for updates and repeats the check daily. It also checks
-after each login. The check only fetches image metadata. When an update is
+after each login. The first automatic check is deferred during the temporary Plasma Setup session until `/etc/plasma-setup-done` exists; the installed user account checks as usual. The check only fetches image metadata. When an update is
 available, the tray icon stays visible and a desktop notification lets you
 know. The updater downloads and stages it automatically on a connection that
 NetworkManager identifies as unmetered. On a metered or unknown connection, it
