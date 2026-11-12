@@ -119,11 +119,9 @@ limited; DNF remains available in Fedora.
 
 Open **Linux Subsystem** from the application menu and follow the short wizard.
 Once setup completes, choose **Open terminal** to open the bundled Konsole in
-the Fedora Virtual Shell. Konsole's system default is locked to VShell and its
-settings menu is disabled. A separate **Host Shell** profile is installed for
-development and can be opened with `konsole --profile HostShell` after lifting
-the KDE `shell_access` kiosk restriction. The application menu provides a
-dedicated **Konsole (Fedora Virtual Shell)** entry
+the Fedora Virtual Shell. Konsole's system default is locked to VShell, its
+settings menu is disabled, and no separate host-shell profile is added. The
+application menu provides a dedicated **Konsole (Fedora Virtual Shell)** entry
 that opens the same profile. If the environment is not set up yet, this entry
 opens the setup window directly without briefly opening an empty Konsole. If
 the environment exists but is stopped, Konsole starts it when opening the

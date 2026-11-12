@@ -24,11 +24,9 @@ customization, and restricts user-defined application
 launchers and autostart entries. Patched KIO blocks launching executable files
 and user-created desktop launchers. Dolphin's terminal actions stay unavailable
 while shell access is disabled. A dedicated Konsole launcher opens the locked
-Fedora Virtual Shell profile; KDE hides Konsole's stock launcher. The image
-includes a non-default Host Shell profile for development. Open it with
-`konsole --profile HostShell` after lifting the KDE `shell_access` kiosk
-restriction. These are exploratory desktop restrictions, not an operating-system
-security boundary.
+Fedora Virtual Shell profile; KDE hides Konsole's stock launcher, and the image
+adds no separate host-shell profile. These are exploratory desktop
+restrictions, not an operating-system security boundary.
 
 Virtual Shell provides a separate Fedora environment for running command-line
 tools. It is under active development while its unprivileged container setup
