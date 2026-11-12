@@ -45,7 +45,7 @@ the guest's `/tmp` and linked back after the Fedora guest mounts its temporary
 filesystem there. The container user is mapped to the desktop user's host ID,
 so those sockets accept connections as that user.
 
-Open the Fedora environment card's menu and choose **Environment settings** to
+Open the cubelinux Runtime card's menu and choose **Environment settings** to
 view the home folder share, add other host folders, and manage forwarded ports.
 Additional folders are mounted read-write under
 `/mnt/vshell-shares/` inside Fedora, subject to the host folder's permissions.
@@ -86,13 +86,10 @@ still controls incoming connections, and VShell does not change firewall
 rules. Ports below 1024 are not forwarded automatically, and manual forwarding
 rules are not implemented yet.
 
-VShell displays the icon-only Fedora symbol beside the Fedora Linux guest
-environment. The [icon file](https://commons.wikimedia.org/wiki/File:Fedora_icon_(2021).svg)
-is bundled with VShell. The About page includes Fedora trademark attribution
-and states that VShell and cubelinux are not affiliated with or endorsed by the
-Fedora Project or Red Hat.
-Fedora® and the Fedora logo are trademarks or registered trademarks of Red Hat,
-Inc., or its subsidiaries in the United States and other countries.
+VShell brands the environment as cubelinux Runtime and displays the cubelinux
+icon. The runtime is based on Fedora Linux 44. The About page includes Fedora
+trademark attribution and states that VShell and cubelinux are not affiliated
+with or endorsed by the Fedora Project or Red Hat.
 
 The container runs as an unprivileged user namespace. Container root maps to
 subordinate host IDs; the Fedora login user maps to the desktop user's own ID
@@ -146,7 +143,7 @@ cubelinux-vshell stop
 `cubelinux-vshell enter` starts the container if needed and opens a login shell
 as the mapped Fedora user. The container user has passwordless `sudo` inside
 the unprivileged container only. `cubelinux-vshell stop` shuts down the
-persistent container. Use **Destroy Fedora environment** in Linux Subsystem to
+persistent container. Use **Destroy cubelinux Runtime** in Linux Subsystem to
 permanently delete the container, including installed packages, container
 settings, and files stored in its filesystem. The shared host home folder
 remains untouched. After destruction, Linux

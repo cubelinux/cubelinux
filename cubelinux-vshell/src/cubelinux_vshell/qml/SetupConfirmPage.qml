@@ -10,7 +10,7 @@ Kirigami.ScrollablePage {
     property bool navigationBusy: false
     signal setupRequested()
     signal aboutRequested()
-    title: qsTr("Set up Fedora®")
+    title: qsTr("Set up cubelinux Runtime")
 
     actions: [
         Kirigami.Action {
@@ -64,7 +64,7 @@ Kirigami.ScrollablePage {
 
             Controls.Label {
                 Layout.fillWidth: true
-                text: qsTr("Linux Subsystem will create Fedora 44 as your Linux environment. An internet connection is required to download its runtime.")
+                text: qsTr("Linux Subsystem will create cubelinux Runtime, based on Fedora Linux 44. An internet connection is required to download it.")
                 opacity: 0.75
                 wrapMode: Text.Wrap
             }
@@ -90,7 +90,7 @@ Kirigami.ScrollablePage {
                 spacing: Kirigami.Units.mediumSpacing
 
                 Image {
-                    source: "fedora-icon.svg"
+                    source: "cubelinux-icon.svg"
                     sourceSize.width: 128
                     sourceSize.height: 128
                     fillMode: Image.PreserveAspectFit
@@ -103,13 +103,13 @@ Kirigami.ScrollablePage {
                     spacing: Kirigami.Units.smallSpacing
 
                     Controls.Label {
-                        text: qsTr("Fedora® Linux 44")
+                        text: qsTr("cubelinux Runtime")
                         font.bold: true
                     }
 
                     Controls.Label {
                         Layout.fillWidth: true
-                        text: qsTr("Installed apps and data stay in Fedora.")
+                        text: qsTr("Fedora Linux 44 powers this environment. Installed apps and data stay here.")
                         opacity: 0.75
                         wrapMode: Text.Wrap
                     }
@@ -150,7 +150,7 @@ Kirigami.ScrollablePage {
 
         Controls.Label {
             Layout.fillWidth: true
-            text: qsTr("Your shared home files stay on cubelinux if you destroy Fedora.")
+            text: qsTr("Your shared home files stay on cubelinux if you destroy cubelinux Runtime.")
             opacity: 0.75
             wrapMode: Text.Wrap
         }

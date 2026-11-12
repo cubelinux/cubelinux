@@ -18,8 +18,8 @@ destination = "/usr/lib/cubelinux-vshell/cubelinux_vshell"
 mode = "0644"
 
 [[downloads]]
-url = "https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/third-party/fedora-icon.svg"
-destination = "/usr/lib/cubelinux-vshell/cubelinux_vshell/qml/fedora-icon.svg"
+url = "https://pub-eb590fbfc3074776ad4199c13b93d722.r2.dev/logo/icon.svg"
+destination = "/usr/lib/cubelinux-vshell/cubelinux_vshell/qml/cubelinux-icon.svg"
 mode = "0644"
 
 [[files]]

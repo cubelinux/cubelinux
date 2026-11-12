@@ -25,9 +25,9 @@ Kirigami.ScrollablePage {
 
     readonly property var setupSteps: [
         ({ title: qsTr("Preparing your account"), description: qsTr("Checking permissions and container mappings"), icon: "user-identity" }),
-        ({ title: qsTr("Downloading the runtime"), description: qsTr("Getting the Fedora environment"), icon: "download" }),
+        ({ title: qsTr("Downloading cubelinux Runtime"), description: qsTr("Getting your Linux environment"), icon: "download" }),
         ({ title: qsTr("Creating your environment"), description: qsTr("Checking and unpacking the runtime image"), icon: "package-x-generic" }),
-        ({ title: qsTr("Starting Fedora"), description: qsTr("Bringing up your Linux environment"), icon: "system-run" }),
+        ({ title: qsTr("Starting cubelinux Runtime"), description: qsTr("Bringing up your Linux environment"), icon: "system-run" }),
         ({ title: qsTr("Connecting to the network"), description: qsTr("Waiting for Fedora to come online"), icon: "network-connect" }),
         ({ title: qsTr("Configuring Fedora"), description: qsTr("Preparing your guest account and network"), icon: "configure" }),
         ({ title: qsTr("Sharing your home folder"), description: qsTr("Connecting your files to Fedora"), icon: "folder-home" }),
@@ -41,7 +41,7 @@ Kirigami.ScrollablePage {
         if (title.indexOf("downloading cubelinux runtime") >= 0
                 || title.indexOf("checking cubelinux runtime") >= 0) return 1
         if (title.indexOf("extracting cubelinux runtime") >= 0) return 2
-        if (title.indexOf("starting fedora") >= 0) return 3
+        if (title.indexOf("starting cubelinux runtime") >= 0) return 3
         if (title.indexOf("connecting fedora to the network") >= 0) return 4
         if (title.indexOf("preparing your fedora account") >= 0) return 5
         if (title.indexOf("sharing your home folder") >= 0) return 6
@@ -143,7 +143,7 @@ Kirigami.ScrollablePage {
             text: controller.setupFailed
                   ? qsTr("Review the message below, then retry setup or return to the overview.")
                   : page.showingComplete
-                    ? qsTr("Fedora is ready to open from your desktop.")
+                    ? qsTr("cubelinux Runtime is ready to open from your desktop.")
                     : qsTr("This may take a few minutes. You can close this window; setup will continue in the background.")
             color: Kirigami.Theme.neutralTextColor
             horizontalAlignment: Text.AlignHCenter
@@ -237,7 +237,7 @@ Kirigami.ScrollablePage {
             }
             Kirigami.Heading {
                 Layout.fillWidth: true
-                text: qsTr("Your Linux environment is ready")
+                text: qsTr("cubelinux Runtime is ready")
                 level: 2
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
@@ -248,7 +248,7 @@ Kirigami.ScrollablePage {
             Layout.fillWidth: true
             visible: !controller.busy && controller.progress.length > 0
             text: controller.ready && controller.setupFailed
-                  ? qsTr("The Fedora environment was created, but desktop setup did not finish. Return to the overview, then destroy and recreate Fedora to try again.\n\n%1").arg(controller.progress)
+                  ? qsTr("cubelinux Runtime was created, but desktop setup did not finish. Return to the overview, then destroy and recreate the runtime to try again.\n\n%1").arg(controller.progress)
                   : controller.progress
             type: controller.setupFailed
                   ? Kirigami.MessageType.Error : Kirigami.MessageType.Information

@@ -18,7 +18,7 @@ Controls.ScrollView {
             spacing: Kirigami.Units.largeSpacing
 
             Image {
-                source: "fedora-icon.svg"
+                source: "cubelinux-icon.svg"
                 sourceSize.width: 128
                 sourceSize.height: 128
                 fillMode: Image.PreserveAspectFit
@@ -32,7 +32,7 @@ Controls.ScrollView {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: qsTr("Create a Fedora® environment for Linux apps and development tools.")
+                    text: qsTr("Create a cubelinux Runtime environment for Linux apps and development tools.")
                     opacity: 0.75
                     wrapMode: Text.Wrap
                 }
@@ -56,7 +56,7 @@ Controls.ScrollView {
 
             Controls.Label {
                 Layout.fillWidth: true
-                text: qsTr("A Fedora terminal for command-line tools")
+                text: qsTr("A Fedora Linux terminal for command-line tools")
                 wrapMode: Text.Wrap
             }
         }

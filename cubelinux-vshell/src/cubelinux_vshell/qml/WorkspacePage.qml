@@ -13,7 +13,7 @@ Controls.ScrollView {
     clip: true
 
     readonly property string containerStatusLabel: controller.destroying
-        ? qsTr("Destroying Fedora")
+        ? qsTr("Destroying cubelinux Runtime")
         : controller.folderSharingBusy
           ? qsTr("Updating folder access")
           : controller.containerStatus === "running" ? qsTr("Running") : qsTr("Stopped")
@@ -86,7 +86,7 @@ Controls.ScrollView {
                 columnSpacing: Kirigami.Units.mediumSpacing
 
                 Image {
-                    source: "fedora-icon.svg"
+                    source: "cubelinux-icon.svg"
                     sourceSize.width: 128
                     sourceSize.height: 128
                     fillMode: Image.PreserveAspectFit
@@ -109,7 +109,7 @@ Controls.ScrollView {
                         spacing: Kirigami.Units.mediumSpacing
 
                         Kirigami.Heading {
-                            text: qsTr("Fedora® 44")
+                            text: qsTr("cubelinux Runtime")
                             level: 2
                         }
 
@@ -122,7 +122,7 @@ Controls.ScrollView {
                     }
 
                     Controls.Label {
-                        text: qsTr("Fedora Linux · x86_64")
+                        text: qsTr("Fedora Linux 44 · x86_64")
                         opacity: 0.7
                     }
                 }
@@ -189,7 +189,7 @@ Controls.ScrollView {
                         }
 
                         Controls.MenuItem {
-                            text: qsTr("Destroy Fedora environment…")
+                            text: qsTr("Destroy cubelinux Runtime…")
                             icon.name: "edit-delete"
                             onTriggered: page.destroyRequested()
                         }

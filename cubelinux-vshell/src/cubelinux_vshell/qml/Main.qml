@@ -45,7 +45,7 @@ Kirigami.ApplicationWindow {
         AboutApplicationPage {
             applicationName: qsTr("Linux Subsystem")
             productName: qsTr("Linux Subsystem")
-            description: qsTr("Manage your Fedora® Linux environment.")
+            description: qsTr("Manage your cubelinux Runtime environment, powered by Fedora Linux.")
             version: softwareVersion
             homepage: "https://cubelinux.github.io"
             bugAddress: "https://github.com/cubelinux/cubelinux/issues"
@@ -182,7 +182,7 @@ Kirigami.ApplicationWindow {
             id: destroyDialog
 
             modal: true
-            title: qsTr("Destroy Fedora environment?")
+            title: qsTr("Destroy cubelinux Runtime?")
             width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, 520)
             anchors.centerIn: parent
             padding: Kirigami.Units.largeSpacing
@@ -194,14 +194,14 @@ Kirigami.ApplicationWindow {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: qsTr("This permanently destroys the Fedora environment. It deletes installed apps, container settings, and files stored in the Fedora filesystem. Your shared cubelinux home folder will remain untouched. You can create a new Fedora environment later from this setup wizard. Creating it again downloads the current cubelinux Runtime image from GHCR and requires an internet connection. This cannot be undone.")
+                    text: qsTr("This permanently destroys cubelinux Runtime. It deletes installed apps, container settings, and files stored in the Fedora filesystem. Your shared cubelinux home folder will remain untouched. You can create a new environment later from this setup wizard. Creating it again downloads the current cubelinux Runtime image from GHCR and requires an internet connection. This cannot be undone.")
                     wrapMode: Text.Wrap
                 }
 
                 Controls.CheckBox {
                     id: destroyAcknowledged
                     Layout.fillWidth: true
-                    text: qsTr("I understand this permanently destroys the Fedora environment.")
+                    text: qsTr("I understand this permanently destroys cubelinux Runtime.")
                 }
             }
 

@@ -258,8 +258,8 @@ class SetupController(QObject):
 
     def _start_worker(self, *, destroy: bool = False) -> None:
         self._busy = True
-        self._progress = "Destroying the Fedora environment…" if destroy else "Getting ready…"
-        self._progress_title = "Destroying Fedora" if destroy else "Getting ready"
+        self._progress = "Destroying cubelinux Runtime…" if destroy else "Getting ready…"
+        self._progress_title = "Destroying cubelinux Runtime" if destroy else "Getting ready"
         self._progress_percent = -1
         self.progressChanged.emit()
         self._worker = SetupWorker(destroy=destroy, parent=self)
@@ -385,14 +385,14 @@ class SetupController(QObject):
             ("downloading the cubelinux runtime image", "Downloading cubelinux Runtime"),
             ("checking the cubelinux runtime image", "Checking cubelinux Runtime"),
             ("extracting the cubelinux runtime image", "Extracting cubelinux Runtime"),
-            ("starting fedora for first-time setup", "Starting Fedora"),
+            ("starting fedora for first-time setup", "Starting cubelinux Runtime"),
             ("connecting fedora to the network", "Connecting Fedora to the network"),
             ("preparing your fedora user and network", "Preparing your Fedora account"),
             ("sharing your home folder", "Sharing your home folder"),
             ("connecting fedora to your desktop session", "Connecting Fedora to your desktop"),
             ("restarting fedora", "Restarting Fedora"),
             ("updating fedora's container settings", "Updating container settings"),
-            ("destroying the fedora container", "Destroying Fedora"),
+            ("destroying the fedora container", "Destroying cubelinux Runtime"),
             ("fedora virtual shell is ready", "Setup complete"),
         )
         for marker, title in steps:
