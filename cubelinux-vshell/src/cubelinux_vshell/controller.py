@@ -1,6 +1,5 @@
 """Qt controller for the Linux Subsystem setup and workspace window."""
 
-import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -372,9 +371,10 @@ class SetupController(QObject):
             self._progress_title = title
             self._progress_percent = -1
 
-        percentage = re.search(r"(?<!\d)(100|[1-9]?\d)%", message)
-        if percentage:
-            self._progress_percent = int(percentage.group(1))
+        # Subprocess output percentages describe individual operations (for
+        # example, one image layer), not completion of the current setup step.
+        # Keep the indicator indeterminate until the step itself advances.
+        self._progress_percent = -1
         self.progressChanged.emit()
 
     @staticmethod
