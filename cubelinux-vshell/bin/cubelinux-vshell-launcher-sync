@@ -84,15 +84,19 @@ def _rootfs_path(value, user) -> Path:
     return rootfs
 
 
-def _relative_desktop_path(value) -> str:
+def _relative_desktop_path(value, username):
     if not isinstance(value, str) or not value or len(value) > 4096:
         raise SyncError("A Fedora application path is invalid.")
     if value.startswith("/") or "\\" in value or any(part in ("", ".", "..") for part in value.split("/")):
         raise SyncError("A Fedora application path must stay inside its application directory.")
-    if not value.endswith(".desktop") or not value.startswith((
-        "usr/share/applications/", "usr/local/share/applications/"
-    )):
-        raise SyncError("Only Fedora application desktop entries can be published.")
+    allowed_prefixes = (
+        "usr/share/applications/",
+        "usr/local/share/applications/",
+        "var/lib/flatpak/exports/share/applications/",
+        f"home/{username}/.local/share/flatpak/exports/share/applications/",
+    )
+    if not value.endswith(".desktop") or not value.startswith(allowed_prefixes):
+        raise SyncError("Only Fedora or the current user's Flatpak desktop entries can be published.")
     return value
 
 
@@ -174,16 +178,22 @@ def _exec_path(value: str) -> str:
     return escaped
 
 
-def _launcher_contents(uid: int, rootfs: Path, entry: dict) -> tuple[str, str] | None:
+def _launcher_contents(uid: int, user, rootfs: Path, entry: dict) -> tuple[str, str] | None:
     if not isinstance(entry, dict) or set(entry) != {"path", "has_icon", "name"}:
         raise SyncError("The launcher request has an invalid entry.")
     if not isinstance(entry["has_icon"], bool):
         raise SyncError("The launcher icon flag is invalid.")
-    relative = _relative_desktop_path(entry["path"])
-    candidate = rootfs.joinpath(*relative.split("/"))
+    relative = _relative_desktop_path(entry["path"], user.pw_name)
+    user_prefix = f"home/{user.pw_name}/"
+    if relative.startswith(user_prefix):
+        allowed_root = Path(user.pw_dir).resolve(strict=True)
+        candidate = allowed_root.joinpath(*relative[len(user_prefix):].split("/"))
+    else:
+        allowed_root = rootfs
+        candidate = rootfs.joinpath(*relative.split("/"))
     try:
         source = candidate.resolve(strict=True)
-        source.relative_to(rootfs)
+        source.relative_to(allowed_root)
         if not source.is_file():
             return None
     except (OSError, ValueError):
@@ -295,7 +305,7 @@ def main() -> int:
     _secure_applications_dir()
     live = set()
     for entry in launchers:
-        rendered = _launcher_contents(uid, rootfs, entry)
+        rendered = _launcher_contents(uid, user, rootfs, entry)
         if rendered is None:
             continue
         filename, contents = rendered

@@ -97,11 +97,21 @@ def launch_app(desktop_file: str, files: list[str] | None = None) -> int:
     if relative.is_absolute() or ".." in relative.parts:
         raise VShellError("Invalid Fedora desktop application identifier.")
     rootfs = _rootfs_path().resolve()
-    source = (rootfs / relative).resolve()
-    try:
-        source.relative_to(rootfs)
-    except ValueError as error:
-        raise VShellError("Invalid Fedora desktop application identifier.") from error
+    user_prefix = f"home/{account.pw_name}/.local/share/flatpak/exports/share/applications/"
+    if relative.as_posix().startswith(user_prefix):
+        user_home = _home().resolve()
+        user_suffix = relative.as_posix()[len(user_prefix):]
+        source = (user_home / ".local/share/flatpak/exports/share/applications" / user_suffix).resolve()
+        try:
+            source.relative_to(user_home)
+        except ValueError as error:
+            raise VShellError("Invalid Fedora desktop application identifier.") from error
+    else:
+        source = (rootfs / relative).resolve()
+        try:
+            source.relative_to(rootfs)
+        except ValueError as error:
+            raise VShellError("Invalid Fedora desktop application identifier.") from error
     values = _parse_desktop(source)
     if values.get("Type") != "Application" or not values.get("Exec"):
         raise VShellError("The Fedora application entry is missing or cannot be launched.")

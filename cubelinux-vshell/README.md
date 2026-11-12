@@ -53,8 +53,9 @@ Changing folder shares restarts Fedora when it is running so LXC can apply the
 updated mounts. Destroying Fedora also removes its additional folder-share
 settings.
 
-Install graphical applications inside Fedora with DNF. VShell discovers their
-system desktop entries and adds matching launchers to the host application menu
+Install graphical applications inside Fedora with DNF or Flatpak. VShell
+discovers DNF desktop entries and system or current-user Flatpak exports, then
+adds matching launchers to the host application menu
 with “(Fedora)” in the name. A narrowly scoped Polkit helper publishes
 root-owned wrapper entries in `/usr/local/share/applications/cubelinux`, so KDE
 Kiosk can keep user-created application entries out of Kickoff while these
@@ -67,7 +68,9 @@ session watcher refreshes those entries after packages are installed or
 removed, and each launcher starts the app inside the Fedora container with the
 host display/audio sockets and session environment. For example, install `vlc`;
 the Fedora launcher will appear in the host menu. Terminal-launched programs
-continue to work as before.
+continue to work as before. Current-user Flatpak launchers are read from the
+shared home folder; VShell publishes a root-owned host wrapper, so KDE Kiosk
+does not need to permit launchers from the user's writable applications folder.
 
 While the KDE desktop session is running, its VShell watcher discovers Fedora
 TCP services listening on the container network interface at ports 1024 and

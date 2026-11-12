@@ -10,7 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from .lxc_backend import _rootfs_path
+from .lxc_backend import _account, _home, _rootfs_path
 from .port_forwarding import PortForwardingMonitor
 
 
@@ -47,11 +47,30 @@ def _display_name(values: dict[str, str]) -> str:
 
 
 def _app_sources(rootfs: Path) -> list[Path]:
+    directories = (
+        rootfs / "usr/share/applications",
+        rootfs / "usr/local/share/applications",
+        rootfs / "var/lib/flatpak/exports/share/applications",
+        _home() / ".local/share/flatpak/exports/share/applications",
+    )
     found: list[Path] = []
-    for directory in (rootfs / "usr/share/applications", rootfs / "usr/local/share/applications"):
+    seen: set[Path] = set()
+    for directory in directories:
         if directory.is_dir():
-            found.extend(sorted(directory.rglob("*.desktop")))
+            for source in sorted(directory.rglob("*.desktop")):
+                if source not in seen:
+                    found.append(source)
+                    seen.add(source)
     return found
+
+
+def _guest_desktop_path(rootfs: Path, source: Path) -> str:
+    try:
+        return source.relative_to(rootfs).as_posix()
+    except ValueError:
+        account = _account()
+        relative = source.resolve(strict=True).relative_to(_home().resolve(strict=True))
+        return (Path("home") / account.pw_name / relative).as_posix()
 
 
 def _icon_source(rootfs: Path, icon: str) -> Path | None:
@@ -64,13 +83,21 @@ def _icon_source(rootfs: Path, icon: str) -> Path | None:
         stem = given.stem
         suffixes = (given.suffix,) if given.suffix else _EXTENSIONS
         candidates = [rootfs / "usr/share/pixmaps" / f"{stem}{suffix}" for suffix in suffixes]
-        for theme_root in (rootfs / "usr/share/icons/hicolor", rootfs / "usr/share/icons/Fedora"):
+        theme_roots = (
+            rootfs / "usr/share/icons/hicolor",
+            rootfs / "usr/share/icons/Fedora",
+            rootfs / "var/lib/flatpak/exports/share/icons/hicolor",
+            _home() / ".local/share/flatpak/exports/share/icons/hicolor",
+        )
+        for theme_root in theme_roots:
             for size in ("scalable/apps", "256x256/apps", "128x128/apps", "64x64/apps", "48x48/apps", "32x32/apps", "apps"):
                 candidates.extend(theme_root.glob(f"{size}/{stem}.*"))
+    allowed_roots = (rootfs.resolve(), _home().resolve())
     for candidate in candidates:
         try:
             resolved = candidate.resolve(strict=True)
-            resolved.relative_to(rootfs.resolve())
+            if not any(resolved.is_relative_to(root) for root in allowed_roots):
+                continue
             if resolved.suffix.lower() in _EXTENSIONS and resolved.is_file():
                 return resolved
         except (OSError, ValueError):
@@ -85,7 +112,7 @@ def _desktop_launcher(rootfs: Path, source: Path, icons: Path) -> dict[str, obje
             or values.get("Hidden", "false").lower() == "true"
             or values.get("NoDisplay", "false").lower() == "true"):
         return None
-    relative = source.relative_to(rootfs).as_posix()
+    relative = _guest_desktop_path(rootfs, source)
     app_id = hashlib.sha256(relative.encode()).hexdigest()[:20]
     icon_name = values.get("Icon", "applications-other")
     icon = _icon_source(rootfs, icon_name)
