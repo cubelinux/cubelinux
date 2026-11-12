@@ -1,6 +1,8 @@
 """Qt controller for the Linux Subsystem setup and workspace window."""
 
 import re
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from PySide6.QtCore import Property, QObject, QProcess, QThread, QTimer, Signal, Slot
@@ -59,6 +61,32 @@ class SharedFolderWorker(QThread):
             self.succeeded.emit(folders)
 
 
+class ConnectivityWorker(QThread):
+    succeeded = Signal()
+    failed = Signal(str)
+
+    def run(self) -> None:
+        request = urllib.request.Request(
+            "https://ghcr.io/v2/",
+            headers={"User-Agent": "cubelinux-vshell"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=6) as response:
+                if response.status != 200:
+                    raise OSError(f"GHCR returned HTTP {response.status}.")
+        except urllib.error.HTTPError as error:
+            # OCI registries normally require authentication, so 401 at this
+            # endpoint confirms that DNS, TLS, and the registry are reachable.
+            if error.code == 401:
+                self.succeeded.emit()
+                return
+            self.failed.emit(f"GHCR returned HTTP {error.code}.")
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            self.failed.emit(str(error.reason if isinstance(error, urllib.error.URLError) else error))
+        else:
+            self.succeeded.emit()
+
+
 class SetupController(QObject):
     progressChanged = Signal()
     stateChanged = Signal()
@@ -67,6 +95,7 @@ class SetupController(QObject):
     folderSharingChanged = Signal()
     forwardedPortsChanged = Signal()
     portForwardingChanged = Signal()
+    connectivityChanged = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -74,6 +103,9 @@ class SetupController(QObject):
         self._progress_title = ""
         self._progress_percent = -1
         self._worker: SetupWorker | None = None
+        self._connectivity_worker: ConnectivityWorker | None = None
+        self._connectivity_status = "unknown"
+        self._connectivity_error = ""
         self._folder_worker: SharedFolderWorker | None = None
         self._folder_sharing_busy = False
         self._folder_sharing_message = ""
@@ -122,6 +154,14 @@ class SetupController(QObject):
     @Property(bool, notify=stateChanged)
     def busy(self) -> bool:
         return self._busy
+
+    @Property(str, notify=connectivityChanged)
+    def connectivityStatus(self) -> str:
+        return self._connectivity_status
+
+    @Property(str, notify=connectivityChanged)
+    def connectivityError(self) -> str:
+        return self._connectivity_error
 
     @Property(bool, notify=stateChanged)
     def ready(self) -> bool:
@@ -175,9 +215,39 @@ class SetupController(QObject):
 
     @Slot()
     def setup(self) -> None:
-        if self.busy or self.folderSharingBusy or self.ready:
+        if (self.busy or self.folderSharingBusy or self.ready
+                or self._connectivity_status != "online"):
             return
         self._start_worker()
+
+    @Slot()
+    def checkInternet(self) -> None:
+        if self._connectivity_worker is not None and self._connectivity_worker.isRunning():
+            return
+        self._connectivity_status = "checking"
+        self._connectivity_error = ""
+        self.connectivityChanged.emit()
+        self._connectivity_worker = ConnectivityWorker(self)
+        self._connectivity_worker.succeeded.connect(self._connectivity_succeeded)
+        self._connectivity_worker.failed.connect(self._connectivity_failed)
+        self._connectivity_worker.finished.connect(self._connectivity_finished)
+        self._connectivity_worker.start()
+
+    @Slot()
+    def _connectivity_succeeded(self) -> None:
+        self._connectivity_status = "online"
+        self._connectivity_error = ""
+        self.connectivityChanged.emit()
+
+    @Slot(str)
+    def _connectivity_failed(self, error: str) -> None:
+        self._connectivity_status = "offline"
+        self._connectivity_error = error
+        self.connectivityChanged.emit()
+
+    @Slot()
+    def _connectivity_finished(self) -> None:
+        self._connectivity_worker = None
 
     @Slot()
     def destroyContainer(self) -> None:
@@ -319,7 +389,9 @@ class SetupController(QObject):
             ("connecting fedora to the network", "Connecting Fedora to the network"),
             ("preparing your fedora user and network", "Preparing your Fedora account"),
             ("sharing your home folder", "Sharing your home folder"),
+            ("connecting fedora to your desktop session", "Connecting Fedora to your desktop"),
             ("restarting fedora", "Restarting Fedora"),
+            ("updating fedora's container settings", "Updating container settings"),
             ("destroying the fedora container", "Destroying Fedora"),
             ("fedora virtual shell is ready", "Setup complete"),
         )

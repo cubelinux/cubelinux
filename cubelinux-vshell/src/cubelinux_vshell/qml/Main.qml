@@ -14,6 +14,17 @@ Kirigami.ApplicationWindow {
     visible: true
     property bool closeAfterSetup: false
 
+    Timer {
+        id: setupCompletionTimer
+        interval: 1100
+        repeat: false
+        onTriggered: {
+            if (setupController.setupComplete && !root.closeAfterSetup) {
+                root.pageStack.layers.clear()
+            }
+        }
+    }
+
     pageStack.globalToolBar.showNavigationButtons: setupController.busy
         || root.pageStack.layers.busy ? 0
         : Kirigami.ApplicationHeaderStyle.ShowBackButton
@@ -73,7 +84,8 @@ Kirigami.ApplicationWindow {
             onSetupRequested: {
                 if (!root.pageStack.layers.busy
                         && !setupController.busy
-                        && !setupController.ready) {
+                        && !setupController.ready
+                        && setupController.connectivityStatus === "online") {
                     root.pageStack.layers.push(setupProgressPage)
                     setupController.setup()
                 }
@@ -86,7 +98,7 @@ Kirigami.ApplicationWindow {
         target: setupController
         function onStateChanged() {
             if (setupController.ready && setupController.setupComplete) {
-                root.pageStack.layers.clear()
+                setupCompletionTimer.start()
             }
             root.finishDeferredClose()
         }

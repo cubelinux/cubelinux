@@ -18,11 +18,23 @@ Kirigami.ScrollablePage {
             icon.name: "go-next"
             enabled: !page.controller.busy && !page.controller.ready
                      && !page.navigationBusy
+                     && page.controller.connectivityStatus === "online"
             onTriggered: {
                 if (enabled) {
                     page.setupRequested()
                 }
             }
+        },
+        Kirigami.Action {
+            text: page.controller.connectivityStatus === "checking"
+                  ? qsTr("Checking connection…")
+                  : page.controller.connectivityStatus === "offline"
+                    ? qsTr("Retry connection check") : qsTr("Check connection")
+            icon.name: page.controller.connectivityStatus === "checking"
+                       ? "network-wired" : "view-refresh"
+            visible: page.controller.connectivityStatus !== "online"
+            enabled: page.controller.connectivityStatus !== "checking"
+            onTriggered: page.controller.checkInternet()
         },
         Kirigami.Action {
             text: qsTr("Menu")
@@ -52,10 +64,23 @@ Kirigami.ScrollablePage {
 
             Controls.Label {
                 Layout.fillWidth: true
-                text: qsTr("Linux Subsystem will create Fedora 44 as your Linux environment.")
+                text: qsTr("Linux Subsystem will create Fedora 44 as your Linux environment. An internet connection is required to download its runtime.")
                 opacity: 0.75
                 wrapMode: Text.Wrap
             }
+        }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: page.controller.connectivityStatus !== "online"
+            showCloseButton: false
+            type: page.controller.connectivityStatus === "offline"
+                  ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
+            text: page.controller.connectivityStatus === "checking"
+                  ? qsTr("Checking access to the cubelinux Runtime registry…")
+                  : page.controller.connectivityStatus === "offline"
+                    ? qsTr("The cubelinux Runtime registry could not be reached. Connect to the internet and retry before starting setup.\n\nDetails: %1").arg(page.controller.connectivityError)
+                    : qsTr("Checking that the cubelinux Runtime registry is reachable…")
         }
 
         Kirigami.Card {
@@ -130,4 +155,6 @@ Kirigami.ScrollablePage {
             wrapMode: Text.Wrap
         }
     }
+
+    Component.onCompleted: page.controller.checkInternet()
 }

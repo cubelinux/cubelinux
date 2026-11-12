@@ -20,6 +20,8 @@ base = [
   "bluedevil",
   "dolphin",
   "generic-logos",
+  "google-noto-sans-khmer-vf-fonts",
+  "google-noto-serif-khmer-vf-fonts",
   "kde-gtk-config",
   "kde-partitionmanager",
   "kf6-kirigami",
