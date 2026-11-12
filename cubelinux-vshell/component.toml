@@ -71,6 +71,12 @@ source = "data/lxc-net-disabled.conf"
 destination = "/usr/lib/systemd/system/lxc-net.service.d/90-cubelinux-vshell.conf"
 mode = "0644"
 
+# DEVELOPMENT ONLY: Remove the host shell profile before production to preserve
+# CubeLinux isolation and security goals.
+[[files]]
+source = "data/HostShell.profile"
+destination = "/usr/share/konsole/HostShell.profile"
+
 [[files]]
 source = "data/VShell.profile"
 destination = "/usr/share/konsole/VShell.profile"
