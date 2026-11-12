@@ -61,7 +61,8 @@ cubelinux/
 ### What belongs where
 
 - **`cubelinux-image/config/image.toml`** is the source of truth for the Fedora
-  base image, shared packages, distro branding, and included local components.
+  base image, shared packages, separately grouped firmware packages, distro
+  branding, and included local components.
   The image build renders `distro.logo.url` as a 64px launcher icon and a 256px
   About page icon. It downloads `distro.plymouth_logo.url` and converts that
   SVG into the PNG watermark included in the initramfs.

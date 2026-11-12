@@ -235,6 +235,10 @@ def main() -> None:
     if not isinstance(package_config, dict):
         fail("packages must be a table")
     packages = validate_package_list(package_config.get("base", []), "packages.base")
+    firmware_packages = validate_package_list(
+        package_config.get("firmware", []), "packages.firmware"
+    )
+    packages.extend(firmware_packages)
 
     distro = config.get("distro")
     if not isinstance(distro, dict) or not isinstance(distro.get("os_release"), dict):

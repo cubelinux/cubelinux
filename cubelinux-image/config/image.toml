@@ -49,6 +49,34 @@ base = [
   "spectacle",
 ]
 
+firmware = [
+  # Wi-Fi, Bluetooth, graphics, audio, CPU microcode, and sensor firmware.
+  "alsa-sof-firmware",
+  "amd-gpu-firmware",
+  "amd-ucode-firmware",
+  "atheros-firmware",
+  "brcmfmac-firmware",
+  "cirrus-audio-firmware",
+  "intel-audio-firmware",
+  "intel-gpu-firmware",
+  "intel-vsc-firmware",
+  "iwlbluetooth-firmware",
+  "iwlegacy-firmware",
+  "iwlwifi-dvm-firmware",
+  "iwlwifi-mld-firmware",
+  "iwlwifi-mvm-firmware",
+  "libertas-firmware",
+  "linux-firmware",
+  "mediatek-firmware",
+  "microcode_ctl",
+  "mt7xxx-firmware",
+  "nvidia-gpu-firmware",
+  "nxpwireless-firmware",
+  "qcom-firmware",
+  "realtek-firmware",
+  "tiwilink-firmware",
+]
+
 [[components]]
 id = "updater"
 path = "cubelinux-updater"
