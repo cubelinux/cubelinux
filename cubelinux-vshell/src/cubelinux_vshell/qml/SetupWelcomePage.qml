@@ -10,56 +10,141 @@ Controls.ScrollView {
     clip: true
 
     ColumnLayout {
+        id: content
+
         width: page.availableWidth
-        spacing: Kirigami.Units.largeSpacing
+        height: Math.max(page.availableHeight, content.implicitHeight)
+        spacing: 0
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.largeSpacing
-
-            Image {
-                source: "cubelinux-icon.svg"
-                sourceSize.width: 128
-                sourceSize.height: 128
-                fillMode: Image.PreserveAspectFit
-                Layout.preferredWidth: 64
-                Layout.preferredHeight: 64
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Controls.Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Create a cubelinux Runtime environment for Linux apps and development tools.")
-                    opacity: 0.75
-                    wrapMode: Text.Wrap
-                }
-            }
+        Item {
+            Layout.fillHeight: true
+            Layout.minimumHeight: Kirigami.Units.largeSpacing
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: Kirigami.Units.mediumSpacing
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 42
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Kirigami.Units.largeSpacing * 1.5
 
-            Kirigami.Heading {
-                text: qsTr("What you get")
-                level: 2
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.mediumSpacing
+
+                Image {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 88
+                    Layout.preferredHeight: 88
+                    source: "cubelinux-icon.svg"
+                    sourceSize.width: 128
+                    sourceSize.height: 128
+                    fillMode: Image.PreserveAspectFit
+                    Accessible.name: qsTr("cubelinux")
+                }
+
+                Kirigami.Heading {
+                    Layout.fillWidth: true
+                    text: qsTr("Linux apps, at home on cubelinux")
+                    level: 1
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                }
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Create a Fedora workspace for Linux apps and development tools, alongside your cubelinux desktop.")
+                    opacity: 0.8
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                }
             }
 
-            Controls.Label {
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: qsTr("Linux apps alongside your cubelinux apps")
-                wrapMode: Text.Wrap
-            }
+                spacing: Kirigami.Units.mediumSpacing
 
-            Controls.Label {
-                Layout.fillWidth: true
-                text: qsTr("A Fedora Linux terminal for command-line tools")
-                wrapMode: Text.Wrap
+                Kirigami.Heading {
+                    Layout.fillWidth: true
+                    text: qsTr("What you get")
+                    level: 2
+                }
+
+                Kirigami.CardsLayout {
+                    Layout.fillWidth: true
+                    maximumColumns: 2
+
+                    Kirigami.AbstractCard {
+                        Layout.fillWidth: true
+
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.mediumSpacing
+
+                            Kirigami.Icon {
+                                source: "applications-all"
+                                implicitWidth: Kirigami.Units.iconSizes.large
+                                implicitHeight: Kirigami.Units.iconSizes.large
+                                color: Kirigami.Theme.highlightColor
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Kirigami.Heading {
+                                    Layout.fillWidth: true
+                                    text: qsTr("Linux apps")
+                                    level: 3
+                                }
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: qsTr("Run graphical Linux apps alongside your cubelinux apps.")
+                                    opacity: 0.75
+                                    wrapMode: Text.Wrap
+                                }
+                            }
+                        }
+                    }
+
+                    Kirigami.AbstractCard {
+                        Layout.fillWidth: true
+
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.mediumSpacing
+
+                            Kirigami.Icon {
+                                source: "utilities-terminal"
+                                implicitWidth: Kirigami.Units.iconSizes.large
+                                implicitHeight: Kirigami.Units.iconSizes.large
+                                color: Kirigami.Theme.highlightColor
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Kirigami.Heading {
+                                    Layout.fillWidth: true
+                                    text: qsTr("Fedora tools")
+                                    level: 3
+                                }
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: qsTr("Use a Fedora terminal for command-line tools and development.")
+                                    opacity: 0.75
+                                    wrapMode: Text.Wrap
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
+        Item {
+            Layout.fillHeight: true
+            Layout.minimumHeight: Kirigami.Units.largeSpacing
+        }
     }
 }
