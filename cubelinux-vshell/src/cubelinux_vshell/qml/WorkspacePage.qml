@@ -86,7 +86,7 @@ Controls.ScrollView {
                 columnSpacing: Kirigami.Units.mediumSpacing
 
                 Image {
-                    source: "cubelinux-icon.svg"
+                    source: "cubelinux-icon.png"
                     sourceSize.width: 128
                     sourceSize.height: 128
                     fillMode: Image.PreserveAspectFit

@@ -35,7 +35,7 @@ Controls.ScrollView {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: 88
                     Layout.preferredHeight: 88
-                    source: "cubelinux-icon.svg"
+                    source: "cubelinux-icon.png"
                     sourceSize.width: 128
                     sourceSize.height: 128
                     fillMode: Image.PreserveAspectFit
