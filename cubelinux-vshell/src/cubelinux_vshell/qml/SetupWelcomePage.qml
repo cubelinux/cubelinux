@@ -24,10 +24,17 @@ Controls.ScrollView {
         }
 
         ColumnLayout {
+            id: heroContent
+
             Layout.fillWidth: true
             Layout.maximumWidth: Kirigami.Units.gridUnit * 42
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.largeSpacing * 1.5
+
+            transform: Translate {
+                y: page.availableHeight > heroContent.implicitHeight + Kirigami.Units.largeSpacing * 2
+                   ? -Kirigami.Units.gridUnit : 0
+            }
 
             ColumnLayout {
                 Layout.fillWidth: true

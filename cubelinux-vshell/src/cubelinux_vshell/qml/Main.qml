@@ -13,6 +13,8 @@ Kirigami.ApplicationWindow {
     minimumHeight: 600
     visible: true
     property bool closeAfterSetup: false
+    property string selectedEnvironmentId: "vshell"
+    property string selectedEnvironmentName: qsTr("cubelinux Runtime")
 
     Timer {
         id: setupCompletionTimer
@@ -59,6 +61,8 @@ Kirigami.ApplicationWindow {
 
         EnvironmentSettingsPage {
             controller: setupController
+            environmentId: root.selectedEnvironmentId
+            environmentName: root.selectedEnvironmentName
             onReturnToWorkspaceRequested: root.pageStack.pop()
             onAboutRequested: root.pageStack.layers.push(aboutPage)
         }
@@ -166,8 +170,15 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 controller: setupController
-                onDestroyRequested: destroyDialog.open()
-                onSettingsRequested: root.pageStack.push(environmentSettingsPage)
+                onDestroyRequested: function(environmentId) {
+                    root.selectedEnvironmentId = environmentId
+                    destroyDialog.open()
+                }
+                onSettingsRequested: function(environmentId, environmentName) {
+                    root.selectedEnvironmentId = environmentId
+                    root.selectedEnvironmentName = environmentName
+                    root.pageStack.push(environmentSettingsPage)
+                }
             }
         }
 

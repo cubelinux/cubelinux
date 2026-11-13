@@ -76,7 +76,6 @@ Kirigami.ScrollablePage {
                     Layout.fillWidth: true
                     text: qsTr("Before you begin")
                     level: 1
-                    horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
                 }
 
@@ -84,7 +83,6 @@ Kirigami.ScrollablePage {
                     Layout.fillWidth: true
                     text: qsTr("Set up cubelinux Runtime for Linux apps and development tools. An internet connection is needed for the initial download.")
                     opacity: 0.8
-                    horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
                 }
             }
@@ -106,10 +104,6 @@ Kirigami.ScrollablePage {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.mediumSpacing
 
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
                 Kirigami.Heading {
                     Layout.fillWidth: true
                     text: qsTr("Setup details")
@@ -122,13 +116,19 @@ Kirigami.ScrollablePage {
                     contentItem: RowLayout {
                         spacing: Kirigami.Units.mediumSpacing
 
-                        Image {
-                            source: page.logoSource
-                            sourceSize.width: 128
-                            sourceSize.height: 128
-                            fillMode: Image.PreserveAspectFit
+                        Item {
                             Layout.preferredWidth: 56
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.large
+                            Layout.preferredHeight: 56
+
+                            Image {
+                                anchors.centerIn: parent
+                                width: 56
+                                height: 56
+                                source: page.logoSource
+                                sourceSize.width: 128
+                                sourceSize.height: 128
+                                fillMode: Image.PreserveAspectFit
+                            }
                         }
 
                         ColumnLayout {
@@ -156,10 +156,16 @@ Kirigami.ScrollablePage {
                     contentItem: RowLayout {
                         spacing: Kirigami.Units.mediumSpacing
 
-                        Kirigami.Icon {
-                            source: "folder-home"
-                            implicitWidth: Kirigami.Units.iconSizes.medium
-                            implicitHeight: Kirigami.Units.iconSizes.medium
+                        Item {
+                            Layout.preferredWidth: 56
+                            Layout.preferredHeight: 56
+
+                            Kirigami.Icon {
+                                anchors.centerIn: parent
+                                source: "folder-home"
+                                implicitWidth: Kirigami.Units.iconSizes.medium
+                                implicitHeight: Kirigami.Units.iconSizes.medium
+                            }
                         }
 
                         ColumnLayout {

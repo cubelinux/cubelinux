@@ -12,6 +12,17 @@ Kirigami.ApplicationWindow {
     minimumWidth: 760
     minimumHeight: 600
     visible: true
+    property string selectedEnvironmentId: "vshell"
+    property string selectedEnvironmentName: qsTr("cubelinux Runtime")
+    property string previewMessage: qsTr("This prototype previews the interface. Setup and Runtime operations are not started.")
+
+    Connections {
+        target: previewController
+        function onPreviewActionRequested(action) {
+            root.previewMessage = qsTr("%1 is not available in this preview.").arg(action)
+            previewNotice.open()
+        }
+    }
 
     Component {
         id: confirmPage
@@ -20,8 +31,55 @@ Kirigami.ApplicationWindow {
             controller: previewController
             navigationBusy: root.pageStack.layers.busy
             logoSource: previewIconUrl
-            onSetupRequested: previewNotice.open()
-            onAboutRequested: previewNotice.open()
+            onSetupRequested: {
+                root.previewMessage = qsTr("Runtime setup is not started in this preview.")
+                previewNotice.open()
+            }
+            onAboutRequested: {
+                root.previewMessage = qsTr("About information is not part of this UI preview.")
+                previewNotice.open()
+            }
+        }
+    }
+
+    Component {
+        id: workspacePreviewPage
+
+        Kirigami.Page {
+            title: qsTr("Linux environments")
+            padding: 0
+
+            WorkspacePage {
+                anchors.fill: parent
+                anchors.margins: Kirigami.Units.largeSpacing
+                controller: previewController
+                logoSource: previewIconUrl
+                onSettingsRequested: function(environmentId, environmentName) {
+                    root.selectedEnvironmentId = environmentId
+                    root.selectedEnvironmentName = environmentName
+                    root.pageStack.layers.push(settingsPreviewPage)
+                }
+                onDestroyRequested: function(environmentId) {
+                    root.selectedEnvironmentId = environmentId
+                    root.previewMessage = qsTr("Destroying cubelinux Runtime is disabled in this preview.")
+                    previewNotice.open()
+                }
+            }
+        }
+    }
+
+    Component {
+        id: settingsPreviewPage
+
+        EnvironmentSettingsPage {
+            controller: previewController
+            environmentId: root.selectedEnvironmentId
+            environmentName: root.selectedEnvironmentName
+            onReturnToWorkspaceRequested: root.pageStack.layers.pop()
+            onAboutRequested: {
+                root.previewMessage = qsTr("About information is not part of this UI preview.")
+                previewNotice.open()
+            }
         }
     }
 
@@ -39,6 +97,11 @@ Kirigami.ApplicationWindow {
                 text: qsTr("Menu")
                 icon.name: "application-menu"
                 children: [
+                    Kirigami.Action {
+                        text: qsTr("Preview environment overview")
+                        icon.name: "computer"
+                        onTriggered: root.pageStack.layers.push(workspacePreviewPage)
+                    },
                     Kirigami.Action {
                         text: qsTr("About Linux Subsystem")
                         icon.name: "help-about"
@@ -68,7 +131,7 @@ Kirigami.ApplicationWindow {
 
         Controls.Label {
             Layout.fillWidth: true
-            text: qsTr("This prototype previews the interface. Setup and Runtime operations are not started.")
+            text: root.previewMessage
             wrapMode: Text.Wrap
         }
 

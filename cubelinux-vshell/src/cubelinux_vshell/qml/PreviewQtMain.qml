@@ -11,10 +11,19 @@ Controls.ApplicationWindow {
     minimumWidth: 760
     minimumHeight: 600
     visible: true
-    property bool showingConfirmation: false
+    property int previewPageIndex: 0
+    property string previewMessage: qsTr("This prototype previews the interface. Setup and Runtime operations are not started.")
 
     SystemPalette {
         id: systemPalette
+    }
+
+    Connections {
+        target: previewController
+        function onPreviewActionRequested(action) {
+            root.previewMessage = qsTr("%1 is not available in this preview.").arg(action)
+            previewNotice.open()
+        }
     }
 
     header: Controls.ToolBar {
@@ -23,27 +32,38 @@ Controls.ApplicationWindow {
             spacing: 8
 
             Controls.ToolButton {
-                visible: root.showingConfirmation
+                visible: root.previewPageIndex > 0
                 text: "‹"
                 Accessible.name: qsTr("Back")
-                onClicked: root.showingConfirmation = false
+                onClicked: root.previewPageIndex = root.previewPageIndex === 3 ? 2 : 0
             }
 
             Controls.Label {
                 Layout.fillWidth: true
-                text: qsTr("Set up cubelinux Runtime")
+                text: root.previewPageIndex < 2
+                      ? qsTr("Set up cubelinux Runtime")
+                      : root.previewPageIndex === 2
+                        ? qsTr("Linux environments") : qsTr("Environment settings")
                 font.bold: true
                 elide: Text.ElideRight
             }
 
             Controls.Button {
-                text: root.showingConfirmation ? qsTr("Set up Runtime") : qsTr("Next")
+                text: root.previewPageIndex === 0 ? qsTr("Next")
+                      : root.previewPageIndex === 1 ? qsTr("Set up Runtime")
+                      : root.previewPageIndex === 2 ? qsTr("Environment settings")
+                                                    : qsTr("Back to environments")
                 icon.name: "go-next"
                 onClicked: {
-                    if (root.showingConfirmation) {
+                    if (root.previewPageIndex === 0) {
+                        root.previewPageIndex = 1
+                    } else if (root.previewPageIndex === 1) {
+                        root.previewMessage = qsTr("Runtime setup is not started in this preview.")
                         previewNotice.open()
+                    } else if (root.previewPageIndex === 2) {
+                        root.previewPageIndex = 3
                     } else {
-                        root.showingConfirmation = true
+                        root.previewPageIndex = 2
                     }
                 }
             }
@@ -59,15 +79,42 @@ Controls.ApplicationWindow {
         id: previewMenu
 
         Controls.MenuItem {
+            text: qsTr("Welcome page")
+            onTriggered: root.previewPageIndex = 0
+        }
+
+        Controls.MenuItem {
+            text: qsTr("Setup details")
+            onTriggered: root.previewPageIndex = 1
+        }
+
+        Controls.MenuSeparator {}
+
+        Controls.MenuItem {
+            text: qsTr("Environment overview")
+            onTriggered: root.previewPageIndex = 2
+        }
+
+        Controls.MenuItem {
+            text: qsTr("Environment settings")
+            onTriggered: root.previewPageIndex = 3
+        }
+
+        Controls.MenuSeparator {}
+
+        Controls.MenuItem {
             text: qsTr("About Linux Subsystem")
-            onTriggered: previewNotice.open()
+            onTriggered: {
+                root.previewMessage = qsTr("About information is not part of this UI preview.")
+                previewNotice.open()
+            }
         }
     }
 
     StackLayout {
         anchors.fill: parent
         anchors.margins: 24
-        currentIndex: root.showingConfirmation ? 1 : 0
+        currentIndex: root.previewPageIndex
 
         Controls.ScrollView {
             id: welcomeScroll
@@ -88,10 +135,16 @@ Controls.ApplicationWindow {
                 }
 
                 ColumnLayout {
+                    id: welcomeHero
+
                     Layout.fillWidth: true
                     Layout.maximumWidth: 680
                     Layout.alignment: Qt.AlignHCenter
                     spacing: 40
+
+                    transform: Translate {
+                        y: welcomeScroll.availableHeight > welcomeHero.implicitHeight + 48 ? -18 : 0
+                    }
 
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -251,7 +304,6 @@ Controls.ApplicationWindow {
                             text: qsTr("Before you begin")
                             font.pixelSize: 26
                             font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.Wrap
                         }
 
@@ -259,7 +311,6 @@ Controls.ApplicationWindow {
                             Layout.fillWidth: true
                             text: qsTr("Set up cubelinux Runtime for Linux apps and development tools. An internet connection is needed for the initial download.")
                             opacity: 0.8
-                            horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.Wrap
                         }
                     }
@@ -267,13 +318,6 @@ Controls.ApplicationWindow {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 16
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 1
-                            color: systemPalette.mid
-                            opacity: 0.5
-                        }
 
                         Controls.Label {
                             Layout.fillWidth: true
@@ -295,13 +339,19 @@ Controls.ApplicationWindow {
                                 anchors.margins: 16
                                 spacing: 16
 
-                                Image {
+                                Item {
                                     Layout.preferredWidth: 56
                                     Layout.preferredHeight: 56
-                                    source: previewIconUrl
-                                    sourceSize.width: 128
-                                    sourceSize.height: 128
-                                    fillMode: Image.PreserveAspectFit
+
+                                    Image {
+                                        anchors.centerIn: parent
+                                        width: 56
+                                        height: 56
+                                        source: previewIconUrl
+                                        sourceSize.width: 128
+                                        sourceSize.height: 128
+                                        fillMode: Image.PreserveAspectFit
+                                    }
                                 }
 
                                 ColumnLayout {
@@ -336,10 +386,16 @@ Controls.ApplicationWindow {
                                 anchors.margins: 16
                                 spacing: 16
 
-                                Controls.Label {
-                                    text: "⌂"
-                                    font.pixelSize: 34
-                                    color: systemPalette.highlight
+                                Item {
+                                    Layout.preferredWidth: 56
+                                    Layout.preferredHeight: 56
+
+                                    Controls.Label {
+                                        anchors.centerIn: parent
+                                        text: "⌂"
+                                        font.pixelSize: 34
+                                        color: systemPalette.highlight
+                                    }
                                 }
 
                                 ColumnLayout {
@@ -376,6 +432,340 @@ Controls.ApplicationWindow {
                 }
             }
         }
+
+        Controls.ScrollView {
+            id: workspaceScroll
+
+            contentWidth: availableWidth
+            clip: true
+
+            ColumnLayout {
+                id: workspaceContent
+
+                width: Math.min(workspaceScroll.availableWidth, 760)
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 24
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Controls.Label {
+                        text: qsTr("Linux environments")
+                        font.pixelSize: 26
+                        font.bold: true
+                    }
+
+                    Controls.Label {
+                        text: qsTr("Your environment is ready to open.")
+                        opacity: 0.75
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: runtimePreviewContent.implicitHeight + 32
+                    radius: 8
+                    color: systemPalette.base
+                    border.color: systemPalette.mid
+
+                    ColumnLayout {
+                        id: runtimePreviewContent
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 16
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            Image {
+                                source: previewIconUrl
+                                sourceSize.width: 128
+                                sourceSize.height: 128
+                                fillMode: Image.PreserveAspectFit
+                                Layout.preferredWidth: 64
+                                Layout.preferredHeight: 64
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 4
+
+                                RowLayout {
+                                    spacing: 12
+
+                                    Controls.Label {
+                                        text: qsTr("cubelinux Runtime")
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                    }
+
+                                    Controls.Label {
+                                        text: qsTr("DEFAULT")
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        opacity: 0.7
+                                    }
+                                }
+
+                                Controls.Label {
+                                    text: qsTr("cubelinux Runtime · x86_64")
+                                    opacity: 0.75
+                                }
+                            }
+
+                            RowLayout {
+                                spacing: 8
+
+                                Controls.Label {
+                                    text: "●"
+                                    color: systemPalette.highlight
+                                }
+
+                                Controls.Label {
+                                    text: qsTr("Running")
+                                    color: systemPalette.highlight
+                                    font.bold: true
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 1
+                            color: systemPalette.mid
+                            opacity: 0.5
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: qsTr("Your apps and tools are ready to use.")
+                                opacity: 0.75
+                                wrapMode: Text.Wrap
+                            }
+
+                            Controls.Button {
+                                text: qsTr("Open terminal")
+                                icon.name: "utilities-terminal"
+                                highlighted: true
+                                onClicked: previewController.openShell()
+                            }
+                        }
+                    }
+                }
+
+                Controls.Button {
+                    text: qsTr("Environment settings")
+                    icon.name: "configure"
+                    onClicked: root.previewPageIndex = 3
+                }
+            }
+        }
+
+        Controls.ScrollView {
+            id: settingsScroll
+
+            contentWidth: availableWidth
+            clip: true
+
+            ColumnLayout {
+                id: settingsContent
+
+                width: Math.min(settingsScroll.availableWidth, 760)
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 24
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Controls.Label {
+                        text: qsTr("Shared folders")
+                        font.pixelSize: 24
+                        font.bold: true
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Choose which cubelinux folders are available to cubelinux Runtime.")
+                        opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 16
+
+                    Controls.Label {
+                        text: "⌂"
+                        font.pixelSize: 30
+                        color: systemPalette.highlight
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Controls.Label {
+                            text: qsTr("Home folder")
+                            font.bold: true
+                        }
+
+                        Controls.Label {
+                            text: qsTr("Shared automatically with cubelinux Runtime at %1.").arg(previewController.sharedHomePath)
+                            opacity: 0.75
+                            wrapMode: Text.Wrap
+                        }
+                    }
+
+                    Controls.Label {
+                        text: qsTr("Shared")
+                        opacity: 0.75
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    color: systemPalette.mid
+                    opacity: 0.5
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 14
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Controls.Label {
+                                text: qsTr("Additional folders")
+                                font.pixelSize: 20
+                                font.bold: true
+                            }
+
+                            Controls.Label {
+                                text: qsTr("Manage folders shared with cubelinux Runtime.")
+                                opacity: 0.75
+                                wrapMode: Text.Wrap
+                            }
+                        }
+
+                        Controls.Button {
+                            text: qsTr("Add folder…")
+                            icon.name: "folder-open"
+                            onClicked: previewController.chooseSharedFolder()
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 16
+
+                        Controls.Label {
+                            text: "▱"
+                            font.pixelSize: 26
+                            color: systemPalette.highlight
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Controls.Label {
+                                text: qsTr("Projects")
+                                font.bold: true
+                            }
+
+                            Controls.Label {
+                                text: qsTr("~/Projects → /mnt/vshell-shares/projects")
+                                opacity: 0.75
+                            }
+                        }
+
+                        Controls.ToolButton {
+                            icon.name: "edit-delete"
+                            Accessible.name: qsTr("Remove shared folder")
+                            onClicked: previewController.removeSharedFolder("preview-projects")
+                        }
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Runtime can read and modify shared folders. Changing folder access restarts the Runtime when it is running.")
+                        opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    color: systemPalette.mid
+                    opacity: 0.5
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    Controls.Label {
+                        text: qsTr("Port forwarding")
+                        font.pixelSize: 20
+                        font.bold: true
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Runtime TCP services on ports 1024 and above are forwarded to this host automatically.")
+                        opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Controls.Label {
+                                text: qsTr("TCP port 3000 in cubelinux Runtime")
+                                font.bold: true
+                            }
+
+                            Controls.Label {
+                                text: qsTr("Available on this host at 127.0.0.1:3000")
+                                opacity: 0.75
+                            }
+                        }
+
+                        ColumnLayout {
+                            Controls.Label {
+                                text: qsTr("Expose to public")
+                                font.bold: true
+                            }
+
+                            Controls.Switch {
+                                checked: false
+                                Accessible.name: qsTr("Expose port 3000 to public networks")
+                                onToggled: previewController.setPortPublicAccess(3000, checked)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Controls.Dialog {
@@ -388,7 +778,7 @@ Controls.ApplicationWindow {
         standardButtons: Controls.Dialog.Ok
 
         contentItem: Controls.Label {
-            text: qsTr("This prototype previews the interface. Setup and Runtime operations are not started.")
+            text: root.previewMessage
             wrapMode: Text.Wrap
         }
     }

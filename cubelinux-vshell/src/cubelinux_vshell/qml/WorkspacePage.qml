@@ -7,8 +7,14 @@ Controls.ScrollView {
     id: page
 
     property var controller
-    signal destroyRequested()
-    signal settingsRequested()
+    property url logoSource: "cubelinux-icon.png"
+    // The current controller has one Runtime; card delegates can consume a future list model.
+    readonly property var environments: [
+        ({ id: "vshell", name: qsTr("cubelinux Runtime"), details: qsTr("cubelinux Runtime · x86_64"), isDefault: true })
+    ]
+    signal destroyRequested(string environmentId)
+    signal settingsRequested(string environmentId, string environmentName)
+
     contentWidth: availableWidth
     clip: true
 
@@ -26,181 +32,102 @@ Controls.ScrollView {
           ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
 
     ColumnLayout {
+        id: content
+
         width: page.availableWidth
-        spacing: Kirigami.Units.largeSpacing
+        height: Math.max(page.availableHeight, content.implicitHeight)
+        spacing: 0
+
+        Item {
+            Layout.fillHeight: true
+            Layout.minimumHeight: Kirigami.Units.largeSpacing
+        }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 48
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Kirigami.Units.largeSpacing * 1.5
 
-            Kirigami.Heading {
-                text: qsTr("Linux environments")
-                level: 1
-            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
 
-            Controls.Label {
-                text: qsTr("Your container environments, ready to open.")
-                opacity: 0.7
-            }
-        }
-
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            visible: controller.busy
-                     || controller.setupFailed
-                     || controller.destroyFailed
-            text: controller.progress
-            type: controller.setupFailed || controller.destroyFailed
-                  ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
-        }
-
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            visible: controller.folderSharingMessage.length > 0
-            text: controller.folderSharingMessage
-            type: controller.folderSharingError
-                  ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
-        }
-
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            visible: controller.portForwardingMessage.length > 0
-            text: controller.portForwardingMessage
-            type: Kirigami.MessageType.Error
-        }
-
-        Controls.ProgressBar {
-            Layout.fillWidth: true
-            visible: controller.busy || controller.folderSharingBusy
-            indeterminate: true
-        }
-
-        Kirigami.Card {
-            Layout.fillWidth: true
-            Layout.preferredHeight: page.availableWidth < 560 ? 156 : 96
-            Layout.minimumHeight: page.availableWidth < 560 ? 156 : 96
-
-            contentItem: GridLayout {
-                columns: page.availableWidth < 560 ? 3 : 5
-                rowSpacing: Kirigami.Units.smallSpacing
-                columnSpacing: Kirigami.Units.mediumSpacing
-
-                Image {
-                    source: "cubelinux-icon.png"
-                    sourceSize.width: 128
-                    sourceSize.height: 128
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: Kirigami.Units.iconSizes.large
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.row: 0
-                    Layout.column: 0
-                }
-
-                ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    Layout.alignment: Qt.AlignVCenter
+                Kirigami.Heading {
                     Layout.fillWidth: true
-                    Layout.row: 0
-                    Layout.column: 1
-
-                    RowLayout {
-                        spacing: Kirigami.Units.mediumSpacing
-
-                        Kirigami.Heading {
-                            text: qsTr("cubelinux Runtime")
-                            level: 2
-                        }
-
-                        Controls.Label {
-                            text: qsTr("DEFAULT")
-                            font.bold: true
-                            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
-                            opacity: 0.7
-                        }
-                    }
-
-                    Controls.Label {
-                        text: qsTr("Fedora Linux 44 · x86_64")
-                        opacity: 0.7
-                    }
+                    text: qsTr("Linux environments")
+                    level: 1
                 }
 
-                Item {
-                    Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-                    Layout.preferredHeight: Kirigami.Units.iconSizes.medium
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.row: 0
-                    Layout.column: 2
-
-                    Kirigami.Icon {
-                        id: statusIcon
-                        anchors.centerIn: parent
-                        source: page.containerStatusIcon
-                        color: page.containerStatusColor
-                        implicitWidth: Kirigami.Units.iconSizes.medium
-                        implicitHeight: Kirigami.Units.iconSizes.medium
-                        Accessible.name: page.containerStatusLabel
-
-                        RotationAnimation on rotation {
-                            from: 0
-                            to: 360
-                            duration: 1000
-                            loops: Animation.Infinite
-                            running: controller.destroying || controller.folderSharingBusy
-                            onRunningChanged: if (!running) statusIcon.rotation = 0
-                        }
-                    }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Open and manage your cubelinux Runtime environment.")
+                    opacity: 0.75
+                    wrapMode: Text.Wrap
                 }
+            }
 
-                Controls.Button {
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.row: page.availableWidth < 560 ? 1 : 0
-                    Layout.column: page.availableWidth < 560 ? 0 : 3
-                    Layout.columnSpan: page.availableWidth < 560 ? 2 : 1
-                    Layout.fillWidth: page.availableWidth < 560
-                    text: qsTr("Open terminal")
-                    icon.name: "utilities-terminal"
-                    highlighted: true
-                    enabled: !controller.busy && !controller.destroying
-                             && !controller.folderSharingBusy
-                             && !controller.setupFailed
-                    onClicked: controller.openShell()
-                }
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                visible: controller.busy
+                         || controller.setupFailed
+                         || controller.destroyFailed
+                text: controller.progress
+                type: controller.setupFailed || controller.destroyFailed
+                      ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
+            }
 
-                Controls.ToolButton {
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.row: page.availableWidth < 560 ? 1 : 0
-                    Layout.column: page.availableWidth < 560 ? 2 : 4
-                    icon.name: "overflow-menu"
-                    Accessible.name: qsTr("Environment actions")
-                    Controls.ToolTip.text: qsTr("Environment actions")
-                    enabled: !controller.busy && !controller.destroying && !controller.folderSharingBusy
-                    onClicked: environmentMenu.open()
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                visible: controller.folderSharingMessage.length > 0
+                text: controller.folderSharingMessage
+                type: controller.folderSharingError
+                      ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
+            }
 
-                    Controls.Menu {
-                        id: environmentMenu
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                visible: controller.portForwardingMessage.length > 0
+                text: controller.portForwardingMessage
+                type: Kirigami.MessageType.Error
+            }
 
-                        Controls.MenuItem {
-                            text: qsTr("Environment settings")
-                            icon.name: "configure"
-                            onTriggered: page.settingsRequested()
-                        }
+            Controls.ProgressBar {
+                Layout.fillWidth: true
+                visible: controller.busy || controller.folderSharingBusy
+                indeterminate: true
+            }
 
-                        Controls.MenuItem {
-                            text: qsTr("Destroy cubelinux Runtime…")
-                            icon.name: "edit-delete"
-                            onTriggered: page.destroyRequested()
-                        }
-                    }
+            Repeater {
+                model: page.environments
+
+                delegate: EnvironmentCard {
+                    required property var modelData
+
+                    Layout.fillWidth: true
+                    environmentId: modelData.id
+                    environmentName: modelData.name
+                    environmentDetails: modelData.details
+                    isDefault: modelData.isDefault
+                    logoSource: page.logoSource
+                    statusLabel: page.containerStatusLabel
+                    statusIcon: page.containerStatusIcon
+                    statusColor: page.containerStatusColor
+                    operationBusy: controller.destroying || controller.folderSharingBusy
+                    canOpen: !controller.busy && !controller.destroying
+                             && !controller.folderSharingBusy && !controller.setupFailed
+                    canManage: !controller.busy && !controller.destroying
+                               && !controller.folderSharingBusy
+                    onOpenRequested: controller.openShell()
+                    onSettingsRequested: page.settingsRequested(modelData.id, modelData.name)
+                    onDestroyRequested: page.destroyRequested(modelData.id)
                 }
             }
         }
 
         Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Kirigami.Units.largeSpacing
+            Layout.fillHeight: true
+            Layout.minimumHeight: Kirigami.Units.largeSpacing
         }
     }
 }
