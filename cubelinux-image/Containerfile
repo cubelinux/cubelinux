@@ -63,7 +63,8 @@ RUN mkdir -p /usr/lib/systemd/user/default.target.wants && \
         /usr/lib/systemd/user/default.target.wants/cubelinux-plasma-setup-hide-edit-mode.service
 COPY bootc/kargs.d/10-quiet-boot.toml /usr/lib/bootc/kargs.d/10-quiet-boot.toml
 COPY .image-build/services.txt /tmp/component-services.txt
-RUN systemctl --root=/ enable NetworkManager.service firewalld.service && \
+RUN firewall-offline-cmd --policy-desktop && \
+    systemctl --root=/ enable NetworkManager.service firewalld.service && \
     systemctl --root=/ enable --force sddm.service && \
     systemctl --root=/ enable plasma-setup.service && \
     while IFS= read -r service; do \
