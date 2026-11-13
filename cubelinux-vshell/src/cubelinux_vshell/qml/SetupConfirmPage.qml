@@ -8,6 +8,7 @@ Kirigami.ScrollablePage {
 
     property var controller
     property bool navigationBusy: false
+    property url logoSource: "cubelinux-icon.png"
     signal setupRequested()
     signal aboutRequested()
     title: qsTr("Set up cubelinux Runtime")
@@ -50,109 +51,148 @@ Kirigami.ScrollablePage {
     ]
 
     ColumnLayout {
-        width: parent.width
-        spacing: Kirigami.Units.largeSpacing
+        id: content
+
+        width: page.availableWidth
+        height: Math.max(page.availableHeight, content.implicitHeight)
+        spacing: 0
+
+        Item {
+            Layout.fillHeight: true
+            Layout.minimumHeight: Kirigami.Units.largeSpacing
+        }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 42
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Kirigami.Units.largeSpacing * 1.5
 
-            Kirigami.Heading {
-                text: qsTr("Before you begin")
-                level: 1
-            }
-
-            Controls.Label {
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: qsTr("Linux Subsystem will create cubelinux Runtime, based on Fedora Linux 44. An internet connection is required to download it.")
-                opacity: 0.75
-                wrapMode: Text.Wrap
-            }
-        }
-
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            visible: page.controller.connectivityStatus !== "online"
-            showCloseButton: false
-            type: page.controller.connectivityStatus === "offline"
-                  ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
-            text: page.controller.connectivityStatus === "checking"
-                  ? qsTr("Checking access to the cubelinux Runtime registry…")
-                  : page.controller.connectivityStatus === "offline"
-                    ? qsTr("The cubelinux Runtime registry could not be reached. Connect to the internet and retry before starting setup.\n\nDetails: %1").arg(page.controller.connectivityError)
-                    : qsTr("Checking that the cubelinux Runtime registry is reachable…")
-        }
-
-        Kirigami.Card {
-            Layout.fillWidth: true
-
-            contentItem: RowLayout {
                 spacing: Kirigami.Units.mediumSpacing
 
-                Image {
-                    source: "cubelinux-icon.png"
-                    sourceSize.width: 128
-                    sourceSize.height: 128
-                    fillMode: Image.PreserveAspectFit
-                    Layout.preferredWidth: 56
-                    Layout.preferredHeight: Kirigami.Units.iconSizes.large
+                Kirigami.Heading {
+                    Layout.fillWidth: true
+                    text: qsTr("Before you begin")
+                    level: 1
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
                 }
 
-                ColumnLayout {
+                Controls.Label {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Controls.Label {
-                        text: qsTr("cubelinux Runtime")
-                        font.bold: true
-                    }
-
-                    Controls.Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Fedora Linux 44 powers this environment. Installed apps and data stay here.")
-                        opacity: 0.75
-                        wrapMode: Text.Wrap
-                    }
+                    text: qsTr("Set up cubelinux Runtime for Linux apps and development tools. An internet connection is needed for the initial download.")
+                    opacity: 0.8
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
                 }
             }
-        }
 
-        Kirigami.Card {
-            Layout.fillWidth: true
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                visible: page.controller.connectivityStatus !== "online"
+                showCloseButton: false
+                type: page.controller.connectivityStatus === "offline"
+                      ? Kirigami.MessageType.Error : Kirigami.MessageType.Information
+                text: page.controller.connectivityStatus === "checking"
+                      ? qsTr("Checking access to the cubelinux Runtime registry…")
+                      : page.controller.connectivityStatus === "offline"
+                        ? qsTr("The cubelinux Runtime registry could not be reached. Connect to the internet and retry before starting setup.\n\nDetails: %1").arg(page.controller.connectivityError)
+                        : qsTr("Checking that the cubelinux Runtime registry is reachable…")
+            }
 
-            contentItem: RowLayout {
+            ColumnLayout {
+                Layout.fillWidth: true
                 spacing: Kirigami.Units.mediumSpacing
 
-                Kirigami.Icon {
-                    source: "folder-home"
-                    implicitWidth: Kirigami.Units.iconSizes.medium
-                    implicitHeight: Kirigami.Units.iconSizes.medium
+                Kirigami.Separator {
+                    Layout.fillWidth: true
                 }
 
-                ColumnLayout {
+                Kirigami.Heading {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
+                    text: qsTr("Setup details")
+                    level: 2
+                }
 
-                    Controls.Label {
-                        text: qsTr("Home folder shared")
-                        font.bold: true
-                    }
+                Kirigami.Card {
+                    Layout.fillWidth: true
 
-                    Controls.Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Your files are available at %1 in Fedora. Other folders can be added later in settings.").arg(controller.sharedHomePath)
-                        opacity: 0.75
-                        wrapMode: Text.Wrap
+                    contentItem: RowLayout {
+                        spacing: Kirigami.Units.mediumSpacing
+
+                        Image {
+                            source: page.logoSource
+                            sourceSize.width: 128
+                            sourceSize.height: 128
+                            fillMode: Image.PreserveAspectFit
+                            Layout.preferredWidth: 56
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.large
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Controls.Label {
+                                text: qsTr("cubelinux Runtime")
+                                font.bold: true
+                            }
+
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: qsTr("A separate environment for your Linux apps, tools, and settings.")
+                                opacity: 0.75
+                                wrapMode: Text.Wrap
+                            }
+                        }
                     }
+                }
+
+                Kirigami.Card {
+                    Layout.fillWidth: true
+
+                    contentItem: RowLayout {
+                        spacing: Kirigami.Units.mediumSpacing
+
+                        Kirigami.Icon {
+                            source: "folder-home"
+                            implicitWidth: Kirigami.Units.iconSizes.medium
+                            implicitHeight: Kirigami.Units.iconSizes.medium
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Controls.Label {
+                                text: qsTr("Shared home folder")
+                                font.bold: true
+                            }
+
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: qsTr("Runtime apps and the terminal can access your files at %1.").arg(page.controller.sharedHomePath)
+                                opacity: 0.75
+                                wrapMode: Text.Wrap
+                            }
+                        }
+                    }
+                }
+
+                Kirigami.InlineMessage {
+                    Layout.fillWidth: true
+                    showCloseButton: false
+                    type: Kirigami.MessageType.Information
+                    text: qsTr("Files in your shared home folder remain on cubelinux if you remove cubelinux Runtime. Other folders can be shared in settings.")
                 }
             }
         }
 
-        Controls.Label {
-            Layout.fillWidth: true
-            text: qsTr("Your shared home files stay on cubelinux if you destroy cubelinux Runtime.")
-            opacity: 0.75
-            wrapMode: Text.Wrap
+        Item {
+            Layout.fillHeight: true
+            Layout.minimumHeight: Kirigami.Units.largeSpacing
         }
     }
 

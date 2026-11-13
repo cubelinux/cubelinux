@@ -166,6 +166,25 @@ from a development environment with those dependencies installed:
 PYTHONPATH=src python3 -m cubelinux_vshell
 ```
 
+To preview the setup pages without initializing the Runtime, install the
+project into your active Python environment once from this directory:
+
+```sh
+python -m pip install -e .
+```
+
+Then run the same command from any working directory on Windows, Linux, or
+macOS:
+
+```sh
+cubelinux-vshell-preview
+```
+
+The preview uses an in-memory controller. It does not call LXC, check network
+connectivity, or change system settings. It requires PySide6, Qt Quick, and Qt
+Quick Controls. When KDE Kirigami is installed, it loads the actual setup
+pages. Otherwise it opens a Qt Quick Controls preview of those screens.
+
 ## Official development references
 
 - [KDE Python application with Kirigami](https://develop.kde.org/docs/getting-started/python/python-app/)
