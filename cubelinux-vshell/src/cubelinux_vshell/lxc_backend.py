@@ -715,6 +715,7 @@ def enter() -> int:
         raise VShellError("Virtual Shell is not set up yet. Open it from the application menu first.")
 
     start_runtime()
+    account = _account()
     root = _lxc_path()
 
     term = os.environ.get("TERM", "xterm-256color")
