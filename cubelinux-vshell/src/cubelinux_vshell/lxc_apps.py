@@ -12,7 +12,8 @@ from urllib.parse import unquote, urlparse
 from .lxc_backend import (
     CONTAINER_NAME, CONTAINER_RUNTIME_DIR, GUEST_ID, VShellError,
     _account, _container_running, _container_runtime_value,
-    _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
+    _ensure_guest_host_runtime_path, _ensure_guest_x11_socket_path,
+    _ensure_host_desktop_mounts,
     _ensure_flathub_remote, _ensure_slirp_config, _ensure_slirp_network, _home,
     _host_runtime_dir, _lxc_path, _rootfs_path, _start_container,
     _stop_container, is_initialized,
@@ -153,6 +154,8 @@ def launch_app(desktop_file: str, files: list[str] | None = None) -> int:
         values["Exec"], files or [], _display_name(values), guest_desktop_file,
         values.get("Icon", ""), account
     )
+    if Path(argv[0]).name == "flatpak":
+        _ensure_guest_host_runtime_path(account)
     if Path(argv[0]).name == "plasma-discover":
         if container_running:
             _ensure_flathub_remote(print)

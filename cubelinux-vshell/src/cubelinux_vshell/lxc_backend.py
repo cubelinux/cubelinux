@@ -6,6 +6,7 @@ import ipaddress
 import os
 import pwd
 import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -322,20 +323,76 @@ def _ensure_slirp_config() -> bool:
         )
         changed = True
 
-    mount_auto_indexes = [
-        index for index, line in enumerate(updated)
-        if line.partition("=")[0].strip() == "lxc.mount.auto" and "=" in line
-    ]
-    if mount_auto_indexes:
-        index = mount_auto_indexes[-1]
-        key, _, value = updated[index].partition("=")
+    # An earlier workaround changed proc:mixed to proc:rw, but it did not let
+    # Bubblewrap mount procfs and relaxed the guest's /proc/sys restrictions.
+    # Restore the mixed mode; the separate clean procfs below fixes the mount.
+    for index, line in enumerate(updated):
+        key, separator, value = line.partition("=")
+        if not separator or key.strip() != "lxc.mount.auto":
+            continue
         mounts = value.split()
-        proc_entries = [item for item in mounts if item == "proc" or item.startswith("proc:")]
-        if proc_entries != ["proc:rw"]:
-            mounts = [item for item in mounts if item != "proc" and not item.startswith("proc:")]
-            mounts.insert(0, "proc:rw")
-            updated[index] = f"{key.rstrip()} = {' '.join(mounts)}"
+        if "proc:rw" in mounts:
+            restored_mounts = (
+                "proc:mixed" if item == "proc:rw" else item for item in mounts
+            )
+            updated[index] = f"{key.rstrip()} = {' '.join(restored_mounts)}"
             changed = True
+
+    legacy_proc_target = "var/lib/cubelinux-vshell/proc"
+    without_legacy_proc: list[str] = []
+    for line in updated:
+        fields = line.split()
+        if (
+            len(fields) >= 5
+            and fields[:2] == ["lxc.mount.entry", "="]
+            and fields[2] == "proc"
+            and fields[3] == legacy_proc_target
+            and fields[4] == "proc"
+        ):
+            changed = True
+            continue
+        without_legacy_proc.append(line)
+    if without_legacy_proc != updated:
+        updated = without_legacy_proc
+
+    # A second, unmasked procfs lets Bubblewrap create its own procfs after
+    # systemd masks selected paths on /proc (for example, boot_id).
+    nested_proc_marker = "# VShell Flatpak nested proc mount"
+    nested_proc_entry = (
+        "lxc.mount.entry = proc proc2 proc "
+        "nosuid,nodev,noexec,relatime,create=dir 0 0"
+    )
+    nested_proc_marker_index = next(
+        (index for index, line in enumerate(updated) if line == nested_proc_marker),
+        None,
+    )
+    has_managed_nested_proc = (
+        nested_proc_marker_index is not None
+        and nested_proc_marker_index + 1 < len(updated)
+        and updated[nested_proc_marker_index + 1].strip() == nested_proc_entry
+    )
+    if not has_managed_nested_proc:
+        before_nested_proc = updated.copy()
+        if nested_proc_marker_index is not None:
+            del updated[nested_proc_marker_index]
+            if (
+                nested_proc_marker_index < len(updated)
+                and updated[nested_proc_marker_index].strip() == nested_proc_entry
+            ):
+                del updated[nested_proc_marker_index]
+        has_proc2_mount = any(
+            len(fields := line.split()) >= 4
+            and fields[:2] == ["lxc.mount.entry", "="]
+            and fields[3] == "proc2"
+            for line in updated
+        )
+        if not has_proc2_mount:
+            updated.extend([nested_proc_marker, nested_proc_entry])
+        if updated != before_nested_proc:
+            changed = True
+
+    if updated != lines:
+        changed = True
 
     if not changed:
         return False
@@ -475,6 +532,51 @@ def _ensure_guest_x11_socket_path(progress: Progress | None = None) -> None:
     _attach("/usr/bin/bash", "-ceu", script, progress=progress)
 
 
+def _ensure_guest_host_runtime_path(
+    account: pwd.struct_passwd, progress: Progress | None = None
+) -> None:
+    """Expose host runtime paths at the absolute paths returned over D-Bus."""
+    runtime_dir = _host_runtime_dir(account)
+    if runtime_dir is None:
+        return
+
+    source = CONTAINER_RUNTIME_DIR
+    old_helper_target = runtime_dir / ".flatpak-helper"
+    runtime_dir_arg = shlex.quote(str(runtime_dir))
+    source_arg = shlex.quote(source)
+    old_helper_target_arg = shlex.quote(str(old_helper_target))
+    script = (
+        "set -eu; "
+        f"target={runtime_dir_arg}; "
+        f"source={source_arg}; "
+        "if [ -L \"$target\" ]; then "
+        "if [ \"$(readlink \"$target\")\" = \"$source\" ]; then exit 0; fi; "
+        "echo 'VShell found an unexpected host runtime path in the guest.' >&2; "
+        "exit 1; "
+        "fi; "
+        "if [ -d \"$target\" ]; then "
+        f"if [ -L {old_helper_target_arg} ] "
+        f"&& [ \"$(readlink {old_helper_target_arg})\" = \"$source/.flatpak-helper\" ] "
+        f"&& [ -z \"$(find \"$target\" -mindepth 1 -maxdepth 1 "
+        "! -name .flatpak-helper -print -quit)\" ]; then "
+        f"rm {old_helper_target_arg}; "
+        "rmdir \"$target\"; "
+        "elif [ -z \"$(find \"$target\" -mindepth 1 -maxdepth 1 -print -quit)\" ]; then "
+        "rmdir \"$target\"; "
+        "else "
+        "echo 'VShell cannot map the host runtime because its guest path is already occupied.' >&2; "
+        "exit 1; "
+        "fi; "
+        "elif [ -e \"$target\" ]; then "
+        "echo 'VShell cannot map the host runtime because its guest path is already occupied.' >&2; "
+        "exit 1; "
+        "fi; "
+        "install -d -m 0755 \"$(dirname \"$target\")\"; "
+        "ln -s \"$source\" \"$target\""
+    )
+    _attach("/usr/bin/bash", "-ceu", script, progress=progress)
+
+
 def _stop_container(progress: Progress) -> None:
     if _container_running(progress):
         _run(
@@ -533,6 +635,7 @@ def start_runtime(progress: Progress = print) -> bool:
         _start_container(progress)
     else:
         _ensure_slirp_network(progress)
+    _ensure_guest_host_runtime_path(account, progress)
     _ensure_guest_x11_socket_path(progress)
     return True
 
