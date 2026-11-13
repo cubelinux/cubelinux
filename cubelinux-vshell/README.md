@@ -38,10 +38,13 @@ The old `lxc-net` bridge service is not used and is gated off, including when an
 older image left it enabled. Existing Fedora environments switch from their old
 veth configuration the next time VShell starts them.
 Programs in the container can read and modify files in the shared home folder.
-The host user's runtime directory and X11 socket directory are also mounted so
-terminal-launched applications can connect to the host's Wayland/XWayland,
-D-Bus, and PipeWire/PulseAudio session. The host X11 directory is mounted outside
-the guest's `/tmp` and linked back after the Fedora guest mounts its temporary
+The host user's XDG runtime directory is recursively mounted at
+`/mnt/vshell-host-runtime` so guest applications can access the host's
+Wayland/XWayland, D-Bus, and PipeWire/PulseAudio sockets. VShell also exposes
+that directory inside the guest at its original host path, usually
+`/run/user/1000`. This lets Flatpak resolve absolute runtime paths returned by
+the host session helper and document portal. The host X11 directory is mounted
+outside the guest's `/tmp` and linked back after Fedora mounts its temporary
 filesystem there. The container user is mapped to the desktop user's host ID,
 so those sockets accept connections as that user.
 
@@ -111,8 +114,14 @@ and account tools. LXC imports the image into the existing `vshell` container
 location. The resulting filesystem stays mutable; VShell does not mount it
 read-only. It keeps the same guest user, shared home, network, desktop sockets,
 application launchers, and port forwarding setup. The image includes Flatpak and
-Discover's Flatpak backend. Flatpak sandbox behavior inside rootless LXC may be
-limited; DNF remains available in Fedora.
+Discover's Flatpak backend. For nested Flatpak sandboxes, VShell mounts a second
+clean procfs at `/proc2` so Bubblewrap can mount the sandbox's `/proc`. It also
+binds `/proc2/sys/user` over `/proc/sys/user` so Bubblewrap can set
+`user.max_user_namespaces` while disabling further user namespaces. The rest of
+the sysctl tree keeps LXC's existing `proc:mixed` policy. Existing containers
+are migrated away from the ineffective `proc:rw` workaround and updated to use
+these mounts; VShell restarts a running container when needed to apply the
+configuration.
 
 ## Use
 

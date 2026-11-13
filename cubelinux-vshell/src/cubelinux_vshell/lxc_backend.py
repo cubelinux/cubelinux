@@ -323,9 +323,9 @@ def _ensure_slirp_config() -> bool:
         )
         changed = True
 
-    # An earlier workaround changed proc:mixed to proc:rw, but it did not let
-    # Bubblewrap mount procfs and relaxed the guest's /proc/sys restrictions.
-    # Restore the mixed mode; the separate clean procfs below fixes the mount.
+    # Keep the main proc mount in mixed mode. Bubblewrap needs a clean procfs
+    # to mount its sandbox /proc, plus the user namespace sysctl subtree for
+    # its --disable-userns setup.
     for index, line in enumerate(updated):
         key, separator, value = line.partition("=")
         if not separator or key.strip() != "lxc.mount.auto":
@@ -389,6 +389,45 @@ def _ensure_slirp_config() -> bool:
         if not has_proc2_mount:
             updated.extend([nested_proc_marker, nested_proc_entry])
         if updated != before_nested_proc:
+            changed = True
+
+    # Bubblewrap writes user.max_user_namespaces while disabling nested user
+    # namespaces. Bind only this procfs subtree from the clean proc mount and
+    # preserve the main proc mount's existing mixed policy elsewhere.
+    userns_sysctl_marker = "# VShell Flatpak user namespace sysctl mount"
+    userns_sysctl_entry = (
+        "lxc.mount.entry = proc2/sys/user proc/sys/user none "
+        "bind,relative,rw 0 0"
+    )
+    userns_sysctl_marker_index = next(
+        (index for index, line in enumerate(updated) if line == userns_sysctl_marker),
+        None,
+    )
+    has_managed_userns_sysctl = (
+        userns_sysctl_marker_index is not None
+        and userns_sysctl_marker_index + 1 < len(updated)
+        and updated[userns_sysctl_marker_index + 1].strip() == userns_sysctl_entry
+    )
+    if not has_managed_userns_sysctl:
+        before_userns_sysctl = updated.copy()
+        if userns_sysctl_marker_index is not None:
+            del updated[userns_sysctl_marker_index]
+            if (
+                userns_sysctl_marker_index < len(updated)
+                and updated[userns_sysctl_marker_index].strip().startswith(
+                    "lxc.mount.entry = proc2/sys/user proc/sys/user none "
+                )
+            ):
+                del updated[userns_sysctl_marker_index]
+        has_userns_sysctl_mount = any(
+            len(fields := line.split()) >= 5
+            and fields[:2] == ["lxc.mount.entry", "="]
+            and fields[2:5] == ["proc2/sys/user", "proc/sys/user", "none"]
+            for line in updated
+        )
+        if not has_userns_sysctl_mount:
+            updated.extend([userns_sysctl_marker, userns_sysctl_entry])
+        if updated != before_userns_sysctl:
             changed = True
 
     if updated != lines:
@@ -624,10 +663,10 @@ def start_runtime(progress: Progress = print) -> bool:
         return False
 
     account = _account()
-    network_config_changed = _ensure_slirp_config()
+    container_config_changed = _ensure_slirp_config()
     mounts_changed = _ensure_host_desktop_mounts(account)
     running = _container_running(progress)
-    if (mounts_changed or network_config_changed) and running:
+    if (mounts_changed or container_config_changed) and running:
         _report(progress, "Restarting the cubelinux Runtime to apply session settings...")
         _stop_container(progress)
         running = False
