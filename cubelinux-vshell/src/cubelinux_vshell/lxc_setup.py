@@ -17,6 +17,7 @@ from .lxc_backend import (
     _ensure_flathub_remote, _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
     _ensure_slirp_config, _ensure_slirp_network, _escape_mount_path, _home,
     _lxc_path, _report, _rootless_scope, _run, _start_container,
+    install_runtime_autostart, remove_runtime_autostart,
     _stop_container, _wait_for_network, is_initialized,
 )
 from .shared_folders import clear_shared_folders, sync_saved_shared_folders
@@ -196,6 +197,10 @@ def initialize(progress: Progress = print) -> None:
         elif _container_running(progress):
             _ensure_slirp_network(progress)
             _ensure_flathub_remote(progress)
+        try:
+            install_runtime_autostart()
+        except VShellError as error:
+            _report(progress, str(error))
         _report(progress, "Fedora Virtual Shell is already set up.")
         return
     account = _account()
@@ -287,6 +292,10 @@ def initialize(progress: Progress = print) -> None:
     _ensure_guest_x11_socket_path(progress)
     _mark_initialized()
     _ensure_flathub_remote(progress)
+    try:
+        install_runtime_autostart()
+    except VShellError as error:
+        _report(progress, str(error))
     _report(progress, "Fedora Virtual Shell is ready.")
 
 
@@ -300,6 +309,7 @@ def destroy_container(progress: Progress = print) -> None:
             clear_shared_folders()
             clear_port_forwarding_settings()
             clear_apps()
+            remove_runtime_autostart()
             _report(progress, "The Fedora environment is already destroyed.")
             return
         if _container_running(progress):
@@ -310,6 +320,7 @@ def destroy_container(progress: Progress = print) -> None:
         clear_shared_folders()
         clear_port_forwarding_settings()
         clear_apps()
+        remove_runtime_autostart()
         return
 
     if _container_running(progress):
@@ -334,3 +345,4 @@ def destroy_container(progress: Progress = print) -> None:
     clear_shared_folders()
     clear_port_forwarding_settings()
     clear_apps()
+    remove_runtime_autostart()

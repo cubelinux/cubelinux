@@ -26,8 +26,10 @@ from .controller import SetupController
 from .lxc_backend import (
     VShellError,
     enter,
+    install_runtime_autostart,
     install_shutdown_hook,
     is_initialized,
+    start_runtime,
     status,
     stop,
 )
@@ -181,6 +183,7 @@ def _run_command(arguments: list[str]) -> int:
         "command",
         choices=(
             "init",
+            "start",
             "enter",
             "open-terminal",
             "stop",
@@ -196,6 +199,9 @@ def _run_command(arguments: list[str]) -> int:
     try:
         if parsed.command == "init":
             initialize()
+            return 0
+        if parsed.command == "start":
+            start_runtime()
             return 0
         if parsed.command == "enter":
             return enter()
@@ -222,6 +228,12 @@ def _run_command(arguments: list[str]) -> int:
 
 
 def main() -> int:
+    if is_initialized():
+        try:
+            install_runtime_autostart()
+        except VShellError as error:
+            print(f"cubelinux-vshell: {error}", file=sys.stderr)
+
     if len(sys.argv) > 1:
         if sys.argv[1] not in ("watch-apps", "launch-app"):
             try:

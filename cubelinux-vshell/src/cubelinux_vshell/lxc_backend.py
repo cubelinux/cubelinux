@@ -67,6 +67,52 @@ def install_shutdown_hook() -> None:
         ) from error
 
 
+def install_runtime_autostart() -> bool:
+    """Register a KDE login entry once, leaving Plasma's user choice intact."""
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    entry = config_home / "autostart" / "org.cubelinux.VShellRuntime.desktop"
+    migration_marker = config_home / "cubelinux-vshell" / "runtime-autostart-migrated"
+    if migration_marker.exists():
+        return False
+
+    contents = (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=Virtual Shell Runtime\n"
+        "Comment=Start the initialized cubelinux Runtime for this desktop session\n"
+        "Exec=/usr/bin/cubelinux-vshell start\n"
+        "OnlyShowIn=KDE;\n"
+        "X-KDE-autostart-after=panel\n"
+        "X-CubeLinux-Managed=true\n"
+    )
+    try:
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        created = not entry.exists()
+        if created:
+            entry.write_text(contents, encoding="utf-8")
+            entry.chmod(0o644)
+        migration_marker.parent.mkdir(parents=True, exist_ok=True)
+        migration_marker.touch(exist_ok=True)
+    except OSError as error:
+        raise VShellError(f"Could not configure runtime autostart: {error}") from error
+    return created
+
+
+def remove_runtime_autostart() -> None:
+    """Remove the managed login entry when the runtime is destroyed."""
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    entry = config_home / "autostart" / "org.cubelinux.VShellRuntime.desktop"
+    migration_marker = config_home / "cubelinux-vshell" / "runtime-autostart-migrated"
+    try:
+        if entry.is_file():
+            contents = entry.read_text(encoding="utf-8")
+            if "X-CubeLinux-Managed=true" in contents:
+                entry.unlink()
+        migration_marker.unlink(missing_ok=True)
+    except OSError as error:
+        raise VShellError(f"Could not remove runtime autostart: {error}") from error
+
+
 def is_initialized() -> bool:
     config = _config_path()
     if not config.is_file() or not (config.parent / "rootfs").is_dir():
@@ -470,6 +516,27 @@ def _start_container(progress: Progress) -> None:
     _ensure_flathub_remote(progress)
 
 
+def start_runtime(progress: Progress = print) -> bool:
+    """Start the initialized runtime for the current desktop session."""
+    if not is_initialized():
+        return False
+
+    account = _account()
+    network_config_changed = _ensure_slirp_config()
+    mounts_changed = _ensure_host_desktop_mounts(account)
+    running = _container_running(progress)
+    if (mounts_changed or network_config_changed) and running:
+        _report(progress, "Restarting the cubelinux Runtime to apply session settings...")
+        _stop_container(progress)
+        running = False
+    if not running:
+        _start_container(progress)
+    else:
+        _ensure_slirp_network(progress)
+    _ensure_guest_x11_socket_path(progress)
+    return True
+
+
 def _ensure_flathub_remote(progress: Progress = print) -> bool:
     """Ensure Flathub exists in the mapped guest user's Flatpak configuration."""
     if not is_initialized():
@@ -544,18 +611,8 @@ def enter() -> int:
             return 0
         raise VShellError("Virtual Shell is not set up yet. Open it from the application menu first.")
 
-    account = _account()
+    start_runtime()
     root = _lxc_path()
-    network_config_changed = _ensure_slirp_config()
-    mounts_changed = _ensure_host_desktop_mounts(account)
-    if (mounts_changed or network_config_changed) and _container_running(print):
-        print("Restarting Fedora to apply its container and desktop settings...")
-        _stop_container(print)
-    if not _container_running(print):
-        _start_container(print)
-    else:
-        _ensure_slirp_network(print)
-    _ensure_guest_x11_socket_path()
 
     term = os.environ.get("TERM", "xterm-256color")
     command = [
