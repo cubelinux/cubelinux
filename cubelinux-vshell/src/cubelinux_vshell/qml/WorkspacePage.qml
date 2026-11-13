@@ -39,7 +39,8 @@ Controls.ScrollView {
         spacing: 0
 
         Item {
-            Layout.fillHeight: true
+            Layout.fillWidth: true
+            Layout.preferredHeight: Kirigami.Units.largeSpacing
             Layout.minimumHeight: Kirigami.Units.largeSpacing
         }
 
@@ -98,35 +99,41 @@ Controls.ScrollView {
                 indeterminate: true
             }
 
-            Repeater {
-                model: page.environments
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.mediumSpacing
 
-                delegate: EnvironmentCard {
-                    required property var modelData
+                Repeater {
+                    model: page.environments
 
-                    Layout.fillWidth: true
-                    environmentId: modelData.id
-                    environmentName: modelData.name
-                    environmentDetails: modelData.details
-                    isDefault: modelData.isDefault
-                    logoSource: page.logoSource
-                    statusLabel: page.containerStatusLabel
-                    statusIcon: page.containerStatusIcon
-                    statusColor: page.containerStatusColor
-                    operationBusy: controller.destroying || controller.folderSharingBusy
-                    canOpen: !controller.busy && !controller.destroying
-                             && !controller.folderSharingBusy && !controller.setupFailed
-                    canManage: !controller.busy && !controller.destroying
-                               && !controller.folderSharingBusy
-                    onOpenRequested: controller.openShell()
-                    onSettingsRequested: page.settingsRequested(modelData.id, modelData.name)
-                    onDestroyRequested: page.destroyRequested(modelData.id)
+                    delegate: EnvironmentCard {
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        environmentId: modelData.id
+                        environmentName: modelData.name
+                        environmentDetails: modelData.details
+                        isDefault: modelData.isDefault
+                        logoSource: page.logoSource
+                        statusLabel: page.containerStatusLabel
+                        statusIcon: page.containerStatusIcon
+                        statusColor: page.containerStatusColor
+                        operationBusy: controller.destroying || controller.folderSharingBusy
+                        canOpen: !controller.busy && !controller.destroying
+                                 && !controller.folderSharingBusy && !controller.setupFailed
+                        canManage: !controller.busy && !controller.destroying
+                                   && !controller.folderSharingBusy
+                        onOpenRequested: controller.openShell()
+                        onSettingsRequested: page.settingsRequested(modelData.id, modelData.name)
+                        onDestroyRequested: page.destroyRequested(modelData.id)
+                    }
                 }
             }
         }
 
         Item {
-            Layout.fillHeight: true
+            Layout.fillWidth: true
+            Layout.preferredHeight: Kirigami.Units.largeSpacing
             Layout.minimumHeight: Kirigami.Units.largeSpacing
         }
     }

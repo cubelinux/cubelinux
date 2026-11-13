@@ -18,12 +18,14 @@ Kirigami.Card {
     property bool canManage: true
     property url logoSource: "cubelinux-icon.png"
 
+    padding: Kirigami.Units.largeSpacing
+
     signal openRequested(string environmentId)
     signal settingsRequested(string environmentId, string environmentName)
     signal destroyRequested(string environmentId)
 
     contentItem: ColumnLayout {
-        spacing: Kirigami.Units.mediumSpacing
+        spacing: Kirigami.Units.largeSpacing
 
         RowLayout {
             Layout.fillWidth: true
@@ -96,10 +98,6 @@ Kirigami.Card {
             }
         }
 
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
-
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.mediumSpacing
@@ -109,9 +107,11 @@ Kirigami.Card {
                 text: qsTr("Your apps and tools are ready to use.")
                 opacity: 0.75
                 wrapMode: Text.Wrap
+                verticalAlignment: Text.AlignVCenter
             }
 
             Controls.Button {
+                Layout.alignment: Qt.AlignVCenter
                 text: qsTr("Open terminal")
                 icon.name: "utilities-terminal"
                 highlighted: true
@@ -120,6 +120,7 @@ Kirigami.Card {
             }
 
             Controls.ToolButton {
+                Layout.alignment: Qt.AlignVCenter
                 icon.name: "overflow-menu"
                 Accessible.name: qsTr("Environment actions")
                 Controls.ToolTip.text: qsTr("Environment actions")
