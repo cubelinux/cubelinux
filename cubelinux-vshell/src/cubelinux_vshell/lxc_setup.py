@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
-from .app_discovery import clear_apps
+from .app_discovery import clear_apps, discover_apps
 from .lxc_backend import (
     CONTAINER_NAME, GUEST_ID, ID_COUNT, VShellError,
     _account, _attach, _container_running, _config_path,
@@ -296,6 +296,7 @@ def initialize(progress: Progress = print) -> None:
         install_runtime_autostart()
     except VShellError as error:
         _report(progress, str(error))
+    discover_apps()
     _report(progress, "Fedora Virtual Shell is ready.")
 
 

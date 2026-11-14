@@ -64,13 +64,33 @@ def _app_sources(rootfs: Path) -> list[Path]:
     return found
 
 
-def _guest_desktop_path(rootfs: Path, source: Path) -> str:
+def _guest_desktop_path(rootfs: Path, source: Path) -> str | None:
     try:
-        return source.relative_to(rootfs).as_posix()
+        relative = source.relative_to(rootfs)
     except ValueError:
         account = _account()
-        relative = source.resolve(strict=True).relative_to(_home().resolve(strict=True))
-        return (Path("home") / account.pw_name / relative).as_posix()
+        home = _home()
+        try:
+            relative = source.relative_to(home)
+            allowed_root = home.resolve(strict=True)
+        except (OSError, ValueError):
+            return None
+        guest_prefix = Path("home") / account.pw_name
+    else:
+        try:
+            allowed_root = rootfs.resolve(strict=True)
+        except OSError:
+            return None
+        guest_prefix = Path()
+
+    try:
+        # Preserve exported Flatpak paths instead of replacing them with the
+        # symlink target inside the deployment. Still reject broken symlinks
+        # and targets that leave the rootfs or shared home.
+        source.resolve(strict=True).relative_to(allowed_root)
+    except (OSError, ValueError):
+        return None
+    return (guest_prefix / relative).as_posix()
 
 
 def _icon_source(rootfs: Path, icon: str) -> Path | None:
@@ -113,6 +133,8 @@ def _desktop_launcher(rootfs: Path, source: Path, icons: Path) -> dict[str, obje
             or values.get("NoDisplay", "false").lower() == "true"):
         return None
     relative = _guest_desktop_path(rootfs, source)
+    if relative is None:
+        return None
     app_id = hashlib.sha256(relative.encode()).hexdigest()[:20]
     icon_name = values.get("Icon", "applications-other")
     icon = _icon_source(rootfs, icon_name)
@@ -291,18 +313,38 @@ def clear_apps() -> None:
 
 def watch_apps(interval: float = 4.0) -> None:
     """Keep host launcher entries synchronized while the desktop session runs."""
-    fingerprint: tuple[tuple[str, int, int], ...] | None = None
+    fingerprint: tuple[tuple[str, int, int, int], ...] | None = None
     forwarding = PortForwardingMonitor()
     try:
         while True:
             rootfs = _rootfs_path()
-            current: list[tuple[str, int, int]] = []
+            current: list[tuple[str, int, int, int]] = []
+            try:
+                rootfs_stat = rootfs.stat()
+            except OSError:
+                current.append(("@rootfs", -1, -1, -1))
+            else:
+                # Recreating the same image can restore desktop files with
+                # identical paths, mtimes, and sizes. Include the rootfs
+                # identity so that a fast destroy/recreate is still noticed.
+                current.append((
+                    "@rootfs",
+                    rootfs_stat.st_dev,
+                    rootfs_stat.st_ino,
+                    rootfs_stat.st_ctime_ns,
+                ))
             for source in _app_sources(rootfs):
                 try:
                     stat = source.stat()
-                except OSError:
+                    resolved_source = source.resolve(strict=True)
+                except (OSError, RuntimeError):
                     continue
-                current.append((str(source), stat.st_mtime_ns, stat.st_size))
+                current.append((
+                    f"{source}\0{resolved_source}",
+                    stat.st_dev,
+                    stat.st_mtime_ns,
+                    stat.st_size,
+                ))
             current_fingerprint = tuple(current)
             if current_fingerprint != fingerprint:
                 discover_apps()
