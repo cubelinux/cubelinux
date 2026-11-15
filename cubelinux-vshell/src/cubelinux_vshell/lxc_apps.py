@@ -13,6 +13,7 @@ from .lxc_backend import (
     CONTAINER_NAME, CONTAINER_RUNTIME_DIR, GUEST_ID, VShellError,
     _account, _container_running, _container_runtime_value,
     _ensure_guest_host_runtime_path, _ensure_guest_x11_socket_path,
+    _ensure_gpu_device_mounts,
     _ensure_host_desktop_mounts,
     _ensure_flathub_remote, _ensure_slirp_config, _ensure_slirp_network, _home,
     _host_runtime_dir, _lxc_path, _rootfs_path, _start_container,
@@ -117,9 +118,12 @@ def launch_app(desktop_file: str, files: list[str] | None = None) -> int:
     if values.get("Type") != "Application" or not values.get("Exec"):
         raise VShellError("The Fedora application entry is missing or cannot be launched.")
     network_config_changed = _ensure_slirp_config()
+    gpu_mounts_changed = _ensure_gpu_device_mounts()
     mounts_changed = _ensure_host_desktop_mounts(account)
     container_running = _container_running(print)
-    if (mounts_changed or network_config_changed) and container_running:
+    if (
+        mounts_changed or network_config_changed or gpu_mounts_changed
+    ) and container_running:
         _stop_container(print)
         container_running = False
     if not container_running:

@@ -8,6 +8,7 @@ import pwd
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import time
 from pathlib import Path
@@ -20,6 +21,8 @@ GUEST_ID = 50000
 ID_COUNT = 65536
 CONTAINER_RUNTIME_DIR = "/mnt/vshell-host-runtime"
 CONTAINER_X11_DIR = "/mnt/vshell-host-x11"
+GPU_MOUNT_START = "# VShell managed Intel and AMD GPU devices"
+GPU_MOUNT_END = "# End VShell managed Intel and AMD GPU devices"
 CONTAINER_X11_TMPFILES = "/etc/tmpfiles.d/cubelinux-vshell-x11.conf"
 SHUTDOWN_HOOK = """#!/bin/sh
 # Stop the cubelinux Fedora container before the Plasma user manager exits.
@@ -484,6 +487,105 @@ def _host_desktop_mount_lines(account: pwd.struct_passwd) -> list[str]:
     return lines if len(lines) > 1 else []
 
 
+def _host_drm_devices() -> list[tuple[Path, int, int]]:
+    """Return accessible Intel and AMD DRM card and render device nodes."""
+    device_dir = Path("/dev/dri")
+    sysfs_dir = Path("/sys/class/drm")
+    if not device_dir.is_dir() or not sysfs_dir.is_dir():
+        return []
+
+    devices: list[tuple[Path, int, int]] = []
+    try:
+        nodes = sorted(device_dir.iterdir(), key=lambda item: item.name)
+    except OSError:
+        return []
+    for node in nodes:
+        if not re.fullmatch(r"(?:card\d+|renderD\d+)", node.name):
+            continue
+        try:
+            vendor = (sysfs_dir / node.name / "device" / "vendor").read_text(
+                encoding="ascii"
+            ).strip().lower()
+            if vendor not in {"0x8086", "0x1002"}:
+                continue
+            metadata = node.stat()
+            if not stat.S_ISCHR(metadata.st_mode):
+                continue
+            if not os.access(node, os.R_OK | os.W_OK):
+                continue
+        except OSError:
+            continue
+        devices.append(
+            (node, os.major(metadata.st_rdev), os.minor(metadata.st_rdev))
+        )
+    return devices
+
+
+def _gpu_device_mount_lines() -> list[str]:
+    """Build a narrow LXC allowlist for usable Intel and AMD DRM nodes."""
+    devices = _host_drm_devices()
+    if not devices:
+        return []
+
+    lines = [
+        GPU_MOUNT_START,
+        "lxc.mount.entry = tmpfs dev/dri tmpfs "
+        "nosuid,noexec,mode=0755,size=64k,nr_inodes=64,create=dir 0 0",
+    ]
+    for node, major, minor in devices:
+        relative_target = f"dev/dri/{node.name}"
+        lines.extend(
+            [
+                f"lxc.mount.entry = {_escape_mount_path(str(node))} "
+                f"{relative_target} none bind,create=file,optional 0 0",
+                f"lxc.cgroup2.devices.allow = c {major}:{minor} rw",
+            ]
+        )
+    lines.append(GPU_MOUNT_END)
+    return lines
+
+
+def _ensure_gpu_device_mounts() -> bool:
+    """Update LXC's optional Intel/AMD GPU device mounts and cgroup rules."""
+    config = _config_path()
+    if not config.is_file():
+        return False
+
+    contents = config.read_text(encoding="utf-8")
+    lines = contents.splitlines()
+    preserved: list[str] = []
+    skipping = False
+    insertion_index: int | None = None
+    for line in lines:
+        if line == GPU_MOUNT_START:
+            if insertion_index is None:
+                insertion_index = len(preserved)
+            skipping = True
+            continue
+        if skipping:
+            if line == GPU_MOUNT_END:
+                skipping = False
+            continue
+        if line == GPU_MOUNT_END:
+            continue
+        preserved.append(line)
+
+    section = _gpu_device_mount_lines()
+    if section:
+        if insertion_index is None:
+            insertion_index = len(preserved)
+        preserved[insertion_index:insertion_index] = section
+    updated = "\n".join(preserved).rstrip() + "\n"
+    if updated == contents:
+        return False
+
+    temporary = config.with_name(f".{config.name}.tmp")
+    temporary.write_text(updated, encoding="utf-8")
+    temporary.chmod(config.stat().st_mode & 0o777)
+    temporary.replace(config)
+    return True
+
+
 def _escape_mount_path(value: str) -> str:
     return value.replace("\\", "\\\\").replace(" ", "\\040")
 
@@ -638,6 +740,7 @@ def _stop_container(progress: Progress) -> None:
 
 def _start_container(progress: Progress) -> None:
     _ensure_slirp_config()
+    _ensure_gpu_device_mounts()
     _run(
         _rootless_scope(
             [
@@ -664,9 +767,12 @@ def start_runtime(progress: Progress = print) -> bool:
 
     account = _account()
     container_config_changed = _ensure_slirp_config()
+    gpu_mounts_changed = _ensure_gpu_device_mounts()
     mounts_changed = _ensure_host_desktop_mounts(account)
     running = _container_running(progress)
-    if (mounts_changed or container_config_changed) and running:
+    if (
+        mounts_changed or container_config_changed or gpu_mounts_changed
+    ) and running:
         _report(progress, "Restarting the cubelinux Runtime to apply session settings...")
         _stop_container(progress)
         running = False

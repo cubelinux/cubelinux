@@ -15,7 +15,8 @@ from .lxc_backend import (
     CONTAINER_NAME, GUEST_ID, ID_COUNT, VShellError,
     _account, _attach, _container_running, _config_path,
     _ensure_flathub_remote, _ensure_guest_x11_socket_path, _ensure_host_desktop_mounts,
-    _ensure_slirp_config, _ensure_slirp_network, _escape_mount_path, _home,
+    _ensure_gpu_device_mounts, _ensure_slirp_config, _ensure_slirp_network,
+    _escape_mount_path, _home,
     _lxc_path, _report, _rootless_scope, _run, _start_container,
     install_runtime_autostart, remove_runtime_autostart,
     _stop_container, _wait_for_network, is_initialized,
@@ -189,7 +190,9 @@ def _mark_initialized() -> None:
 def initialize(progress: Progress = print) -> None:
     """Prepare the host and create a rootless Fedora OCI environment."""
     if is_initialized():
-        changed = _ensure_slirp_config()
+        config_changed = _ensure_slirp_config()
+        gpu_mounts_changed = _ensure_gpu_device_mounts()
+        changed = config_changed or gpu_mounts_changed
         if changed and _container_running(progress):
             _report(progress, "Updating Fedora's container settings…")
             _stop_container(progress)
