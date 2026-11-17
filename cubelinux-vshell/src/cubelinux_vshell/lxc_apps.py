@@ -160,9 +160,12 @@ def launch_app(desktop_file: str, files: list[str] | None = None) -> int:
     )
     if Path(argv[0]).name == "flatpak":
         _ensure_guest_host_runtime_path(account)
-    if Path(argv[0]).name == "plasma-discover":
-        if container_running:
-            _ensure_flathub_remote(print)
+    app_command = Path(argv[0]).name
+    if app_command == "plasma-discover" and container_running:
+        _ensure_flathub_remote(print)
+    # These services must activate on a runtime-local bus, not the forwarded
+    # Plasma session bus from the host.
+    if app_command in {"flatpak", "plasma-discover"}:
         argv = ["dbus-launch", "--exit-with-session", *argv]
     command.extend(["--", *argv])
     return subprocess.run(command, check=False).returncode
