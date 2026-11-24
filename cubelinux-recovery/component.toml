@@ -1,0 +1,13 @@
+id = "recovery"
+packages = []
+services = []
+
+[[files]]
+source = "main.py"
+destination = "/usr/lib/cubelinux-recovery/main.py"
+mode = "0755"
+
+[[files]]
+source = "qml"
+destination = "/usr/lib/cubelinux-recovery/qml"
+mode = "0644"

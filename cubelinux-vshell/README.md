@@ -54,7 +54,7 @@ Intel (`0x8086`) or AMD (`0x1002`) integrated or discrete `/dev/dri/card*` and
 does not expose NVIDIA or other GPU devices. The Runtime includes Mesa OpenGL
 and Vulkan drivers. If no supported device is available, applications can use
 Mesa software rendering (llvmpipe for OpenGL and lavapipe for Vulkan). This
-also applies when CubeLinux runs in a VM: accelerated graphics are available
+also applies when cubelinux runs in a VM: accelerated graphics are available
 only if the VM exposes a supported Intel or AMD DRM device to the host OS.
 Some Flatpak apps may need the `dri` device permission enabled in their
 Flatpak settings to use an exposed GPU.

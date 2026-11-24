@@ -29,6 +29,8 @@
 
 ## About cubelinux
 
+The project name is always written **cubelinux**, in lowercase.
+
 cubelinux brings a complete desktop experience together in one operating
 system. It starts with a first boot setup to create your user, then opens into
 the restricted KDE Plasma desktop.
