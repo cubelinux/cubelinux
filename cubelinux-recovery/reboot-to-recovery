@@ -89,7 +89,7 @@ def verify_bundle(slot: Path, check_contents: bool = True) -> dict[str, str]:
 
 def recovery_partition_present(efi_id: str, expected_recovery_id: str, expected_fs_uuid: str,
                                check_contents: bool = True) -> bool:
-    root = run("/usr/bin/findmnt", "-nro", "SOURCE", "--mountpoint", "/sysroot").split("[", 1)[0]
+    root = run("/usr/bin/findmnt", "-nro", "SOURCE", "--mountpoint", "/").split("[", 1)[0]
     root_partition = parent_device(root, "part")
     root_disk = parent_device(root, "disk")
     root_id = run("/usr/sbin/blkid", "-s", "PARTUUID", "-o", "value", root_partition)
@@ -258,8 +258,13 @@ def main() -> int:
             status = "available\n"
         except ValueError as error:
             status = f"unavailable\n{error}\n"
-        except (OSError, subprocess.CalledProcessError):
-            status = "unavailable\nRecovery could not be checked on this system.\n"
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or "").strip()
+            if not detail:
+                detail = f"{error.cmd} exited with status {error.returncode}"
+            status = f"unavailable\nRecovery check failed: {detail}\n"
+        except OSError as error:
+            status = f"unavailable\nRecovery check failed: {error}\n"
         path = Path("/run/cubelinux-recovery-status")
         temporary = path.with_suffix(".new")
         temporary.write_text(status, encoding="utf-8")
