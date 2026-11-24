@@ -95,8 +95,12 @@ class RecoveryRebootTest(unittest.TestCase):
                 def __exit__(self, *args): return False
 
             def fake_run(*args):
-                if args[0].endswith("findmnt"): return "/dev/root"
-                if args[0].endswith("blkid"): return "ext4" if "TYPE" in args else EFI_ID
+                if args[0].endswith("findmnt"):
+                    return "/dev/efi" if "/boot/efi" in args else "/dev/root"
+                if args[0].endswith("blkid"):
+                    if "TYPE" in args:
+                        return "vfat" if args[-1] == "/dev/efi" else "ext4"
+                    return EFI_ID
                 return ""
 
             completed = subprocess.CompletedProcess([], 0, stdout="/dev/recovery\n", stderr="")
