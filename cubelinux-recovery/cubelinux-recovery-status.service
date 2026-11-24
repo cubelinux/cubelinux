@@ -1,9 +1,10 @@
 [Unit]
 Description=Check whether factory recovery is available
-After=local-fs.target
+After=local-fs.target bootloader-update.service
 
 [Service]
 Type=oneshot
+ExecStartPre=-/usr/lib/cubelinux-recovery/runtime/install-recovery-boot /
 ExecStart=/usr/libexec/cubelinux-recovery-reboot --status
 
 [Install]

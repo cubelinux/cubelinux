@@ -23,6 +23,13 @@ def run(*args: str) -> str:
                           stderr=subprocess.PIPE).stdout.strip()
 
 
+def refresh_recovery_bootloader() -> None:
+    helper = Path("/usr/lib/cubelinux-recovery/runtime/install-recovery-boot")
+    if not helper.is_file() or helper.is_symlink():
+        raise ValueError("The signed recovery bootloader updater is missing.")
+    run(str(helper), "/")
+
+
 def parent_device(device: str, kind: str) -> str:
     lines = run("/usr/bin/lsblk", "--inverse", "--list", "--noheadings", "--paths",
                 "--output", "NAME,TYPE", "--", device).splitlines()
@@ -148,11 +155,10 @@ def recovery_partition_present(efi_id: str, expected_recovery_id: str, expected_
     return matches == 1
 
 
-def boot_layout(efi_id: str) -> tuple[str, str]:
+def boot_layout(efi_id: str, require_secure_boot: bool = False) -> tuple[str, str]:
     directory = Path("/boot/efi/EFI/cubelinux-recovery")
-    binary = directory / "recovery.efi"
     metadata = directory / "boot-layout"
-    if not binary.is_file() or not metadata.is_file():
+    if not metadata.is_file():
         raise ValueError("Recovery is not installed. Reinstall cubelinux to add factory recovery.")
     entries = {}
     for line in metadata.read_text(encoding="utf-8").splitlines():
@@ -160,20 +166,53 @@ def boot_layout(efi_id: str) -> tuple[str, str]:
         if not separator or not value or key in entries:
             raise ValueError("The recovery boot metadata is invalid.")
         entries[key] = value
-    if set(entries) != {"recovery_partuuid", "recovery_fs_uuid", "efi_partuuid", "boot_sha256"}:
-        raise ValueError("The recovery boot metadata is incomplete.")
+
+    legacy_fields = {"recovery_partuuid", "recovery_fs_uuid", "efi_partuuid", "boot_sha256"}
+    signed_fields = {"format", "recovery_partuuid", "recovery_fs_uuid", "efi_partuuid",
+                     "shim_sha256", "grub_sha256", "grub_cfg_sha256"}
+    if set(entries) == legacy_fields:
+        if require_secure_boot:
+            raise ValueError("Recovery needs an update before it can boot with Secure Boot enabled.")
+        binary = directory / "recovery.efi"
+        if not binary.is_file():
+            raise ValueError("The recovery bootloader is missing.")
+        if not re.fullmatch(r"[0-9a-f]{64}", entries["boot_sha256"]):
+            raise ValueError("The recovery boot metadata is invalid.")
+        digest = hashlib.sha256()
+        with binary.open("rb") as source:
+            for block in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(block)
+        if digest.hexdigest() != entries["boot_sha256"]:
+            raise ValueError("The recovery bootloader is damaged.")
+    elif set(entries) == signed_fields and entries["format"] == "2":
+        for key in ("shim_sha256", "grub_sha256", "grub_cfg_sha256"):
+            if not re.fullmatch(r"[0-9a-f]{64}", entries[key]):
+                raise ValueError("The recovery boot metadata is invalid.")
+        fedora_directory = Path("/boot/efi/EFI/fedora")
+        for name, digest_key in (("shimx64.efi", "shim_sha256"),
+                                 ("grubx64.efi", "grub_sha256"),
+                                 ("grub.cfg", "grub_cfg_sha256")):
+            copied = directory / name
+            if not copied.is_file():
+                raise ValueError(f"The recovery boot file is missing: {name}")
+            digest = hashlib.sha256()
+            with copied.open("rb") as source:
+                for block in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(block)
+            if digest.hexdigest() != entries[digest_key]:
+                raise ValueError(f"The recovery boot file is damaged: {name}")
+            if name != "grub.cfg":
+                fedora_copy = fedora_directory / name
+                if not fedora_copy.is_file() or fedora_copy.read_bytes() != copied.read_bytes():
+                    raise ValueError("The Fedora Secure Boot loader is stale or has changed.")
+    else:
+        raise ValueError("The recovery boot metadata is incomplete or unsupported.")
+
     if entries["efi_partuuid"].lower() != efi_id.lower():
         raise ValueError("The recovery boot entry belongs to a different EFI partition.")
     if (not re.fullmatch(r"[0-9a-fA-F-]{36}", entries["recovery_partuuid"])
-            or not re.fullmatch(r"[0-9a-fA-F-]{36}", entries["recovery_fs_uuid"])
-            or not re.fullmatch(r"[0-9a-f]{64}", entries["boot_sha256"])):
+            or not re.fullmatch(r"[0-9a-fA-F-]{36}", entries["recovery_fs_uuid"])):
         raise ValueError("The recovery boot metadata is invalid.")
-    digest = hashlib.sha256()
-    with binary.open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    if digest.hexdigest() != entries["boot_sha256"]:
-        raise ValueError("The recovery bootloader is damaged.")
     return entries["recovery_partuuid"], entries["recovery_fs_uuid"]
 
 
@@ -184,20 +223,26 @@ def recovery_entry(check_contents: bool = True) -> tuple[str, str]:
     variable = secure_boot.read_bytes()
     if len(variable) < 5 or variable[4] not in (0, 1):
         raise ValueError("Could not determine the Secure Boot state.")
-    if variable[4] == 1:
-        raise ValueError("This recovery boot image does not support Secure Boot yet.")
+    secure_boot_enabled = variable[4] == 1
     efi = run("/usr/bin/findmnt", "-nro", "SOURCE", "--mountpoint", "/boot/efi")
     efi_id = run("/usr/sbin/blkid", "-s", "PARTUUID", "-o", "value", efi)
     if not re.fullmatch(r"[0-9a-fA-F-]{36}", efi_id):
         raise ValueError("Could not identify the EFI partition.")
-    recovery_id, recovery_fs_uuid = boot_layout(efi_id)
+    recovery_id, recovery_fs_uuid = boot_layout(efi_id, require_secure_boot=secure_boot_enabled)
     if not recovery_partition_present(efi_id, recovery_id, recovery_fs_uuid, check_contents):
         raise ValueError("The recovery partition is missing or does not match this installation.")
     entries = run("/usr/sbin/efibootmgr", "-v")
     matches = []
+    signed_loader = r"file(\efi\cubelinux-recovery\shimx64.efi)"
+    legacy_loader = r"file(\efi\cubelinux-recovery\recovery.efi)"
     for line in entries.splitlines():
         entry = re.match(r"^Boot([0-9A-Fa-f]{4})\*?\s+cubelinux recovery\s", line)
-        if entry and efi_id.lower() in line.lower() and "cubelinux-recovery" in line.lower():
+        if not entry or efi_id.lower() not in line.lower():
+            continue
+        normalized = line.lower()
+        if secure_boot_enabled and signed_loader not in normalized:
+            raise ValueError("The recovery firmware entry does not use Fedora's Secure Boot loader.")
+        if signed_loader in normalized or (not secure_boot_enabled and legacy_loader in normalized):
             matches.append(entry.group(1))
     if len(matches) != 1:
         raise ValueError("The recovery boot entry is missing or ambiguous.")
@@ -221,6 +266,7 @@ def main() -> int:
         temporary.chmod(0o644)
         os.replace(temporary, path)
         return 0
+    refresh_recovery_bootloader()
     entry, entries = recovery_entry()
     previous = re.search(r"^BootNext:\s*([0-9A-Fa-f]{4})\s*$", entries, re.MULTILINE)
     run("/usr/sbin/efibootmgr", "--bootnext", entry)

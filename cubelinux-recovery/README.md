@@ -22,8 +22,10 @@ During factory reset, the full backend output is written to
 fails, the wizard shows the end of that log; the file remains available until
 the recovery environment reboots.
 
-This prototype uses an unsigned recovery bootloader and temporarily hides the
-installer's root encryption option. Recovery boot requires Secure Boot to be
-disabled, and reset refuses existing encrypted roots. Both limitations need
-to be addressed before supporting those configurations.
+Recovery reuses Fedora's signed shim and GRUB from the installed EFI system
+partition, along with the Fedora kernel from the recovery bundle. It can boot
+with Secure Boot enabled on systems that trust Fedora's shim. The external
+initramfs and mutable recovery payload use checksums for damage detection; they
+are not a verified-boot security boundary. The installer temporarily hides
+root encryption, and reset refuses existing encrypted roots.
 

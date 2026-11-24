@@ -81,6 +81,13 @@ def block_id(device: str, tag: str) -> str:
     return command("/usr/sbin/blkid", "-s", tag, "-o", "value", device)
 
 
+def refresh_recovery_bootloader(component_root: Path) -> None:
+    helper = component_root / "runtime" / "install-recovery-boot"
+    if not helper.is_file() or helper.is_symlink():
+        raise ValueError("the signed recovery bootloader updater is missing")
+    command(str(helper), "/")
+
+
 def active_slot(mount: Path) -> str:
     lines = (mount / "active.cfg").read_text().splitlines()
     values = [line.removeprefix("set recovery_slot=") for line in lines
@@ -333,6 +340,10 @@ def main() -> int:
                 update(mount, layout, slot, reference, digest, image)
             finally:
                 command("/usr/bin/umount", str(mount))
+            # Keep the recovery copy of Fedora's signed shim/GRUB current even
+            # when the recovery payload itself already matches this image.
+            refresh_recovery_bootloader(component_root)
+            command("/usr/bin/systemctl", "start", "cubelinux-recovery-status.service")
     return 0
 
 

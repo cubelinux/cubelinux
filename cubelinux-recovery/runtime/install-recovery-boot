@@ -5,7 +5,11 @@ target=${1:?Usage: install-recovery-boot TARGET_ROOT}
 target=$(/usr/bin/realpath -e -- "$target")
 fail() { echo "Recovery boot setup failed: $*" >&2; exit 1; }
 [[ -d /sys/firmware/efi/efivars ]] || fail 'UEFI variables are unavailable'
-efi_mount="$target/boot/efi"
+if [[ "$target" == / ]]; then
+    efi_mount=/boot/efi
+else
+    efi_mount="$target/boot/efi"
+fi
 efi=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount") || fail 'EFI partition is not mounted'
 efi=${efi%%\[*}
 [[ -b "$efi" ]] || fail 'EFI source is not a block device'
@@ -14,7 +18,15 @@ part=$(/usr/bin/lsblk --nodeps --noheadings --output PARTN -- "$efi" | /usr/bin/
 efi_id=$(/usr/sbin/blkid -s PARTUUID -o value "$efi")
 [[ -n "$disk" && "$part" =~ ^[0-9]+$ && "$efi_id" =~ ^[[:xdigit:]-]{36}$ ]] || fail 'could not identify EFI partition'
 [[ $(/usr/sbin/blkid -s TYPE -o value "$efi") == vfat ]] || fail 'EFI partition is not FAT formatted'
-root=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$target") || fail 'root is not mounted'
+if [[ "$target" == / ]]; then
+    if root=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint /sysroot 2>/dev/null); then
+        :
+    else
+        root=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint /) || fail 'root is not mounted'
+    fi
+else
+    root=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$target") || fail 'root is not mounted'
+fi
 root=${root%%\[*}
 root_part=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$root" | /usr/bin/awk '$2 == "part" {print $1; exit}')
 root_disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$root" | /usr/bin/awk '$2 == "disk" {print $1; exit}')
@@ -59,66 +71,102 @@ recovery_fs_uuid=$(/usr/sbin/blkid -s UUID -o value "${matches[0]}")
 [[ "$recovery_id" =~ ^[[:xdigit:]-]{36}$ ]] || fail 'invalid recovery partition identity'
 [[ "$recovery_fs_uuid" =~ ^[[:xdigit:]-]{36}$ ]] || fail 'invalid recovery filesystem identity'
 
-tmp=$(/usr/bin/mktemp -d /run/cubelinux-grub.XXXXXX)
-original_order=
+boot_dir="$efi_mount/EFI/cubelinux-recovery"
+boot_metadata="$boot_dir/boot-layout"
+fedora_boot_dir="$efi_mount/EFI/fedora"
+shim_source="$fedora_boot_dir/shimx64.efi"
+grub_source="$fedora_boot_dir/grubx64.efi"
+[[ -s "$shim_source" ]] || fail 'the Fedora Secure Boot shim is missing from the EFI partition'
+[[ -s "$grub_source" ]] || fail 'the Fedora-signed GRUB loader is missing from the EFI partition'
+
+# Reuse the Fedora-signed shim and GRUB unchanged. A custom grub2-mkstandalone
+# image is not trusted by Secure Boot and must never be the firmware entry.
+tmp=$(/usr/bin/mktemp -d /run/cubelinux-signed-grub.XXXXXX)
+order_to_restore=
 restore_order=0
 cleanup() {
-    if (( restore_order )) && [[ -n "$original_order" ]]; then
-        /usr/sbin/efibootmgr --bootorder "$original_order" >&2 || true
+    if (( restore_order )) && [[ -n "$order_to_restore" ]]; then
+        /usr/sbin/efibootmgr --bootorder "$order_to_restore" >&2 || true
     fi
     /usr/bin/rm -rf -- "$tmp"
 }
 trap cleanup EXIT
-cat > "$tmp/grub.cfg" <<EOF
+
+staged_boot="$tmp/EFI/cubelinux-recovery"
+/usr/bin/install -d -m 0755 "$staged_boot"
+/usr/bin/install -m 0644 "$shim_source" "$staged_boot/shimx64.efi"
+/usr/bin/install -m 0644 "$grub_source" "$staged_boot/grubx64.efi"
+cat > "$staged_boot/grub.cfg" <<EOF
 search --no-floppy --fs-uuid --set=recovery $recovery_fs_uuid
 export recovery
 configfile (\$recovery)/active.cfg
 EOF
-boot_dir="$efi_mount/EFI/cubelinux-recovery"
-boot_binary="$boot_dir/recovery.efi"
-boot_metadata="$boot_dir/boot-layout"
-/usr/bin/install -d -m 0755 "$boot_dir"
-reuse=0
-if [[ -f "$boot_binary" && -f "$boot_metadata" ]] && \
-    /usr/bin/grep -Fxq "recovery_partuuid=$recovery_id" "$boot_metadata" && \
-    /usr/bin/grep -Fxq "recovery_fs_uuid=$recovery_fs_uuid" "$boot_metadata" && \
-    /usr/bin/grep -Fxq "efi_partuuid=$efi_id" "$boot_metadata"; then
-    recorded_sha=$(/usr/bin/sed -n 's/^boot_sha256=//p' "$boot_metadata")
-    actual_sha=$(/usr/bin/sha256sum "$boot_binary")
-    [[ "$recorded_sha" == "${actual_sha%% *}" ]] && reuse=1
-fi
-if (( ! reuse )); then
-    /usr/bin/grub2-mkstandalone -O x86_64-efi --fonts= --themes= --locales= \
-        --modules='part_gpt ext2 search search_fs_uuid configfile linux' \
-        -o "$tmp/recovery.efi" "boot/grub/grub.cfg=$tmp/grub.cfg"
-    /usr/bin/install -m 0644 "$tmp/recovery.efi" "$boot_dir/.recovery.efi.new"
-    /usr/bin/sync --file-system "$efi_mount"
-    /usr/bin/mv -f "$boot_dir/.recovery.efi.new" "$boot_binary"
-    boot_sha=$(/usr/bin/sha256sum "$boot_binary")
-    {
-        printf 'recovery_partuuid=%s\n' "$recovery_id"
-        printf 'recovery_fs_uuid=%s\n' "$recovery_fs_uuid"
-        printf 'efi_partuuid=%s\n' "$efi_id"
-        printf 'boot_sha256=%s\n' "${boot_sha%% *}"
-    } > "$tmp/boot-layout"
-    /usr/bin/install -m 0644 "$tmp/boot-layout" "$boot_dir/.boot-layout.new"
-    /usr/bin/mv -f "$boot_dir/.boot-layout.new" "$boot_metadata"
-    /usr/bin/sync --file-system "$efi_mount"
-fi
+shim_sha=$(/usr/bin/sha256sum "$staged_boot/shimx64.efi")
+grub_sha=$(/usr/bin/sha256sum "$staged_boot/grubx64.efi")
+config_sha=$(/usr/bin/sha256sum "$staged_boot/grub.cfg")
+{
+    printf 'format=2\n'
+    printf 'recovery_partuuid=%s\n' "$recovery_id"
+    printf 'recovery_fs_uuid=%s\n' "$recovery_fs_uuid"
+    printf 'efi_partuuid=%s\n' "$efi_id"
+    printf 'shim_sha256=%s\n' "${shim_sha%% *}"
+    printf 'grub_sha256=%s\n' "${grub_sha%% *}"
+    printf 'grub_cfg_sha256=%s\n' "${config_sha%% *}"
+} > "$staged_boot/boot-layout"
 
-# Preserve normal startup order and append the recovery entry to the firmware menu.
-before=$(/usr/sbin/efibootmgr)
+/usr/bin/install -d -m 0755 "$boot_dir"
+for name in shimx64.efi grubx64.efi grub.cfg; do
+    /usr/bin/install -m 0644 "$staged_boot/$name" "$boot_dir/.$name.new"
+    /usr/bin/mv -f "$boot_dir/.$name.new" "$boot_dir/$name"
+done
+/usr/bin/install -m 0644 "$staged_boot/boot-layout" "$boot_dir/.boot-layout.new"
+/usr/bin/mv -f "$boot_dir/.boot-layout.new" "$boot_metadata"
+/usr/bin/sync --file-system "$efi_mount"
+
+# Preserve the ordinary OS boot order and migrate the old unsigned entry.
+before=$(/usr/sbin/efibootmgr -v)
 order=$(printf '%s\n' "$before" | /usr/bin/sed -n 's/^BootOrder: //p')
 [[ -n "$order" ]] || fail 'firmware boot order is unavailable'
-original_order=$order
-existing=$(/usr/sbin/efibootmgr -v | /usr/bin/awk -v id="${efi_id,,}" 'tolower($0) ~ id && /cubelinux recovery/ { print substr($1,5,4) }')
-if [[ -z "$existing" ]]; then
-    restore_order=1
-    /usr/sbin/efibootmgr --create --disk "$disk" --part "$part" --label 'cubelinux recovery' --loader '\EFI\cubelinux-recovery\recovery.efi'
-    existing=$(/usr/sbin/efibootmgr -v | /usr/bin/awk -v id="${efi_id,,}" 'tolower($0) ~ id && /cubelinux recovery/ { print substr($1,5,4) }')
+order_to_restore=$order
+restore_order=1
+mapfile -t recovery_entries < <(printf '%s\n' "$before" | /usr/bin/awk \
+    -v id="${efi_id,,}" 'tolower($0) ~ id && /cubelinux recovery/ { print substr($1,5,4) }')
+(( ${#recovery_entries[@]} <= 1 )) || fail 'multiple recovery firmware entries are present'
+
+expected_loader='file(\efi\cubelinux-recovery\shimx64.efi)'
+existing=${recovery_entries[0]:-}
+if [[ -n "$existing" ]]; then
+    existing_line=$(printf '%s\n' "$before" | /usr/bin/awk -v boot="Boot$existing" 'substr($1,1,8) == boot { print }')
+    if [[ "${existing_line,,}" != *"$expected_loader"* ]]; then
+        /usr/sbin/efibootmgr --bootnum "$existing" --delete-bootnum
+        order_to_restore=$(printf '%s' "$order" | /usr/bin/tr ',' '\n' |
+            /usr/bin/grep -Fvx "$existing" | /usr/bin/paste -sd, -)
+        [[ -n "$order_to_restore" ]] || fail 'firmware boot order would be empty after replacing the old recovery entry'
+        existing=
+    fi
 fi
-[[ "$existing" =~ ^[[:xdigit:]]{4}$ ]] || fail 'recovery firmware entry is missing or ambiguous'
-case ",$order," in *",$existing,"*) new_order=$order ;; *) new_order="$order,$existing" ;; esac
-/usr/sbin/efibootmgr --bootorder "$new_order"
+
+if [[ -z "$existing" ]]; then
+    /usr/sbin/efibootmgr --create --disk "$disk" --part "$part" \
+        --label 'cubelinux recovery' --loader '\EFI\cubelinux-recovery\shimx64.efi'
+    after=$(/usr/sbin/efibootmgr -v)
+    mapfile -t created_candidates < <(printf '%s\n' "$after" | /usr/bin/awk \
+        -v id="${efi_id,,}" 'tolower($0) ~ id && /cubelinux recovery/ { print substr($1,5,4) }')
+    created_entries=()
+    for candidate in "${created_candidates[@]}"; do
+        candidate_line=$(printf '%s\n' "$after" | /usr/bin/awk \
+            -v boot="Boot$candidate" 'substr($1,1,8) == boot { print }')
+        [[ "${candidate_line,,}" == *"$expected_loader"* ]] && created_entries+=("$candidate")
+    done
+    (( ${#created_entries[@]} == 1 )) || fail 'signed recovery firmware entry is missing or ambiguous'
+    existing=${created_entries[0]}
+fi
+
+[[ "$existing" =~ ^[[:xdigit:]]{4}$ ]] || fail 'recovery firmware entry is invalid'
+case ",$order_to_restore," in
+    *",$existing,"*) ;;
+    *) order_to_restore="${order_to_restore:+$order_to_restore,}$existing" ;;
+esac
+/usr/sbin/efibootmgr --bootorder "$order_to_restore"
 restore_order=0
-echo "Installed recovery boot entry $existing."
+echo "Installed Fedora-signed recovery boot entry $existing."
