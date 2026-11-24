@@ -1,11 +1,11 @@
 id = "recovery"
-packages = ["efibootmgr", "skopeo", "squashfs-tools"]
+packages = ["efibootmgr"]
 services = ["cubelinux-recovery-status.service", "cubelinux-recovery-update.timer"]
 
 [[files]]
-source = "update-recovery"
-destination = "/usr/libexec/cubelinux-recovery-update"
-mode = "0755"
+source = "backend"
+destination = "/usr/share/cubelinux-recovery/backend-src"
+mode = "0644"
 
 [[files]]
 source = "cubelinux-recovery-update.service"
@@ -18,11 +18,6 @@ destination = "/usr/lib/systemd/system/cubelinux-recovery-status.service"
 [[files]]
 source = "cubelinux-recovery-update.timer"
 destination = "/usr/lib/systemd/system/cubelinux-recovery-update.timer"
-
-[[files]]
-source = "reboot-to-recovery"
-destination = "/usr/libexec/cubelinux-recovery-reboot"
-mode = "0755"
 
 [[files]]
 source = "org.cubelinux.Recovery.policy"

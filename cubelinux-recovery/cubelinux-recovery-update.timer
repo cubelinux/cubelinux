@@ -1,5 +1,5 @@
 [Unit]
-Description=Keep offline cubelinux recovery in sync with the booted image
+Description=Keep cubelinux recovery tools up to date
 
 [Timer]
 OnBootSec=10min

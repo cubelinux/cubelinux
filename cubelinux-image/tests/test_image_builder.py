@@ -127,12 +127,14 @@ class ComponentStagingTests(unittest.TestCase):
                 "usr/lib/cubelinux-recovery/runtime/install-bootc",
                 "usr/share/cubelinux-recovery/kcm-src/CMakeLists.txt",
                 "usr/share/cubelinux-recovery/kcm-src/ui/main.qml",
-                "usr/libexec/cubelinux-recovery-update",
-                "usr/libexec/cubelinux-recovery-reboot",
+                "usr/share/cubelinux-recovery/backend-src/CMakeLists.txt",
+                "usr/share/cubelinux-recovery/backend-src/recovery-common.cpp",
+                "usr/share/cubelinux-recovery/backend-src/recovery-reboot.cpp",
+                "usr/share/cubelinux-recovery/backend-src/recovery-update.cpp",
             ):
                 self.assertTrue((staged / relative).is_file(), relative)
-            self.assertIn("skopeo", packages)
-            self.assertIn("squashfs-tools", packages)
+            self.assertNotIn("skopeo", packages)
+            self.assertNotIn("squashfs-tools", packages)
             self.assertIn("efibootmgr", packages)
             self.assertEqual(services, {"cubelinux-recovery-status.service", "cubelinux-recovery-update.timer"})
 

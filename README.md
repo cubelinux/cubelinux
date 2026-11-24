@@ -50,7 +50,31 @@ updates. When an update is ready, restart to complete the installation.
 The Reset System KDE Settings module can start the offline factory-reset
 recovery when the installation has a recovery partition. The
 `cubelinux-installer` creates and provisions that partition; this repository
-provides the recovery interface, reset backend, and recovery-image updater.
+provides the recovery interface, reset backend, and recovery-runtime updater.
+
+### Factory recovery
+
+The recovery feature has one action: **Factory Reset**. In KDE System Settings,
+the user chooses **Reset System**, then **Restart to Factory Reset**. The
+computer reboots into the separate recovery environment; it does not erase
+anything until the user confirms Factory Reset there. Recovery formats the
+installed `CUBE_ROOT` partition, installs the local offline image payload, and
+reboots to Plasma's first-boot account setup. The EFI and recovery partitions
+are preserved.
+
+Calamares creates the `CUBE_RECOVERY` partition during a fresh Erase disk
+installation. The recovery partition holds the ISO-provisioned boot image and
+offline reset payload. OS updates can independently update the recovery UI,
+QML screens, and reset helpers through checksummed A/B runtime slots. That
+small runtime update uses files already in the installed image and needs no
+network. Factory Reset continues to install the payload snapshot from the ISO
+used for installation; updating the recovery code does not update that OS
+payload. Existing installations without `CUBE_RECOVERY` need to be reinstalled
+to add the partition.
+
+See the `cubelinux-installer` repository's
+`docs/recovery-partition-design.md` for the partition layout, boot flow,
+update behavior, and current limitations.
 
 Virtual Shell provides a separate Fedora environment for running command-line
 tools and graphical applications.

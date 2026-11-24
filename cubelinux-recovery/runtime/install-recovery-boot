@@ -6,19 +6,6 @@ target=$(/usr/bin/realpath -e -- "$target")
 fail() { echo "Recovery boot setup failed: $*" >&2; exit 1; }
 [[ -d /sys/firmware/efi/efivars ]] || fail 'UEFI variables are unavailable'
 if [[ "$target" == / ]]; then
-    efi_mount=/boot/efi
-else
-    efi_mount="$target/boot/efi"
-fi
-efi=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount") || fail 'EFI partition is not mounted'
-efi=${efi%%\[*}
-[[ -b "$efi" ]] || fail 'EFI source is not a block device'
-disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$efi" | /usr/bin/awk '$2 == "disk" {print $1; exit}')
-part=$(/usr/bin/lsblk --nodeps --noheadings --output PARTN -- "$efi" | /usr/bin/tr -d '[:space:]')
-efi_id=$(/usr/sbin/blkid -s PARTUUID -o value "$efi")
-[[ -n "$disk" && "$part" =~ ^[0-9]+$ && "$efi_id" =~ ^[[:xdigit:]-]{36}$ ]] || fail 'could not identify EFI partition'
-[[ $(/usr/sbin/blkid -s TYPE -o value "$efi") == vfat ]] || fail 'EFI partition is not FAT formatted'
-if [[ "$target" == / ]]; then
     if root=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint /sysroot 2>/dev/null); then
         :
     else
@@ -30,11 +17,67 @@ fi
 root=${root%%\[*}
 root_part=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$root" | /usr/bin/awk '$2 == "part" {print $1; exit}')
 root_disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$root" | /usr/bin/awk '$2 == "disk" {print $1; exit}')
-[[ -n "$root_part" && "$root_disk" == "$disk" ]] || fail 'the EFI and root partitions must be on the same disk'
+[[ -n "$root_part" && -n "$root_disk" ]] || fail 'could not identify the installed root disk'
 root_id=$(/usr/sbin/blkid -s PARTUUID -o value "$root_part")
-disk_id=$(/usr/sbin/blkid -s PTUUID -o value "$disk")
+disk_id=$(/usr/sbin/blkid -s PTUUID -o value "$root_disk")
 [[ "$disk_id" =~ ^[[:xdigit:]-]{36}$ ]] ||
     fail 'the EFI and root partitions must be on the same GPT disk'
+
+if [[ "$target" == / ]]; then
+    efi_mount=/boot/efi
+    fstab=/etc/fstab
+else
+    efi_mount="$target/boot/efi"
+    fstab="$target/etc/fstab"
+fi
+ensure_fstab_efi_entry() {
+    local path=$1 uuid=$2 directory temporary
+    directory=${path%/*}
+    [[ -d "$directory" ]] || fail "fstab directory is missing: $directory"
+    [[ ! -L "$path" && ( ! -e "$path" || -f "$path" ) ]] || fail 'fstab is not a regular file'
+    if [[ -f "$path" ]] &&
+        [[ $(/usr/bin/awk '$0 !~ /^[[:space:]]*#/ && NF >= 2 && $2 == "/boot/efi" { count++ } END { print count+0 }' "$path") == 1 ]] &&
+        /usr/bin/grep -Fxq "UUID=$uuid /boot/efi vfat umask=0077,shortname=winnt 0 2" "$path"; then
+        return
+    fi
+    temporary=$(/usr/bin/mktemp "$directory/.fstab.XXXXXX") || fail 'could not create temporary fstab'
+    if [[ -f "$path" ]]; then
+        /usr/bin/awk '$0 ~ /^[[:space:]]*#/ || NF < 2 || $2 != "/boot/efi" { print }' "$path" > "$temporary" ||
+            fail 'could not read fstab'
+    fi
+    printf 'UUID=%s /boot/efi vfat umask=0077,shortname=winnt 0 2\n' "$uuid" >> "$temporary"
+    /usr/bin/chmod 0644 "$temporary"
+    /usr/bin/mv -f -- "$temporary" "$path" || fail 'could not update fstab'
+}
+
+if efi=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount" 2>/dev/null); then
+    efi=${efi%%\[*}
+else
+    [[ "$target" == / ]] || fail 'EFI partition is not mounted in the installer'
+    mapfile -t efi_candidates < <(/usr/bin/lsblk --list --noheadings --paths --output NAME,PARTTYPE -- "$root_disk" |
+        /usr/bin/awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" { print $1 }')
+    (( ${#efi_candidates[@]} == 1 )) || fail "expected one EFI partition on $root_disk, found ${#efi_candidates[@]}"
+    efi=${efi_candidates[0]}
+fi
+[[ -b "$efi" ]] || fail 'EFI source is not a block device'
+efi_type=$(/usr/bin/lsblk --nodeps --noheadings --output PARTTYPE -- "$efi" | /usr/bin/tr -d '[:space:]')
+[[ "${efi_type,,}" == c12a7328-f81f-11d2-ba4b-00a0c93ec93b ]] || fail 'partition is not an EFI System Partition'
+[[ $(/usr/sbin/blkid -s TYPE -o value "$efi") == vfat ]] || fail 'EFI partition is not FAT formatted'
+disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$efi" | /usr/bin/awk '$2 == "disk" {print $1; exit}')
+part=$(/usr/bin/lsblk --nodeps --noheadings --output PARTN -- "$efi" | /usr/bin/tr -d '[:space:]')
+efi_id=$(/usr/sbin/blkid -s PARTUUID -o value "$efi")
+efi_uuid=$(/usr/sbin/blkid -s UUID -o value "$efi")
+[[ -n "$disk" && "$root_disk" == "$disk" && "$part" =~ ^[0-9]+$ && "$efi_id" =~ ^[[:xdigit:]-]{36}$ && "$efi_uuid" =~ ^[[:xdigit:]-]{36}$ ]] ||
+    fail 'the EFI and root partitions must be on the same disk'
+ensure_fstab_efi_entry "$fstab" "$efi_uuid"
+if [[ "$target" == / ]] && ! /usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount" >/dev/null 2>&1; then
+    /usr/bin/install -d -m 0755 "$efi_mount" || fail 'could not create the EFI mount point'
+    /usr/bin/mount "$efi_mount" || fail 'could not mount the EFI partition'
+    efi=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount") || fail 'EFI mount did not become available'
+    efi=${efi%%\[*}
+    [[ "$(/usr/bin/readlink -f -- "$efi")" == "$(/usr/bin/readlink -f -- "${efi_candidates[0]}")" ]] ||
+        fail 'mounted EFI source does not match the system EFI partition'
+fi
 mapfile -t candidates < <(/usr/sbin/blkid -t PARTLABEL=CUBE_RECOVERY -o device || true)
 matches=()
 for candidate in "${candidates[@]}"; do
@@ -49,10 +92,24 @@ for candidate in "${candidates[@]}"; do
         mapfile -t selectors < <(/usr/bin/sed -n 's/^set recovery_slot=//p' "$selector")
         if (( ${#selectors[@]} == 1 )) && [[ "${selectors[0]}" == A || "${selectors[0]}" == B ]]; then
             slot=${selectors[0]}
+            mapfile -t runtime_selectors < <(/usr/bin/sed -n 's/^set recovery_runtime_slot=//p' "$selector")
+            runtime_slot=
+            if (( ${#runtime_selectors[@]} == 1 )) && [[ "${runtime_selectors[0]}" == A || "${runtime_selectors[0]}" == B ]]; then
+                runtime_slot=${runtime_selectors[0]}
+            elif (( ${#runtime_selectors[@]} != 0 )); then
+                /usr/bin/umount "$tmp" || fail 'could not unmount recovery check'
+                /usr/bin/rmdir "$tmp"
+                continue
+            fi
             manifest="$tmp/slots/$slot/CUBELINUX_LAYOUT"
             recovery_id=$(/usr/sbin/blkid -s PARTUUID -o value "$candidate")
-            expected_config=$(printf 'set recovery_slot=%s\nlinux ($recovery)/slots/%s/boot/vmlinuz root=live:PARTUUID=%s ro rd.live.image rd.live.dir=/slots/%s/LiveOS rd.live.overlay.overlayfs=1 cubelinux.recovery=1 cubelinux.recovery_slot=%s console=tty0\ninitrd ($recovery)/slots/%s/boot/initrd.img\nboot\n' \
-                "$slot" "$slot" "$recovery_id" "$slot" "$slot" "$slot")
+            if [[ -n "$runtime_slot" ]]; then
+                expected_config=$(printf 'set recovery_slot=%s\nset recovery_runtime_slot=%s\nlinux ($recovery)/slots/%s/boot/vmlinuz root=live:PARTUUID=%s ro rd.live.image rd.live.dir=/slots/%s/LiveOS rd.live.overlay.overlayfs=1 cubelinux.recovery=1 cubelinux.recovery_slot=%s cubelinux.recovery_runtime_slot=%s console=tty0\ninitrd ($recovery)/slots/%s/boot/initrd.img\nboot\n' \
+                    "$slot" "$runtime_slot" "$slot" "$recovery_id" "$slot" "$slot" "$runtime_slot" "$slot")
+            else
+                expected_config=$(printf 'set recovery_slot=%s\nlinux ($recovery)/slots/%s/boot/vmlinuz root=live:PARTUUID=%s ro rd.live.image rd.live.dir=/slots/%s/LiveOS rd.live.overlay.overlayfs=1 cubelinux.recovery=1 cubelinux.recovery_slot=%s console=tty0\ninitrd ($recovery)/slots/%s/boot/initrd.img\nboot\n' \
+                    "$slot" "$slot" "$recovery_id" "$slot" "$slot" "$slot")
+            fi
             if [[ -f "$manifest" && "$(<"$selector")" == "$expected_config" ]] && \
                 /usr/bin/grep -Fxq "disk_ptuuid=$disk_id" "$manifest" && \
                 /usr/bin/grep -Fxq "root_partuuid=$root_id" "$manifest" && \

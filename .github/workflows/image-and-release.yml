@@ -38,9 +38,6 @@ jobs:
         working-directory: cubelinux-image
         run: python -m unittest discover -s tests -v
 
-      - name: Run recovery unit tests
-        run: python -m unittest discover -s cubelinux-recovery/tests -v
-
       - name: Set image name and tag
         id: image
         shell: bash

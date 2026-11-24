@@ -1,11 +1,9 @@
 [Unit]
-Description=Update the offline cubelinux recovery image
-After=network-online.target
-Wants=network-online.target
+Description=Update the cubelinux recovery runtime
 
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/cubelinux-recovery-update
-TimeoutStartSec=4h
+TimeoutStartSec=30min
 Nice=10
 IOSchedulingClass=idle
