@@ -9,7 +9,9 @@ include(KDEInstallDirs)
 include(KDECompilerSettings NO_POLICY_SCOPE)
 include(KDECMakeSettings)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Quick Qml)
-find_package(KF6 6.0 REQUIRED COMPONENTS CoreAddons KCMUtils KCMUtilsQuick I18n)
+# Fedora ships the Quick library target with the KF6KCMUtils CMake package;
+# KCMUtilsQuick is not a separate FindKF6 component there.
+find_package(KF6 6.0 REQUIRED COMPONENTS CoreAddons KCMUtils I18n)
 kcmutils_add_qml_kcm(kcm_cubelinux_recovery)
 target_sources(kcm_cubelinux_recovery PRIVATE recoverysettings.cpp recoverysettings.h)
 target_link_libraries(kcm_cubelinux_recovery PRIVATE Qt6::Quick KF6::CoreAddons KF6::KCMUtilsQuick KF6::I18n)
