@@ -1,0 +1,243 @@
+#!/usr/bin/python3
+"""Select this installation's recovery entry for the next UEFI boot."""
+
+import os
+import hashlib
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+REQUIRED_BUNDLE_FILES = {
+    "LiveOS/squashfs.img",
+    "boot/vmlinuz",
+    "boot/initrd.img",
+    "CUBELINUX_IMAGE_REF",
+    "CUBELINUX_LAYOUT",
+}
+
+
+def run(*args: str) -> str:
+    return subprocess.run(args, check=True, text=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE).stdout.strip()
+
+
+def parent_device(device: str, kind: str) -> str:
+    lines = run("/usr/bin/lsblk", "--inverse", "--list", "--noheadings", "--paths",
+                "--output", "NAME,TYPE", "--", device).splitlines()
+    matches = [parts[0] for line in lines if len(parts := line.split()) == 2 and parts[1] == kind]
+    if len(matches) != 1:
+        raise ValueError("Could not identify the system disk.")
+    return matches[0]
+
+
+def verify_bundle(slot: Path, check_contents: bool = True) -> dict[str, str]:
+    entries = {}
+    manifest = slot / "SHA256SUMS"
+    if manifest.is_symlink() or not manifest.is_file():
+        raise ValueError("Recovery checksum manifest is missing.")
+    for line in manifest.read_text(encoding="ascii").splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
+        if not match or match.group(2) in entries:
+            raise ValueError("Recovery checksum manifest is invalid.")
+        entries[match.group(2)] = match.group(1)
+    expected = set(REQUIRED_BUNDLE_FILES)
+    digest_file = slot / "CUBELINUX_DIGEST"
+    if digest_file.exists() or digest_file.is_symlink():
+        expected.add("CUBELINUX_DIGEST")
+    if set(entries) != expected:
+        raise ValueError("Recovery checksum manifest has unexpected entries.")
+    for name, expected_digest in entries.items():
+        path = slot / name
+        if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f"Recovery file is missing or invalid: {name}")
+        if not check_contents:
+            continue
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for block in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(block)
+        if digest.hexdigest() != expected_digest:
+            raise ValueError(f"Recovery file checksum failed: {name}")
+    if "CUBELINUX_DIGEST" in expected and not re.fullmatch(
+        r"sha256:[0-9a-f]{64}\n?", digest_file.read_text(encoding="ascii")
+    ):
+        raise ValueError("Recovery image digest is invalid.")
+    fields = {}
+    for line in (slot / "CUBELINUX_LAYOUT").read_text(encoding="ascii").splitlines():
+        key, separator, value = line.partition("=")
+        if not separator or not value or key in fields:
+            raise ValueError("Recovery layout is invalid.")
+        fields[key] = value
+    if set(fields) != {"format", "disk_ptuuid", "root_partuuid", "recovery_partuuid", "efi_partuuid"}:
+        raise ValueError("Recovery layout is incomplete.")
+    if fields["format"] != "1" or any(
+        not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", value)
+        for key, value in fields.items() if key != "format"
+    ):
+        raise ValueError("Recovery layout has invalid partition identifiers.")
+    return fields
+
+
+def recovery_partition_present(efi_id: str, expected_recovery_id: str, expected_fs_uuid: str,
+                               check_contents: bool = True) -> bool:
+    root = run("/usr/bin/findmnt", "-nro", "SOURCE", "--mountpoint", "/sysroot").split("[", 1)[0]
+    root_partition = parent_device(root, "part")
+    root_disk = parent_device(root, "disk")
+    root_id = run("/usr/sbin/blkid", "-s", "PARTUUID", "-o", "value", root_partition)
+    root_disk_id = run("/usr/sbin/blkid", "-s", "PTUUID", "-o", "value", root_disk)
+    root_type = run("/usr/sbin/blkid", "-s", "TYPE", "-o", "value", root_partition)
+    if root_type == "crypto_LUKS":
+        raise ValueError("Factory reset is not yet available for encrypted installations.")
+    if root_type != "ext4":
+        raise ValueError("The installed root filesystem is not supported by factory reset.")
+    efi_source = run("/usr/bin/findmnt", "-nro", "SOURCE", "--mountpoint", "/boot/efi").split("[", 1)[0]
+    if parent_device(efi_source, "disk") != root_disk:
+        raise ValueError("The EFI and root partitions are on different disks.")
+    if run("/usr/sbin/blkid", "-s", "TYPE", "-o", "value", efi_source) != "vfat":
+        raise ValueError("The EFI partition is not FAT formatted.")
+    result = subprocess.run(["/usr/sbin/blkid", "-t", "PARTLABEL=CUBE_RECOVERY", "-o", "device"],
+                            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if result.returncode not in (0, 2):
+        raise ValueError("Could not inspect the recovery partition.")
+    matches = 0
+    with tempfile.TemporaryDirectory(prefix="cubelinux-recovery-status-", dir="/run") as directory:
+        mount = Path(directory)
+        for candidate in result.stdout.splitlines():
+            mounted = False
+            try:
+                if parent_device(candidate, "disk") != root_disk:
+                    continue
+                run("/usr/bin/mount", "-o", "ro,nodev,nosuid,noexec", candidate, directory)
+                mounted = True
+                config = (mount / "active.cfg").read_text(encoding="utf-8")
+                selectors = re.findall(r"^set recovery_slot=([AB])$", config, re.MULTILINE)
+                if len(selectors) != 1:
+                    continue
+                slot_name = selectors[0]
+                recovery_id = run("/usr/sbin/blkid", "-s", "PARTUUID", "-o", "value", candidate)
+                if recovery_id.lower() != expected_recovery_id.lower():
+                    continue
+                recovery_fs_uuid = run("/usr/sbin/blkid", "-s", "UUID", "-o", "value", candidate)
+                if recovery_fs_uuid.lower() != expected_fs_uuid.lower():
+                    continue
+                if run("/usr/sbin/blkid", "-s", "TYPE", "-o", "value", candidate) != "ext4":
+                    continue
+                slot = mount / "slots" / slot_name
+                layout = verify_bundle(slot, check_contents)
+                if (layout["root_partuuid"].lower() != root_id.lower()
+                        or layout["disk_ptuuid"].lower() != root_disk_id.lower()
+                        or layout["efi_partuuid"].lower() != efi_id.lower()
+                        or layout["recovery_partuuid"].lower() != recovery_id.lower()):
+                    continue
+                expected_config = (
+                    f"set recovery_slot={slot_name}\n"
+                    f"linux ($recovery)/slots/{slot_name}/boot/vmlinuz root=live:PARTUUID={recovery_id} ro "
+                    f"rd.live.image rd.live.dir=/slots/{slot_name}/LiveOS rd.live.overlay.overlayfs=1 "
+                    f"cubelinux.recovery=1 cubelinux.recovery_slot={slot_name} console=tty0\n"
+                    f"initrd ($recovery)/slots/{slot_name}/boot/initrd.img\nboot\n"
+                )
+                if config == expected_config:
+                    matches += 1
+            except (OSError, UnicodeError, ValueError, subprocess.CalledProcessError):
+                pass
+            finally:
+                if mounted:
+                    run("/usr/bin/umount", directory)
+    return matches == 1
+
+
+def boot_layout(efi_id: str) -> tuple[str, str]:
+    directory = Path("/boot/efi/EFI/cubelinux-recovery")
+    binary = directory / "recovery.efi"
+    metadata = directory / "boot-layout"
+    if not binary.is_file() or not metadata.is_file():
+        raise ValueError("Recovery is not installed. Reinstall cubelinux to add factory recovery.")
+    entries = {}
+    for line in metadata.read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.partition("=")
+        if not separator or not value or key in entries:
+            raise ValueError("The recovery boot metadata is invalid.")
+        entries[key] = value
+    if set(entries) != {"recovery_partuuid", "recovery_fs_uuid", "efi_partuuid", "boot_sha256"}:
+        raise ValueError("The recovery boot metadata is incomplete.")
+    if entries["efi_partuuid"].lower() != efi_id.lower():
+        raise ValueError("The recovery boot entry belongs to a different EFI partition.")
+    if (not re.fullmatch(r"[0-9a-fA-F-]{36}", entries["recovery_partuuid"])
+            or not re.fullmatch(r"[0-9a-fA-F-]{36}", entries["recovery_fs_uuid"])
+            or not re.fullmatch(r"[0-9a-f]{64}", entries["boot_sha256"])):
+        raise ValueError("The recovery boot metadata is invalid.")
+    digest = hashlib.sha256()
+    with binary.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    if digest.hexdigest() != entries["boot_sha256"]:
+        raise ValueError("The recovery bootloader is damaged.")
+    return entries["recovery_partuuid"], entries["recovery_fs_uuid"]
+
+
+def recovery_entry(check_contents: bool = True) -> tuple[str, str]:
+    secure_boot = Path("/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c")
+    if not secure_boot.is_file():
+        raise ValueError("Could not determine the Secure Boot state.")
+    variable = secure_boot.read_bytes()
+    if len(variable) < 5 or variable[4] not in (0, 1):
+        raise ValueError("Could not determine the Secure Boot state.")
+    if variable[4] == 1:
+        raise ValueError("This recovery boot image does not support Secure Boot yet.")
+    efi = run("/usr/bin/findmnt", "-nro", "SOURCE", "--mountpoint", "/boot/efi")
+    efi_id = run("/usr/sbin/blkid", "-s", "PARTUUID", "-o", "value", efi)
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", efi_id):
+        raise ValueError("Could not identify the EFI partition.")
+    recovery_id, recovery_fs_uuid = boot_layout(efi_id)
+    if not recovery_partition_present(efi_id, recovery_id, recovery_fs_uuid, check_contents):
+        raise ValueError("The recovery partition is missing or does not match this installation.")
+    entries = run("/usr/sbin/efibootmgr", "-v")
+    matches = []
+    for line in entries.splitlines():
+        entry = re.match(r"^Boot([0-9A-Fa-f]{4})\*?\s+cubelinux recovery\s", line)
+        if entry and efi_id.lower() in line.lower() and "cubelinux-recovery" in line.lower():
+            matches.append(entry.group(1))
+    if len(matches) != 1:
+        raise ValueError("The recovery boot entry is missing or ambiguous.")
+    return matches[0], entries
+
+
+def main() -> int:
+    if os.geteuid() != 0 or sys.argv[1:] not in ([], ["--status"]):
+        raise ValueError("Recovery access requires administrator authorization.")
+    if sys.argv[1:] == ["--status"]:
+        try:
+            recovery_entry(check_contents=False)
+            status = "available\n"
+        except ValueError as error:
+            status = f"unavailable\n{error}\n"
+        except (OSError, subprocess.CalledProcessError):
+            status = "unavailable\nRecovery could not be checked on this system.\n"
+        path = Path("/run/cubelinux-recovery-status")
+        temporary = path.with_suffix(".new")
+        temporary.write_text(status, encoding="utf-8")
+        temporary.chmod(0o644)
+        os.replace(temporary, path)
+        return 0
+    entry, entries = recovery_entry()
+    previous = re.search(r"^BootNext:\s*([0-9A-Fa-f]{4})\s*$", entries, re.MULTILINE)
+    run("/usr/sbin/efibootmgr", "--bootnext", entry)
+    try:
+        run("/usr/bin/systemctl", "reboot")
+    except (subprocess.CalledProcessError, OSError):
+        if previous:
+            run("/usr/sbin/efibootmgr", "--bootnext", previous.group(1))
+        else:
+            run("/usr/sbin/efibootmgr", "--delete-bootnext")
+        raise
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        print(f"Could not restart into recovery: {error}", file=sys.stderr)
+        sys.exit(1)

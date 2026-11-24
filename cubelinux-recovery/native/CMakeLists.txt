@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(cubelinux_recovery_ui LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick)
+add_executable(cubelinux-recovery main.cpp)
+target_link_libraries(cubelinux-recovery PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)

@@ -1,0 +1,37 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+target_root=${1:?Usage: cleanup-installed-fstab ROOT_PATH}
+target_root=$(realpath -e "$target_root")
+fstab="$target_root/etc/fstab"
+
+if [[ ! -f "$fstab" ]]; then
+    echo "Installed fstab is missing: $fstab" >&2
+    exit 1
+fi
+
+temporary_fstab=$(/usr/bin/mktemp "$target_root/etc/.fstab.cubelinux.XXXXXX")
+trap '/usr/bin/rm -f "$temporary_fstab"' EXIT
+/usr/bin/awk 'NF < 2 || $1 ~ /^#/ || $2 != "/" { print }' "$fstab" > "$temporary_fstab"
+
+if /usr/bin/cmp -s "$fstab" "$temporary_fstab"; then
+    exit 0
+fi
+
+/usr/bin/chmod --reference="$fstab" "$temporary_fstab"
+/usr/bin/chown --reference="$fstab" "$temporary_fstab"
+/usr/bin/mv -f "$temporary_fstab" "$fstab"
+trap - EXIT
+
+if [[ -x "$target_root/usr/sbin/restorecon" ]]; then
+    /usr/sbin/chroot "$target_root" /usr/sbin/restorecon /etc/fstab
+elif [[ -x "$target_root/usr/bin/restorecon" ]]; then
+    /usr/sbin/chroot "$target_root" /usr/bin/restorecon /etc/fstab
+fi
+
+if /usr/bin/awk 'NF >= 2 && $1 !~ /^#/ && $2 == "/" { found = 1 } END { exit !found }' "$fstab"; then
+    echo "The composefs root entry remains in $fstab" >&2
+    exit 1
+fi
+
+echo 'Removed the composefs root entry from the installed fstab.'

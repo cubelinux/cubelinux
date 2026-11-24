@@ -1,0 +1,101 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+# Only the dedicated recovery boot may invoke this destructive operation.
+bundle=${1:?Usage: factory-reset RECOVERY_MOUNT --confirm-factory-reset}
+[[ ${2:-} == --confirm-factory-reset && $# == 2 ]] || { echo 'Explicit factory-reset confirmation is required.' >&2; exit 2; }
+[[ $EUID == 0 ]] || { echo 'Factory reset requires root.' >&2; exit 1; }
+case " $(</proc/cmdline) " in
+    *' cubelinux.recovery=1 '*) ;;
+    *) echo 'Factory reset requires the recovery boot environment.' >&2; exit 1 ;;
+esac
+[[ -d /sys/firmware/efi ]] || { echo 'UEFI boot is required.' >&2; exit 1; }
+bundle=$(/usr/bin/realpath -e -- "$bundle")
+/usr/local/libexec/cubelinux/check-recovery-layout "$bundle"
+[[ -s /usr/share/cubelinux/payload.oci.tar && -s /usr/share/cubelinux/target-image-ref ]] || {
+    echo 'The offline image or image reference is missing.' >&2; exit 1;
+}
+/usr/bin/cmp -s "$bundle/CUBELINUX_IMAGE_REF" /usr/share/cubelinux/target-image-ref || {
+    echo 'The booted recovery image does not match the recorded image reference.' >&2; exit 1;
+}
+
+root_id=$(/usr/bin/sed -n 's/^root_partuuid=//p' "$bundle/CUBELINUX_LAYOUT")
+efi_id=$(/usr/bin/sed -n 's/^efi_partuuid=//p' "$bundle/CUBELINUX_LAYOUT")
+root=$(/usr/sbin/blkid --match-token "PARTUUID=$root_id" --output device)
+efi=$(/usr/sbin/blkid --match-token "PARTUUID=$efi_id" --output device)
+efi_uuid=$(/usr/sbin/blkid -s UUID -o value "$efi")
+[[ -n "$efi_uuid" ]] || { echo 'The EFI filesystem UUID is missing.' >&2; exit 1; }
+payload_bytes=$(/usr/bin/stat --format=%s /usr/share/cubelinux/payload.oci.tar)
+root_bytes=$(/usr/sbin/blockdev --getsize64 "$root")
+[[ "$payload_bytes" =~ ^[0-9]+$ && "$root_bytes" =~ ^[0-9]+$ ]] || {
+    echo 'Could not determine reset storage requirements.' >&2; exit 1;
+}
+# Match install-bootc's worst-case scratch requirement and leave room for ext4
+# metadata and reserved blocks. Refuse before formatting if it cannot fit.
+scratch_bytes=$((payload_bytes * 3 + 1073741824))
+(( root_bytes / 10 * 9 >= scratch_bytes )) || {
+    echo 'The root partition is too small for offline installation scratch space.' >&2; exit 1;
+}
+if /usr/bin/findmnt --noheadings --source "$efi" >/dev/null; then
+    echo 'The EFI system partition is already mounted.' >&2; exit 1
+fi
+target=/run/cubelinux-factory-reset-target
+/usr/bin/install -d -m 0700 "$target"
+if /usr/bin/mountpoint -q "$target"; then
+    echo 'The reset target mountpoint is already in use.' >&2; exit 1
+fi
+
+root_mounted=0
+efi_mounted=0
+efi_probe_mounted=0
+efi_probe=$(/usr/bin/mktemp -d /run/cubelinux-reset-efi.XXXXXX)
+cleanup() {
+    if (( efi_mounted )); then /usr/bin/umount "$target/boot/efi" || true; fi
+    if (( root_mounted )); then /usr/bin/umount "$target" || true; fi
+    if (( efi_probe_mounted )); then /usr/bin/umount "$efi_probe" || true; fi
+    /usr/bin/rmdir "$efi_probe" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# Confirm that the preserved EFI filesystem can be mounted and written before
+# formatting the root. Keep this mount available for the installation.
+/usr/bin/mount -t vfat "$efi" "$efi_probe"
+efi_probe_mounted=1
+probe_file=$(/usr/bin/mktemp "$efi_probe/.cubelinux-write-check.XXXXXX")
+/usr/bin/rm -f "$probe_file"
+
+echo 'Formatting the cubelinux root partition.'
+/usr/sbin/mkfs.ext4 -F -L CUBE_ROOT "$root"
+/usr/bin/mount -t ext4 "$root" "$target"
+root_mounted=1
+/usr/bin/install -d -m 0755 "$target/boot/efi"
+/usr/bin/mount --bind "$efi_probe" "$target/boot/efi"
+efi_mounted=1
+echo 'Installing the offline cubelinux image.'
+/usr/local/libexec/cubelinux/install-bootc install "$target"
+
+# The Calamares fstab job normally supplies the EFI entry. Recreate it for
+# the reset path without adding a composefs root entry.
+/usr/bin/install -d -m 0755 "$target/etc"
+fstab="$target/etc/fstab"
+temporary_fstab=$(/usr/bin/mktemp "$target/etc/.fstab.recovery.XXXXXX")
+if [[ -f "$fstab" ]]; then
+    /usr/bin/awk 'NF < 2 || $1 ~ /^#/ || $2 != "/boot/efi" { print }' "$fstab" > "$temporary_fstab"
+    /usr/bin/chmod --reference="$fstab" "$temporary_fstab"
+    /usr/bin/chown --reference="$fstab" "$temporary_fstab"
+else
+    /usr/bin/chmod 0644 "$temporary_fstab"
+fi
+printf 'UUID=%s /boot/efi vfat umask=0077,shortname=winnt 0 2\n' "$efi_uuid" >> "$temporary_fstab"
+/usr/bin/mv -f "$temporary_fstab" "$fstab"
+/usr/local/libexec/cubelinux/cleanup-installed-fstab "$target"
+/usr/local/libexec/cubelinux/install-recovery-boot "$target"
+/usr/local/libexec/cubelinux/install-bootc finalize "$target"
+/usr/bin/sync
+/usr/bin/umount "$target/boot/efi"
+efi_mounted=0
+/usr/bin/umount "$target"
+root_mounted=0
+/usr/bin/umount "$efi_probe"
+efi_probe_mounted=0
+echo 'Factory reset installation completed.'

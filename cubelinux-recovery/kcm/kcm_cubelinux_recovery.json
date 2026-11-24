@@ -1,0 +1,9 @@
+{
+    "KPlugin": {
+        "Name": "Reset System",
+        "Description": "Reinstall cubelinux and erase personal data",
+        "Icon": "system-reboot"
+    },
+    "X-KDE-System-Settings-Parent-Category": "system-administration",
+    "X-KDE-Keywords": "reset,recovery,factory"
+}

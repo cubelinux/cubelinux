@@ -109,6 +109,33 @@ class ConfigureDistroTests(unittest.TestCase):
 
 
 class ComponentStagingTests(unittest.TestCase):
+    def test_recovery_component_stages_native_sources_and_runtime(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            packages, services = prepare_image.stage_components(
+                [{"id": "recovery", "path": "cubelinux-recovery"}],
+                output,
+                component_base=ROOT.parent,
+            )
+            staged = output / "rootfs"
+            for relative in (
+                "usr/lib/cubelinux-recovery/native/CMakeLists.txt",
+                "usr/lib/cubelinux-recovery/native/main.cpp",
+                "usr/lib/cubelinux-recovery/qml/Main.qml",
+                "usr/lib/cubelinux-recovery/qml/InstallerError.qml",
+                "usr/lib/cubelinux-recovery/runtime/factory-reset",
+                "usr/lib/cubelinux-recovery/runtime/install-bootc",
+                "usr/share/cubelinux-recovery/kcm-src/CMakeLists.txt",
+                "usr/share/cubelinux-recovery/kcm-src/ui/main.qml",
+                "usr/libexec/cubelinux-recovery-update",
+                "usr/libexec/cubelinux-recovery-reboot",
+            ):
+                self.assertTrue((staged / relative).is_file(), relative)
+            self.assertIn("skopeo", packages)
+            self.assertIn("squashfs-tools", packages)
+            self.assertIn("efibootmgr", packages)
+            self.assertEqual(services, {"cubelinux-recovery-status.service", "cubelinux-recovery-update.timer"})
+
     def test_stages_component_files_packages_services_and_modes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

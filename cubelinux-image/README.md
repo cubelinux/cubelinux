@@ -39,7 +39,7 @@ delivered and updated as a complete system image.
 
 ### Monorepo layout
 
-Image assembly, the updater, and VShell live in one repository. Component
+Image assembly, the updater, recovery, and VShell live in one repository. Component
 sources stay in their own top-level directories, and the image builder stages
 only the files declared by each component manifest.
 
@@ -55,6 +55,7 @@ cubelinux/
 |   |-- Containerfile
 |   `-- README.md
 |-- cubelinux-updater/                 # Updater source and component.toml
+|-- cubelinux-recovery/                # Recovery, Settings module and updater
 `-- cubelinux-vshell/                  # VShell source and component.toml
 ```
 
@@ -71,15 +72,16 @@ cubelinux/
   pinning Dolphin as Plasma creates the initial panel for a new profile. They
   do not rewrite existing user profiles. Keep the selected global theme in
   `kdeglobals`.
-- **`cubelinux-updater/component.toml`** and
+- **`cubelinux-updater/component.toml`**, **`cubelinux-recovery/component.toml`** and
   **`cubelinux-vshell/component.toml`** describe each app's image contribution:
   packages it needs, systemd services to enable, and files to install with
   their source path, destination, and mode. Components can also declare
   HTTPS downloads for assets that should only enter the image during builds.
   Keep each app's code and local assets in its own top-level folder.
 - **`cubelinux-image/Containerfile`** contains shared image build operations.
-  Do not add component-specific `COPY` statements or package lists here;
-  declare those in the component manifest. It builds the installed KF6 KIO
+  Declare component files and runtime packages in the component manifest.
+  The recovery build stage is an exception for compiling its native Qt UI and
+  KDE Settings plugin without shipping development dependencies. It also builds the installed KF6 KIO
   subpackages from the matching Fedora source RPM with the cubelinux kiosk
   launch policy patch in an intermediate stage, then installs those patched
   RPMs into the image.
@@ -106,9 +108,9 @@ to the image configuration.
 
 ### Adding or updating a component
 
-1. Update the app and its `component.toml` in `cubelinux-updater/` or
-   `cubelinux-vshell/`.
-2. The image workflow runs automatically when either component folder changes.
+1. Update the app and its `component.toml` in `cubelinux-updater/`,
+   `cubelinux-recovery/` or `cubelinux-vshell/`.
+2. The image workflow runs automatically when a component folder changes.
 3. `cubelinux-image/config/image.toml` selects components by local path. Remove
    its `[[components]]` entry to exclude a component from the image.
 

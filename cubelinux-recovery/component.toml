@@ -1,13 +1,49 @@
 id = "recovery"
-packages = []
-services = []
+packages = ["efibootmgr", "skopeo", "squashfs-tools"]
+services = ["cubelinux-recovery-status.service", "cubelinux-recovery-update.timer"]
 
 [[files]]
-source = "main.py"
-destination = "/usr/lib/cubelinux-recovery/main.py"
+source = "update-recovery"
+destination = "/usr/libexec/cubelinux-recovery-update"
 mode = "0755"
+
+[[files]]
+source = "cubelinux-recovery-update.service"
+destination = "/usr/lib/systemd/system/cubelinux-recovery-update.service"
+
+[[files]]
+source = "cubelinux-recovery-status.service"
+destination = "/usr/lib/systemd/system/cubelinux-recovery-status.service"
+
+[[files]]
+source = "cubelinux-recovery-update.timer"
+destination = "/usr/lib/systemd/system/cubelinux-recovery-update.timer"
+
+[[files]]
+source = "reboot-to-recovery"
+destination = "/usr/libexec/cubelinux-recovery-reboot"
+mode = "0755"
+
+[[files]]
+source = "org.cubelinux.Recovery.policy"
+destination = "/usr/share/polkit-1/actions/org.cubelinux.Recovery.policy"
 
 [[files]]
 source = "qml"
 destination = "/usr/lib/cubelinux-recovery/qml"
+mode = "0644"
+
+[[files]]
+source = "runtime"
+destination = "/usr/lib/cubelinux-recovery/runtime"
+mode = "0755"
+
+[[files]]
+source = "native"
+destination = "/usr/lib/cubelinux-recovery/native"
+mode = "0644"
+
+[[files]]
+source = "kcm"
+destination = "/usr/share/cubelinux-recovery/kcm-src"
 mode = "0644"

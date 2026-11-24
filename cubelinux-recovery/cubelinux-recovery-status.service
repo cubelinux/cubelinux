@@ -1,0 +1,10 @@
+[Unit]
+Description=Check whether factory recovery is available
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/cubelinux-recovery-reboot --status
+
+[Install]
+WantedBy=multi-user.target

@@ -23,6 +23,27 @@ RUN python3 /tmp/build_patched_kio.py \
         /tmp/patched-kio-rpms && \
     rm -f /tmp/build_patched_kio.py /tmp/kf6-kio-kiosk-launch-policy.patch
 
+# Compile the System Settings module in a separate stage so development
+# dependencies do not become part of the installed system image.
+FROM packages AS recovery-kcm-build
+RUN dnf -y install cmake gcc-c++ extra-cmake-modules \
+        qt6-qtbase-devel qt6-qtdeclarative-devel \
+        kf6-kcoreaddons-devel kf6-kcmutils-devel kf6-ki18n-devel && \
+    dnf clean all
+COPY .image-build/rootfs/ /tmp/component-root/
+RUN mkdir -p /tmp/recovery-artifacts && \
+    if [ -d /tmp/component-root/usr/share/cubelinux-recovery/kcm-src ]; then \
+        cmake -S /tmp/component-root/usr/share/cubelinux-recovery/kcm-src -B /tmp/kcm-build \
+            -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release && \
+        cmake --build /tmp/kcm-build --parallel && \
+        DESTDIR=/tmp/recovery-artifacts cmake --install /tmp/kcm-build && \
+        cmake -S /tmp/component-root/usr/lib/cubelinux-recovery/native -B /tmp/recovery-ui-build \
+            -DCMAKE_BUILD_TYPE=Release && \
+        cmake --build /tmp/recovery-ui-build --parallel && \
+        install -D -m 0755 /tmp/recovery-ui-build/cubelinux-recovery \
+            /tmp/recovery-artifacts/usr/lib/cubelinux-recovery/recovery-ui; \
+    fi
+
 FROM packages AS final
 
 COPY --from=kio-build /tmp/patched-kio-rpms/ /tmp/patched-kio-rpms/
@@ -41,6 +62,17 @@ RUN set -eux; \
     bootc container lint
 
 COPY .image-build/rootfs/ /
+COPY --from=recovery-kcm-build /tmp/recovery-artifacts/ /
+RUN if [ -d /usr/share/cubelinux-recovery/kcm-src ]; then \
+        test -x /usr/lib/cubelinux-recovery/recovery-ui && \
+        plugin="$(find /usr/lib64 /usr/lib -type f -name '*kcm_cubelinux_recovery*.so' -print -quit)" && \
+        test -n "$plugin" && \
+        ldd -r "$plugin" > /tmp/recovery-kcm-ldd && \
+        ! grep -E 'not found|undefined symbol' /tmp/recovery-kcm-ldd && \
+        ldd /usr/lib/cubelinux-recovery/recovery-ui > /tmp/recovery-ui-ldd && \
+        ! grep -q 'not found' /tmp/recovery-ui-ldd && \
+        rm -f /tmp/recovery-kcm-ldd /tmp/recovery-ui-ldd; \
+    fi
 
 # Reserve a trusted KDE applications subdirectory backed by writable /var.
 RUN install -d -o root -g root -m 0755 /usr/local/share/applications/cubelinux

@@ -1,0 +1,124 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+target=${1:?Usage: install-recovery-boot TARGET_ROOT}
+target=$(/usr/bin/realpath -e -- "$target")
+fail() { echo "Recovery boot setup failed: $*" >&2; exit 1; }
+[[ -d /sys/firmware/efi/efivars ]] || fail 'UEFI variables are unavailable'
+efi_mount="$target/boot/efi"
+efi=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount") || fail 'EFI partition is not mounted'
+efi=${efi%%\[*}
+[[ -b "$efi" ]] || fail 'EFI source is not a block device'
+disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$efi" | /usr/bin/awk '$2 == "disk" {print $1; exit}')
+part=$(/usr/bin/lsblk --nodeps --noheadings --output PARTN -- "$efi" | /usr/bin/tr -d '[:space:]')
+efi_id=$(/usr/sbin/blkid -s PARTUUID -o value "$efi")
+[[ -n "$disk" && "$part" =~ ^[0-9]+$ && "$efi_id" =~ ^[[:xdigit:]-]{36}$ ]] || fail 'could not identify EFI partition'
+[[ $(/usr/sbin/blkid -s TYPE -o value "$efi") == vfat ]] || fail 'EFI partition is not FAT formatted'
+root=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$target") || fail 'root is not mounted'
+root=${root%%\[*}
+root_part=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$root" | /usr/bin/awk '$2 == "part" {print $1; exit}')
+root_disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$root" | /usr/bin/awk '$2 == "disk" {print $1; exit}')
+[[ -n "$root_part" && "$root_disk" == "$disk" ]] || fail 'the EFI and root partitions must be on the same disk'
+root_id=$(/usr/sbin/blkid -s PARTUUID -o value "$root_part")
+disk_id=$(/usr/sbin/blkid -s PTUUID -o value "$disk")
+[[ "$disk_id" =~ ^[[:xdigit:]-]{36}$ ]] ||
+    fail 'the EFI and root partitions must be on the same GPT disk'
+mapfile -t candidates < <(/usr/sbin/blkid -t PARTLABEL=CUBE_RECOVERY -o device || true)
+matches=()
+for candidate in "${candidates[@]}"; do
+    [[ -b "$candidate" ]] || continue
+    candidate_disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$candidate" | /usr/bin/awk '$2 == "disk" {print $1; exit}')
+    [[ "$candidate_disk" == "$disk" ]] || continue
+    [[ $(/usr/sbin/blkid -s TYPE -o value "$candidate") == ext4 ]] || continue
+    # The staging job wrote the root and EFI identities to this partition.
+    tmp=$(/usr/bin/mktemp -d /run/cubelinux-boot-check.XXXXXX)
+    if /usr/bin/mount -o ro,nodev,nosuid,noexec "$candidate" "$tmp"; then
+        selector="$tmp/active.cfg"
+        mapfile -t selectors < <(/usr/bin/sed -n 's/^set recovery_slot=//p' "$selector")
+        if (( ${#selectors[@]} == 1 )) && [[ "${selectors[0]}" == A || "${selectors[0]}" == B ]]; then
+            slot=${selectors[0]}
+            manifest="$tmp/slots/$slot/CUBELINUX_LAYOUT"
+            recovery_id=$(/usr/sbin/blkid -s PARTUUID -o value "$candidate")
+            expected_config=$(printf 'set recovery_slot=%s\nlinux ($recovery)/slots/%s/boot/vmlinuz root=live:PARTUUID=%s ro rd.live.image rd.live.dir=/slots/%s/LiveOS rd.live.overlay.overlayfs=1 cubelinux.recovery=1 cubelinux.recovery_slot=%s console=tty0\ninitrd ($recovery)/slots/%s/boot/initrd.img\nboot\n' \
+                "$slot" "$slot" "$recovery_id" "$slot" "$slot" "$slot")
+            if [[ -f "$manifest" && "$(<"$selector")" == "$expected_config" ]] && \
+                /usr/bin/grep -Fxq "disk_ptuuid=$disk_id" "$manifest" && \
+                /usr/bin/grep -Fxq "root_partuuid=$root_id" "$manifest" && \
+                /usr/bin/grep -Fxq "recovery_partuuid=$recovery_id" "$manifest" && \
+                /usr/bin/grep -Fxq "efi_partuuid=$efi_id" "$manifest"; then
+                matches+=("$candidate")
+            fi
+        fi
+        /usr/bin/umount "$tmp" || fail 'could not unmount recovery check'
+    fi
+    /usr/bin/rmdir "$tmp"
+done
+(( ${#matches[@]} == 1 )) || fail "expected one matching recovery partition, found ${#matches[@]}"
+recovery_id=$(/usr/sbin/blkid -s PARTUUID -o value "${matches[0]}")
+recovery_fs_uuid=$(/usr/sbin/blkid -s UUID -o value "${matches[0]}")
+[[ "$recovery_id" =~ ^[[:xdigit:]-]{36}$ ]] || fail 'invalid recovery partition identity'
+[[ "$recovery_fs_uuid" =~ ^[[:xdigit:]-]{36}$ ]] || fail 'invalid recovery filesystem identity'
+
+tmp=$(/usr/bin/mktemp -d /run/cubelinux-grub.XXXXXX)
+original_order=
+restore_order=0
+cleanup() {
+    if (( restore_order )) && [[ -n "$original_order" ]]; then
+        /usr/sbin/efibootmgr --bootorder "$original_order" >&2 || true
+    fi
+    /usr/bin/rm -rf -- "$tmp"
+}
+trap cleanup EXIT
+cat > "$tmp/grub.cfg" <<EOF
+search --no-floppy --fs-uuid --set=recovery $recovery_fs_uuid
+export recovery
+configfile (\$recovery)/active.cfg
+EOF
+boot_dir="$efi_mount/EFI/cubelinux-recovery"
+boot_binary="$boot_dir/recovery.efi"
+boot_metadata="$boot_dir/boot-layout"
+/usr/bin/install -d -m 0755 "$boot_dir"
+reuse=0
+if [[ -f "$boot_binary" && -f "$boot_metadata" ]] && \
+    /usr/bin/grep -Fxq "recovery_partuuid=$recovery_id" "$boot_metadata" && \
+    /usr/bin/grep -Fxq "recovery_fs_uuid=$recovery_fs_uuid" "$boot_metadata" && \
+    /usr/bin/grep -Fxq "efi_partuuid=$efi_id" "$boot_metadata"; then
+    recorded_sha=$(/usr/bin/sed -n 's/^boot_sha256=//p' "$boot_metadata")
+    actual_sha=$(/usr/bin/sha256sum "$boot_binary")
+    [[ "$recorded_sha" == "${actual_sha%% *}" ]] && reuse=1
+fi
+if (( ! reuse )); then
+    /usr/bin/grub2-mkstandalone -O x86_64-efi --fonts= --themes= --locales= \
+        --modules='part_gpt ext2 search search_fs_uuid configfile linux' \
+        -o "$tmp/recovery.efi" "boot/grub/grub.cfg=$tmp/grub.cfg"
+    /usr/bin/install -m 0644 "$tmp/recovery.efi" "$boot_dir/.recovery.efi.new"
+    /usr/bin/sync --file-system "$efi_mount"
+    /usr/bin/mv -f "$boot_dir/.recovery.efi.new" "$boot_binary"
+    boot_sha=$(/usr/bin/sha256sum "$boot_binary")
+    {
+        printf 'recovery_partuuid=%s\n' "$recovery_id"
+        printf 'recovery_fs_uuid=%s\n' "$recovery_fs_uuid"
+        printf 'efi_partuuid=%s\n' "$efi_id"
+        printf 'boot_sha256=%s\n' "${boot_sha%% *}"
+    } > "$tmp/boot-layout"
+    /usr/bin/install -m 0644 "$tmp/boot-layout" "$boot_dir/.boot-layout.new"
+    /usr/bin/mv -f "$boot_dir/.boot-layout.new" "$boot_metadata"
+    /usr/bin/sync --file-system "$efi_mount"
+fi
+
+# Preserve normal startup order and append the recovery entry to the firmware menu.
+before=$(/usr/sbin/efibootmgr)
+order=$(printf '%s\n' "$before" | /usr/bin/sed -n 's/^BootOrder: //p')
+[[ -n "$order" ]] || fail 'firmware boot order is unavailable'
+original_order=$order
+existing=$(/usr/sbin/efibootmgr -v | /usr/bin/awk -v id="${efi_id,,}" 'tolower($0) ~ id && /cubelinux recovery/ { print substr($1,5,4) }')
+if [[ -z "$existing" ]]; then
+    restore_order=1
+    /usr/sbin/efibootmgr --create --disk "$disk" --part "$part" --label 'cubelinux recovery' --loader '\EFI\cubelinux-recovery\recovery.efi'
+    existing=$(/usr/sbin/efibootmgr -v | /usr/bin/awk -v id="${efi_id,,}" 'tolower($0) ~ id && /cubelinux recovery/ { print substr($1,5,4) }')
+fi
+[[ "$existing" =~ ^[[:xdigit:]]{4}$ ]] || fail 'recovery firmware entry is missing or ambiguous'
+case ",$order," in *",$existing,"*) new_order=$order ;; *) new_order="$order,$existing" ;; esac
+/usr/sbin/efibootmgr --bootorder "$new_order"
+restore_order=0
+echo "Installed recovery boot entry $existing."

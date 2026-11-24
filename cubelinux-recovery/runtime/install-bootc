@@ -1,0 +1,264 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+action=${1:?Usage: install-bootc ACTION ROOT_PATH}
+target_root=${2:?Usage: install-bootc ACTION ROOT_PATH}
+target_root=$(realpath -e "$target_root")
+target_image_ref=$(</usr/share/cubelinux/target-image-ref)
+payload=/usr/share/cubelinux/payload.oci.tar
+payload_image=localhost/cubelinux-offline:payload
+live_overlay_root=/run/overlayfs
+live_installer_storage="$live_overlay_root/cubelinux-installer-podman"
+target_installer_storage="$target_root/.cubelinux-installer-podman"
+installer_storage=
+storage_marker=
+storage_marker_value=cubelinux-installer-podman-storage-v1
+podman_graphroot=
+podman_tmpdir=
+podman_runroot=/run/cubelinux-installer-podman
+installer_storage_prepared=0
+host_var_tmp_mounted=0
+
+storage_is_owned() {
+    local storage_path=${1:?Storage path is required}
+    local marker="$storage_path/.cubelinux-installer-storage"
+    [[ -d "$storage_path" && ! -L "$storage_path" && -f "$marker" ]] || return 1
+    [[ "$(<"$marker")" == "$storage_marker_value" ]]
+}
+
+configure_installer_storage() {
+    installer_storage=${1:?Storage path is required}
+    storage_marker="$installer_storage/.cubelinux-installer-storage"
+    podman_graphroot="$installer_storage/containers/storage"
+    podman_tmpdir="$installer_storage/tmp"
+}
+
+remove_installer_storage() {
+    if [[ -e "$installer_storage" || -L "$installer_storage" ]]; then
+        if ! storage_is_owned "$installer_storage"; then
+            echo "Refusing to remove unrecognized installer storage: $installer_storage" >&2
+            return 1
+        fi
+        /usr/bin/rm -rf -- "$installer_storage"
+    fi
+}
+
+prepare_installer_storage() {
+    remove_installer_storage
+    /usr/bin/mkdir -p "$installer_storage"
+    installer_storage_prepared=1
+    printf '%s\n' "$storage_marker_value" > "$storage_marker"
+    /usr/bin/mkdir -p "$podman_graphroot" "$podman_tmpdir" "$podman_runroot"
+}
+
+available_bytes_for() {
+    local available
+    available=$(/usr/bin/df --block-size=1 --output=avail -- "$1" 2>/dev/null | /usr/bin/tail -n 1 | /usr/bin/tr -d '[:space:]') || return 1
+    [[ "$available" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "$available"
+}
+
+mem_available_bytes() {
+    local available_kib
+    available_kib=$(/usr/bin/awk '$1 == "MemAvailable:" { print $2; exit }' /proc/meminfo) || return 1
+    [[ "$available_kib" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "$((available_kib * 1024))"
+}
+
+remove_stale_owned_storage() {
+    local storage_path
+    for storage_path in "$live_installer_storage" "$target_installer_storage"; do
+        if storage_is_owned "$storage_path"; then
+            configure_installer_storage "$storage_path"
+            remove_installer_storage
+        fi
+    done
+}
+
+select_install_storage() {
+    local payload_size required_bytes available storage_path live_available=unavailable target_available=unavailable live_fstype memory_available
+    payload_size=$(/usr/bin/stat --format=%s -- "$payload")
+    # Leave headroom for Podman's import temporary files and unpacked layers.
+    required_bytes=$((payload_size * 3 + 1073741824))
+
+    remove_stale_owned_storage
+
+    for storage_path in "$live_installer_storage" "$target_installer_storage"; do
+        if [[ "$storage_path" == "$live_installer_storage" ]]; then
+            [[ -d "$live_overlay_root" && -w "$live_overlay_root" ]] || continue
+        fi
+
+        if [[ -e "$storage_path" || -L "$storage_path" ]]; then
+            # Never write into or remove a pre-existing directory we do not own.
+            continue
+        fi
+
+        available=$(available_bytes_for "$(dirname -- "$storage_path")") || continue
+        if [[ "$storage_path" == "$live_installer_storage" ]]; then
+            # tmpfs-backed Dracut overlays can be smaller in practice than
+            # their configured size; do not consume more than MemAvailable.
+            live_fstype=$(/usr/bin/findmnt --noheadings --output FSTYPE --target "$live_overlay_root" 2>/dev/null | /usr/bin/tr -d '[:space:]') || live_fstype=
+            if [[ "$live_fstype" == tmpfs || "$live_fstype" == overlay ]]; then
+                memory_available=$(mem_available_bytes) || continue
+                (( memory_available < available )) && available=$memory_available
+            fi
+            live_available=$available
+        else
+            target_available=$available
+        fi
+
+        if (( available >= required_bytes )); then
+            configure_installer_storage "$storage_path"
+            if [[ "$storage_path" == "$live_installer_storage" ]]; then
+                echo "Using Dracut live overlay for temporary Podman storage (${available} bytes available)."
+            else
+                echo "Dracut live overlay space is unavailable or insufficient; using temporary storage on the selected install filesystem (${available} bytes available)."
+            fi
+            return 0
+        fi
+    done
+
+    echo "Not enough temporary storage for the offline image import (need about ${required_bytes} bytes; live overlay: ${live_available}; selected filesystem: ${target_available})." >&2
+    return 1
+}
+
+find_existing_installer_storage() {
+    local storage_path
+    for storage_path in "$live_installer_storage" "$target_installer_storage"; do
+        if storage_is_owned "$storage_path"; then
+            configure_installer_storage "$storage_path"
+            return 0
+        fi
+    done
+    return 1
+}
+
+podman() {
+    TMPDIR="$podman_tmpdir" /usr/bin/podman \
+        --root "$podman_graphroot" \
+        --runroot "$podman_runroot" \
+        "$@"
+}
+
+bind_scratch_to_host_var_tmp() {
+    /usr/bin/mount --bind "$podman_tmpdir" /var/tmp
+    host_var_tmp_mounted=1
+    echo "Host /var/tmp capacity during bootc:"
+    /usr/bin/df --block-size=1 --output=source,fstype,size,used,avail,target -- /var/tmp
+}
+
+restore_host_var_tmp() {
+    if (( host_var_tmp_mounted )); then
+        /usr/bin/umount /var/tmp || return 1
+        host_var_tmp_mounted=0
+    fi
+}
+
+cleanup_failed_install() {
+    local status=$?
+    trap - EXIT
+    if ! restore_host_var_tmp; then
+        echo "Could not unmount installer scratch from host /var/tmp; preserving $installer_storage." >&2
+        exit "$status"
+    fi
+    if (( status != 0 )) && (( installer_storage_prepared )); then
+        if storage_is_owned "$installer_storage"; then
+            remove_installer_storage || true
+        else
+            /usr/bin/rmdir -- "$installer_storage" 2>/dev/null || true
+        fi
+        /usr/bin/rm -rf -- "$podman_runroot" || true
+    fi
+    exit "$status"
+}
+
+if [[ ! -d "$target_root" || -z "$target_image_ref" ]]; then
+    echo 'The target root or update image reference is missing.' >&2
+    exit 1
+fi
+
+if [[ "$action" == install ]]; then
+    if [[ ! -s "$payload" ]]; then
+        echo "The embedded OCI payload is missing or empty: $payload" >&2
+        exit 1
+    fi
+
+    trap cleanup_failed_install EXIT
+    select_install_storage
+    prepare_installer_storage
+
+    if ! podman image exists "$payload_image"; then
+        podman load --input "$payload"
+    fi
+elif [[ "$action" != finalize ]]; then
+    echo "Unknown bootc action: $action" >&2
+    exit 2
+fi
+
+bootc_in_payload() {
+    podman run --rm \
+        --pull=never \
+        --privileged \
+        --pid=host \
+        --ipc=host \
+        --network=none \
+        --security-opt label=type:unconfined_t \
+        --volume /dev:/dev \
+        --volume /usr/share/cubelinux:/usr/share/cubelinux:ro \
+        --volume "$podman_tmpdir:/var/tmp:rw" \
+        --volume "$target_root:/target:rw,rbind" \
+        --volume "$installer_storage:/target/.cubelinux-installer-podman:rw" \
+        --volume "$installer_storage/containers:/var/lib/containers:rw" \
+        --entrypoint /usr/bin/bootc \
+        "$payload_image" \
+        "$@"
+}
+
+if [[ "$action" == install ]]; then
+    root_uuid=$(/usr/bin/findmnt --noheadings --output UUID --target "$target_root" | /usr/bin/tr -d '[:space:]')
+    if [[ -z "$root_uuid" ]]; then
+        echo "Could not determine the UUID of the mounted root filesystem: $target_root" >&2
+        exit 1
+    fi
+
+    bootc_args=(
+        install to-filesystem
+        --skip-fetch-check
+        --skip-finalize
+        "--source-imgref=oci-archive:$payload:localhost/cubelinux-offline:payload"
+        "--target-imgref=$target_image_ref"
+        "--root-mount-spec=UUID=$root_uuid"
+    )
+    boot_mount="$target_root/boot"
+    if [[ -d "$boot_mount" ]]; then
+        boot_target=$(/usr/bin/findmnt --noheadings --output TARGET --target "$boot_mount" | /usr/bin/sed 's/[[:space:]]*$//')
+        if [[ -n "$boot_target" && "$(realpath -e "$boot_target")" == "$(realpath -e "$boot_mount")" ]]; then
+            boot_uuid=$(/usr/bin/findmnt --noheadings --output UUID --target "$boot_mount" | /usr/bin/tr -d '[:space:]')
+            if [[ -z "$boot_uuid" ]]; then
+                echo "Could not determine the UUID of the mounted /boot filesystem: $boot_mount" >&2
+                exit 1
+            fi
+            bootc_args+=("--boot-mount-spec=UUID=$boot_uuid")
+        fi
+    fi
+
+    bind_scratch_to_host_var_tmp
+    bootc_in_payload "${bootc_args[@]}" /target
+    restore_host_var_tmp
+    trap - EXIT
+else
+    if ! find_existing_installer_storage; then
+        echo 'The temporary Podman storage is missing from both the live overlay and selected filesystem.' >&2
+        exit 1
+    fi
+
+    if ! podman image exists "$payload_image"; then
+        echo "The embedded image is not loaded in Podman storage: $payload_image" >&2
+        exit 1
+    fi
+
+    bootc_in_payload install finalize /target
+    podman image rm --force "$payload_image"
+    remove_installer_storage
+    /usr/bin/rm -rf -- "$podman_runroot"
+fi

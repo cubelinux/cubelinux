@@ -1,0 +1,27 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+bundle=${1:?Usage: verify-recovery-bundle RECOVERY_DIRECTORY}
+bundle=$(/usr/bin/realpath -e -- "$bundle")
+
+fail() {
+    echo "Recovery verification failed: $*" >&2
+    exit 1
+}
+
+[[ -d "$bundle" ]] || fail 'recovery directory is missing'
+cd "$bundle"
+
+# Check a fixed list instead of trusting paths from a writable manifest.
+files=(LiveOS/squashfs.img boot/vmlinuz boot/initrd.img CUBELINUX_IMAGE_REF CUBELINUX_LAYOUT)
+[[ -f SHA256SUMS && ! -L SHA256SUMS ]] || fail 'checksum manifest is missing or is a symlink'
+for file in "${files[@]}"; do
+    [[ -f "$file" && ! -L "$file" && -s "$file" ]] || fail "missing or invalid file: $file"
+    line=$(/usr/bin/grep -F "  $file" SHA256SUMS || true)
+    [[ "$line" =~ ^[[:xdigit:]]{64}\ \  ]] || fail "invalid checksum entry for $file"
+    [[ "${line:66}" == "$file" ]] || fail "duplicate or invalid checksum entry for $file"
+    expected=${line:0:64}
+    actual=$(/usr/bin/sha256sum -- "$file")
+    [[ "${actual:0:64}" == "$expected" ]] || fail "checksum mismatch: $file"
+done
+echo 'Recovery bundle checksums verified.'

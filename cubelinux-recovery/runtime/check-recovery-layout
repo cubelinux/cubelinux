@@ -1,0 +1,83 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+# Validate the installer-recorded layout without modifying any block device.
+bundle=${1:?Usage: check-recovery-layout RECOVERY_MOUNT}
+bundle=$(/usr/bin/realpath -e -- "$bundle")
+fail() { echo "Recovery layout check failed: $*" >&2; exit 1; }
+
+/usr/bin/udevadm settle --timeout=30 || fail 'block device discovery did not settle'
+/usr/local/libexec/cubelinux/verify-recovery-bundle "$bundle" || fail 'bundle verification failed'
+manifest="$bundle/CUBELINUX_LAYOUT"
+declare -A layout=()
+while IFS='=' read -r key value; do
+    case "$key" in
+        format|disk_ptuuid|root_partuuid|recovery_partuuid|efi_partuuid) ;;
+        *) fail "unexpected layout field: $key" ;;
+    esac
+    [[ -z ${layout[$key]+set} && -n "$value" ]] || fail "duplicate or empty layout field: $key"
+    layout[$key]=$value
+done < "$manifest"
+[[ ${layout[format]:-} == 1 ]] || fail 'unsupported layout version'
+for key in disk_ptuuid root_partuuid recovery_partuuid efi_partuuid; do
+    [[ ${layout[$key]:-} =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] ||
+        fail "invalid GPT identifier: $key"
+done
+
+resolve_partition() {
+    local id=$1 label=$2 device
+    local -a matches=()
+    mapfile -t matches < <(/usr/sbin/blkid --match-token "PARTUUID=$id" --output device || true)
+    (( ${#matches[@]} == 1 )) || fail "expected one $label partition, found ${#matches[@]}"
+    device=${matches[0]}
+    [[ -b "$device" ]] || fail "$label is not a block device"
+    printf '%s\n' "$device"
+}
+root=$(resolve_partition "${layout[root_partuuid]}" root)
+recovery=$(resolve_partition "${layout[recovery_partuuid]}" recovery)
+efi=$(resolve_partition "${layout[efi_partuuid]}" EFI)
+[[ "$root" != "$recovery" && "$root" != "$efi" && "$recovery" != "$efi" ]] || fail 'partition identities overlap'
+bundle_source=$(/usr/bin/findmnt --noheadings --raw --output SOURCE --target "$bundle" || true)
+bundle_source=${bundle_source%%\[*}
+[[ -b "$bundle_source" && "$(/usr/bin/realpath -e "$bundle_source")" == "$(/usr/bin/realpath -e "$recovery")" ]] ||
+    fail 'bundle is not on the recorded recovery partition'
+bundle_options=$(/usr/bin/findmnt --noheadings --raw --output OPTIONS --target "$bundle" || true)
+case ",$bundle_options," in
+    *,ro,*) ;;
+    *) fail 'recovery partition must be mounted read-only' ;;
+esac
+[[ $(/usr/sbin/blkid -s PARTLABEL -o value "$root") == CUBE_ROOT ]] || fail 'root partition label does not match'
+[[ $(/usr/sbin/blkid -s PARTLABEL -o value "$recovery") == CUBE_RECOVERY ]] || fail 'recovery partition label does not match'
+[[ $(/usr/sbin/blkid -s TYPE -o value "$efi") == vfat ]] || fail 'EFI partition is not FAT formatted'
+root_type=$(/usr/sbin/blkid -s TYPE -o value "$root" || true)
+[[ "$root_type" != crypto_LUKS ]] || fail 'reset of an encrypted root is not implemented; refusing to remove encryption'
+[[ "$root_type" == ext4 ]] || fail "unsupported root filesystem: ${root_type:-unknown}"
+
+for device in "$root" "$recovery" "$efi"; do
+    disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$device" |
+        /usr/bin/awk '$2 == "disk" { print $1; exit }')
+    [[ -n "$disk" ]] || fail "could not identify disk for $device"
+    disk_id=$(/usr/sbin/blkid -s PTUUID -o value "$disk" || true)
+    [[ ${disk_id,,} == "${layout[disk_ptuuid],,}" ]] || fail "$device is on a different disk"
+done
+
+# A mounted filesystem or active mapper on the target must not be formatted.
+descendants=$(/usr/bin/lsblk --list --noheadings --paths --output NAME -- "$root") ||
+    fail 'could not inspect target block devices'
+[[ -n "$descendants" ]] || fail 'target block device list is empty'
+while IFS= read -r descendant; do
+    [[ -n "$descendant" ]] || continue
+    if /usr/bin/findmnt --noheadings --source "$descendant" >/dev/null; then
+        fail "target or descendant is mounted: $descendant"
+    fi
+    [[ "$descendant" == "$root" ]] || fail "target has an active mapped device: $descendant"
+done <<< "$descendants"
+swap_devices=$(/usr/sbin/swapon --noheadings --raw --show=NAME) || fail 'could not inspect active swap devices'
+while IFS= read -r swap_device; do
+    [[ -n "$swap_device" && -b "$swap_device" ]] || continue
+    if [[ "$(/usr/bin/realpath -e "$swap_device")" == "$(/usr/bin/realpath -e "$root")" ]]; then
+        fail 'target root is active swap'
+    fi
+done <<< "$swap_devices"
+
+printf 'Validated recovery layout; root=%s recovery=%s efi=%s\n' "$root" "$recovery" "$efi"
