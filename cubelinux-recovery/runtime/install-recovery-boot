@@ -67,8 +67,12 @@ disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -
 part=$(/usr/bin/lsblk --nodeps --noheadings --output PARTN -- "$efi" | /usr/bin/tr -d '[:space:]')
 efi_id=$(/usr/sbin/blkid -s PARTUUID -o value "$efi")
 efi_uuid=$(/usr/sbin/blkid -s UUID -o value "$efi")
-[[ -n "$disk" && "$root_disk" == "$disk" && "$part" =~ ^[0-9]+$ && "$efi_id" =~ ^[[:xdigit:]-]{36}$ && "$efi_uuid" =~ ^[[:xdigit:]-]{36}$ ]] ||
+[[ -n "$disk" && "$root_disk" == "$disk" ]] ||
     fail 'the EFI and root partitions must be on the same disk'
+[[ "$part" =~ ^[0-9]+$ && "$efi_id" =~ ^[[:xdigit:]-]{36}$ ]] ||
+    fail 'could not identify the EFI partition'
+[[ "$efi_uuid" =~ ^[[:xdigit:]]{4}-[[:xdigit:]]{4}$ ]] ||
+    fail 'the EFI filesystem UUID is not a valid FAT UUID'
 ensure_fstab_efi_entry "$fstab" "$efi_uuid"
 if [[ "$target" == / ]] && ! /usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount" >/dev/null 2>&1; then
     /usr/bin/install -d -m 0755 "$efi_mount" || fail 'could not create the EFI mount point'
