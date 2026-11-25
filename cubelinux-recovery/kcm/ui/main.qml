@@ -23,7 +23,13 @@ KCM.SimpleKCM {
         Controls.Label {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
-            text: qsTr("Erase your personal files, apps, and settings, then reinstall cubelinux.")
+            text: qsTr("Reinstall cubelinux from the recovery image stored on this device.")
+        }
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Warning
+            showCloseButton: false
+            text: qsTr("Factory Reset erases all files, accounts, apps, and settings on the installed system. This cannot be undone.")
         }
         Controls.Label {
             visible: !kcm.available
@@ -31,10 +37,15 @@ KCM.SimpleKCM {
             wrapMode: Text.Wrap
             text: kcm.availabilityMessage
         }
-        Controls.Button {
-            text: kcm.busy ? qsTr("Checking recovery…") : qsTr("Restart to Factory Reset")
-            enabled: kcm.available && !kcm.busy
-            onClicked: kcm.restartToRecovery()
+        RowLayout {
+            Layout.fillWidth: true
+            Item { Layout.fillWidth: true }
+            Controls.Button {
+                text: kcm.busy ? qsTr("Checking recovery...") : qsTr("Restart to Factory Reset")
+                enabled: kcm.available && !kcm.busy
+                onClicked: kcm.restartToRecovery()
+            }
+            Item { Layout.fillWidth: true }
         }
     }
 }
