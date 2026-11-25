@@ -23,41 +23,43 @@ disk_id=$(/usr/sbin/blkid -s PTUUID -o value "$root_disk")
 [[ "$disk_id" =~ ^[[:xdigit:]-]{36}$ ]] ||
     fail 'the EFI and root partitions must be on the same GPT disk'
 
-if [[ "$target" == / ]]; then
-    efi_mount=/boot/efi
-    fstab=/etc/fstab
-else
-    efi_mount="$target/boot/efi"
-    fstab="$target/etc/fstab"
-fi
-ensure_fstab_efi_entry() {
-    local path=$1 uuid=$2 directory temporary
-    directory=${path%/*}
-    [[ -d "$directory" ]] || fail "fstab directory is missing: $directory"
-    [[ ! -L "$path" && ( ! -e "$path" || -f "$path" ) ]] || fail 'fstab is not a regular file'
-    if [[ -f "$path" ]] &&
-        [[ $(/usr/bin/awk '$0 !~ /^[[:space:]]*#/ && NF >= 2 && $2 == "/boot/efi" { count++ } END { print count+0 }' "$path") == 1 ]] &&
-        /usr/bin/grep -Fxq "UUID=$uuid /boot/efi vfat umask=0077,shortname=winnt 0 2" "$path"; then
-        return
+efi_mount=
+efi_tmp=
+efi_mounted=0
+boot_tmp=
+order_to_restore=
+restore_order=0
+cleanup() {
+    if (( restore_order )) && [[ -n "$order_to_restore" ]]; then
+        /usr/sbin/efibootmgr --bootorder "$order_to_restore" >&2 || true
     fi
-    temporary=$(/usr/bin/mktemp "$directory/.fstab.XXXXXX") || fail 'could not create temporary fstab'
-    if [[ -f "$path" ]]; then
-        /usr/bin/awk '$0 ~ /^[[:space:]]*#/ || NF < 2 || $2 != "/boot/efi" { print }' "$path" > "$temporary" ||
-            fail 'could not read fstab'
+    if (( efi_mounted )); then
+        /usr/bin/umount "$efi_mount" || true
     fi
-    printf 'UUID=%s /boot/efi vfat umask=0077,shortname=winnt 0 2\n' "$uuid" >> "$temporary"
-    /usr/bin/chmod 0644 "$temporary"
-    /usr/bin/mv -f -- "$temporary" "$path" || fail 'could not update fstab'
+    if [[ -n "$efi_tmp" ]]; then
+        /usr/bin/rmdir "$efi_tmp" 2>/dev/null || true
+    fi
+    if [[ -n "$boot_tmp" ]]; then
+        /usr/bin/rm -rf -- "$boot_tmp"
+    fi
 }
+trap cleanup EXIT
 
-if efi=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount" 2>/dev/null); then
-    efi=${efi%%\[*}
-else
-    [[ "$target" == / ]] || fail 'EFI partition is not mounted in the installer'
+if [[ "$target" == / ]]; then
     mapfile -t efi_candidates < <(/usr/bin/lsblk --list --noheadings --paths --output NAME,PARTTYPE -- "$root_disk" |
         /usr/bin/awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" { print $1 }')
     (( ${#efi_candidates[@]} == 1 )) || fail "expected one EFI partition on $root_disk, found ${#efi_candidates[@]}"
     efi=${efi_candidates[0]}
+    efi_tmp=$(/usr/bin/mktemp -d /run/cubelinux-recovery-efi.XXXXXX) || fail 'could not create temporary EFI mount point'
+    efi_mount=$efi_tmp
+    /usr/bin/mount -o rw,nodev,nosuid,noexec,umask=0077,shortname=winnt "$efi" "$efi_mount" ||
+        fail 'could not temporarily mount the EFI partition'
+    efi_mounted=1
+else
+    efi_mount="$target/boot/efi"
+    efi=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount" 2>/dev/null) ||
+        fail 'EFI partition is not mounted in the installer'
+    efi=${efi%%\[*}
 fi
 [[ -b "$efi" ]] || fail 'EFI source is not a block device'
 efi_type=$(/usr/bin/lsblk --nodeps --noheadings --output PARTTYPE -- "$efi" | /usr/bin/tr -d '[:space:]')
@@ -66,22 +68,10 @@ efi_type=$(/usr/bin/lsblk --nodeps --noheadings --output PARTTYPE -- "$efi" | /u
 disk=$(/usr/bin/lsblk --inverse --list --noheadings --paths --output NAME,TYPE -- "$efi" | /usr/bin/awk '$2 == "disk" {print $1; exit}')
 part=$(/usr/bin/lsblk --nodeps --noheadings --output PARTN -- "$efi" | /usr/bin/tr -d '[:space:]')
 efi_id=$(/usr/sbin/blkid -s PARTUUID -o value "$efi")
-efi_uuid=$(/usr/sbin/blkid -s UUID -o value "$efi")
 [[ -n "$disk" && "$root_disk" == "$disk" ]] ||
     fail 'the EFI and root partitions must be on the same disk'
 [[ "$part" =~ ^[0-9]+$ && "$efi_id" =~ ^[[:xdigit:]-]{36}$ ]] ||
     fail 'could not identify the EFI partition'
-[[ "$efi_uuid" =~ ^[[:xdigit:]]{4}-[[:xdigit:]]{4}$ ]] ||
-    fail 'the EFI filesystem UUID is not a valid FAT UUID'
-ensure_fstab_efi_entry "$fstab" "$efi_uuid"
-if [[ "$target" == / ]] && ! /usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount" >/dev/null 2>&1; then
-    /usr/bin/install -d -m 0755 "$efi_mount" || fail 'could not create the EFI mount point'
-    /usr/bin/mount "$efi_mount" || fail 'could not mount the EFI partition'
-    efi=$(/usr/bin/findmnt --raw --noheadings --output SOURCE --mountpoint "$efi_mount") || fail 'EFI mount did not become available'
-    efi=${efi%%\[*}
-    [[ "$(/usr/bin/readlink -f -- "$efi")" == "$(/usr/bin/readlink -f -- "${efi_candidates[0]}")" ]] ||
-        fail 'mounted EFI source does not match the system EFI partition'
-fi
 mapfile -t candidates < <(/usr/sbin/blkid -t PARTLABEL=CUBE_RECOVERY -o device || true)
 matches=()
 for candidate in "${candidates[@]}"; do
@@ -142,18 +132,8 @@ grub_source="$fedora_boot_dir/grubx64.efi"
 
 # Reuse the Fedora-signed shim and GRUB unchanged. A custom grub2-mkstandalone
 # image is not trusted by Secure Boot and must never be the firmware entry.
-tmp=$(/usr/bin/mktemp -d /run/cubelinux-signed-grub.XXXXXX)
-order_to_restore=
-restore_order=0
-cleanup() {
-    if (( restore_order )) && [[ -n "$order_to_restore" ]]; then
-        /usr/sbin/efibootmgr --bootorder "$order_to_restore" >&2 || true
-    fi
-    /usr/bin/rm -rf -- "$tmp"
-}
-trap cleanup EXIT
-
-staged_boot="$tmp/EFI/cubelinux-recovery"
+boot_tmp=$(/usr/bin/mktemp -d /run/cubelinux-signed-grub.XXXXXX)
+staged_boot="$boot_tmp/EFI/cubelinux-recovery"
 /usr/bin/install -d -m 0755 "$staged_boot"
 /usr/bin/install -m 0644 "$shim_source" "$staged_boot/shimx64.efi"
 /usr/bin/install -m 0644 "$grub_source" "$staged_boot/grubx64.efi"

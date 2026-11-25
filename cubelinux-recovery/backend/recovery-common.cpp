@@ -158,6 +158,30 @@ DeviceInfo deviceInfo(const QString &device)
     return result;
 }
 
+QString efiPartitionForDisk(const QString &disk)
+{
+    const auto output = run({QStringLiteral("/usr/bin/lsblk"), QStringLiteral("--list"),
+                             QStringLiteral("--noheadings"), QStringLiteral("--paths"),
+                             QStringLiteral("--output"), QStringLiteral("NAME,PARTTYPE"),
+                             QStringLiteral("--"), disk});
+    QStringList matches;
+    for (const auto &line : lines(output)) {
+        const auto fields = line.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+        if (fields.size() == 2 &&
+            fields[1].compare(QStringLiteral("c12a7328-f81f-11d2-ba4b-00a0c93ec93b"), Qt::CaseInsensitive) == 0) {
+            matches.append(fields[0]);
+        }
+    }
+    ensure(matches.size() == 1,
+           QStringLiteral("expected one EFI System Partition on %1, found %2")
+               .arg(disk).arg(matches.size()));
+    ensure(deviceInfo(matches.front()).disk == disk,
+           QStringLiteral("EFI System Partition is not on the installed system disk"));
+    ensure(blockId(matches.front(), QStringLiteral("TYPE")) == QLatin1String("vfat"),
+           QStringLiteral("EFI System Partition is not FAT formatted"));
+    return matches.front();
+}
+
 QString blockId(const QString &device, const QString &tag)
 {
     return run({QStringLiteral("/usr/sbin/blkid"), QStringLiteral("-s"), tag,

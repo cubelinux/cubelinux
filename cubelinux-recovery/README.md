@@ -57,3 +57,10 @@ initramfs and mutable recovery payload use checksums for damage detection; they
 are not a verified-boot security boundary. The installer temporarily hides
 root encryption, and reset refuses existing encrypted roots.
 
+The installed system finds the EFI partition from its GPT partition type and
+temporarily mounts it under `/run` when checking or refreshing recovery. The
+status service is read-only: it does not rewrite `/etc/fstab` or require the
+ESP to stay mounted at `/boot/efi`. Recovery provisioning and explicit runtime
+updates write the signed boot files and firmware entry while the ESP is mounted
+temporarily.
+

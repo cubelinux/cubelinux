@@ -17,7 +17,6 @@ namespace {
 const QString kRecoveryLabel = QStringLiteral("CUBE_RECOVERY");
 const QString kSecureBootVariable = QStringLiteral(
     "/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c");
-const QString kBootDirectory = QStringLiteral("/boot/efi/EFI/cubelinux-recovery");
 
 QString lowercase(QString value)
 {
@@ -46,7 +45,8 @@ void verifyFileDigest(const QString &path, const QString &expected, const QStrin
            QStringLiteral("The recovery boot file is damaged: %1").arg(description));
 }
 
-bool recoveryPartitionPresent(const QString &efiId, const QString &expectedRecoveryId,
+bool recoveryPartitionPresent(const QString &efiDevice, const QString &efiId,
+                              const QString &expectedRecoveryId,
                               const QString &expectedFsUuid, bool checkContents)
 {
     const auto root = systemRootSource();
@@ -59,10 +59,9 @@ bool recoveryPartitionPresent(const QString &efiId, const QString &expectedRecov
     ensure(rootType == QLatin1String("ext4"),
            QStringLiteral("The installed root filesystem is not supported by factory reset."));
 
-    const auto efiSource = deviceSource(QStringLiteral("/boot/efi"));
-    ensure(deviceInfo(efiSource).disk == rootDevice.disk,
+    ensure(deviceInfo(efiDevice).disk == rootDevice.disk,
            QStringLiteral("The EFI and root partitions are on different disks."));
-    ensure(blockId(efiSource, QStringLiteral("TYPE")) == QLatin1String("vfat"),
+    ensure(blockId(efiDevice, QStringLiteral("TYPE")) == QLatin1String("vfat"),
            QStringLiteral("The EFI partition is not FAT formatted."));
 
     const auto result = runResult({QStringLiteral("/usr/sbin/blkid"), QStringLiteral("-t"),
@@ -132,9 +131,9 @@ bool recoveryPartitionPresent(const QString &efiId, const QString &expectedRecov
     return matches == 1;
 }
 
-BundleMetadata bootLayout(const QString &efiId, bool requireSecureBoot)
+BundleMetadata bootLayout(const QString &efiMount, const QString &efiId, bool requireSecureBoot)
 {
-    const auto directory = kBootDirectory;
+    const auto directory = efiMount + QStringLiteral("/EFI/cubelinux-recovery");
     const auto metadataPath = directory + QStringLiteral("/boot-layout");
     ensure(QFileInfo(metadataPath).isFile(),
            QStringLiteral("Recovery is not installed. Reinstall cubelinux to add factory recovery."));
@@ -159,7 +158,7 @@ BundleMetadata bootLayout(const QString &efiId, bool requireSecureBoot)
                          fields.value(QStringLiteral("boot_sha256")), QStringLiteral("recovery.efi"));
     } else if (hasExactKeys(fields, signedFields) && fields.value(QStringLiteral("format")) == QLatin1String("2")) {
         static const QRegularExpression digestPattern(QStringLiteral("^[0-9a-f]{64}$"));
-        const auto fedoraDirectory = QStringLiteral("/boot/efi/EFI/fedora");
+        const auto fedoraDirectory = efiMount + QStringLiteral("/EFI/fedora");
         for (const auto &entry : {
                  qMakePair(QStringLiteral("shimx64.efi"), QStringLiteral("shim_sha256")),
                  qMakePair(QStringLiteral("grubx64.efi"), QStringLiteral("grub_sha256")),
@@ -205,11 +204,17 @@ RecoveryEntry recoveryEntry(bool checkContents)
            QStringLiteral("Could not determine the Secure Boot state."));
     const bool secureBootEnabled = variable[4] == 1;
 
-    const auto efi = deviceSource(QStringLiteral("/boot/efi"));
+    const auto rootDevice = deviceInfo(systemRootSource());
+    const auto efi = efiPartitionForDisk(rootDevice.disk);
     const auto efiId = blockId(efi, QStringLiteral("PARTUUID"));
     ensure(isUuid(efiId), QStringLiteral("Could not identify the EFI partition."));
-    const auto metadata = bootLayout(efiId, secureBootEnabled);
-    ensure(recoveryPartitionPresent(efiId, metadata.recoveryPartUuid,
+
+    QTemporaryDir temporary(QStringLiteral("/run/cubelinux-efi-status-XXXXXX"));
+    ensure(temporary.isValid(), QStringLiteral("Could not create a temporary EFI check directory."));
+    MountGuard efiMount(temporary.path());
+    efiMount.mount(efi, QStringLiteral("ro,nodev,nosuid,noexec"));
+    const auto metadata = bootLayout(temporary.path(), efiId, secureBootEnabled);
+    ensure(recoveryPartitionPresent(efi, efiId, metadata.recoveryPartUuid,
                                     metadata.recoveryFsUuid, checkContents),
            QStringLiteral("The recovery partition is missing or does not match this installation."));
 

@@ -49,6 +49,7 @@ QStringList lines(const QString &text);
 QString deviceSource(const QString &mountPoint);
 QString systemRootSource();
 DeviceInfo deviceInfo(const QString &device);
+QString efiPartitionForDisk(const QString &disk);
 QString blockId(const QString &device, const QString &tag);
 QString sha256File(const QString &path);
 QMap<QString, QString> readFields(const QString &path);

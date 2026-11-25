@@ -330,7 +330,7 @@ int updateRecovery()
     const auto rootDevice = deviceInfo(systemRootSource());
     const auto rootId = blockId(rootDevice.partition, QStringLiteral("PARTUUID"));
     const auto diskId = blockId(rootDevice.disk, QStringLiteral("PTUUID"));
-    const auto efiId = blockId(deviceSource(QStringLiteral("/boot/efi")), QStringLiteral("PARTUUID"));
+    const auto efiId = blockId(efiPartitionForDisk(rootDevice.disk), QStringLiteral("PARTUUID"));
 
     const auto result = runResult({QStringLiteral("/usr/sbin/blkid"), QStringLiteral("-t"),
                                    QStringLiteral("PARTLABEL=") + kRecoveryLabel,
